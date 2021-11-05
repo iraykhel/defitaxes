@@ -1,0 +1,28 @@
+<html>
+    <head>
+        <link rel="stylesheet" href="{{url_for('static', filename='styles.css')}}">
+        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+        <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
+        <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+
+        <title>{{ title }}</title>
+    </head>
+
+    <body>
+        <div id='address_form'><form id='main_form'>Your blockchain address:
+            <input type=text placeholder='0x...' id='your_address'/>
+            Chain:<select id='chain'>
+                <option value='ETH'>ETH</option>
+                <option value='BSC'>BSC</option>
+                <option value='Polygon'>Polygon</option>
+                <option value='HECO'>HECO</option>
+            </select>
+            <div id='initial_options'></div>
+            <input type='submit' id='submit_address' value='Process transactions' /></form></div>
+        <div id='content'></div>
+    </body>
+    <script src="{{url_for('static', filename='main.js')}}"></script>
+    <script src="{{url_for('static', filename='typing.js')}}"></script>
+    <script src="{{url_for('static', filename='tax_calc.js')}}"></script>
+    <script>address = "{{ address }}"; chain = "{{ chain }}"; last_transaction_timestamp = {{ last }};</script>
+</html>
