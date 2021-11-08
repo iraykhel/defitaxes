@@ -6,7 +6,6 @@ import json
 from code.coingecko import Coingecko
 from code.chain import Chain
 from code.util import log
-from code.main import process_web_json
 from code.sqlite import *
 import pickle
 from code.main import *
@@ -47,7 +46,7 @@ if __name__ == "__main__":
 
     # address = '0x6867115787080d4e95cbcb6471fa85a9458a5e43' #subvert
     # address = '0x3401ea5a8d91c5e3944962c0148b08ac4a77f153' #so many nfts
-    name = 'BSC'
+    name = 'ETH'
     address_db = SQLite('addresses')
     chain = Chain.from_name(name,address_db,address)
 
@@ -67,7 +66,6 @@ if __name__ == "__main__":
     # exit(0)
     user = User(address)
     # transactions = chain.get_transactions()
-    # user.wipe_rates()
     # user.store_transactions(chain,transactions)
 
 
@@ -87,7 +85,7 @@ if __name__ == "__main__":
 
     t = time.time()
     C.init_from_db(chain.main_asset, contract_list, address)
-    C.dump(address)
+    C.dump(chain)
     log('timing:coingecko init_from_db', time.time() - t)
 
     S = Signatures()
@@ -101,10 +99,9 @@ if __name__ == "__main__":
     # print('all transactions')
     # print(transactions)
 
-    C = Coingecko.init_from_cache(address)
-    calculator = Calculator(user,chain,C)
+    C = Coingecko.init_from_cache(chain)
+    calculator = Calculator(user,chain,C,mtm=True)
     tax_info = calculator.process_transactions(transactions)
-    CA_long, CA_short, errors = calculator.matchup()
-    print("errors")
-    pprint.pprint(errors)
-    calculator.summary(CA_short)
+    calculator.matchup()
+
+    # calculator.summary(CA_short)

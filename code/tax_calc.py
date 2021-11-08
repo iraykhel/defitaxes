@@ -12,6 +12,10 @@ import zipfile
 import zlib
 
 
+def timestamp_to_year(ts):
+    return datetime.datetime.fromtimestamp(ts).year
+
+
 def rate_pick(what, timestamp, running_rates, coingecko_rates):
     running_rate, running_ts = running_rates[what]
     if running_rate != 0 and timestamp - running_ts < 3600:
@@ -269,6 +273,18 @@ class Calculator:
         self.CA_short = []
         self.errors = {}
 
+    def buysell_everything(self,timestamp,totals, running_rates,sell=True):
+        transactions = []
+        for what,entry in totals.items():
+            rate = rate_pick(what,timestamp,running_rates,self.coingecko_rates)
+            amount = entry['amount']
+            if sell:
+                amount = -amount
+            sell_transaction = CA_transaction(timestamp, what, entry['symbol'], amount, rate, -1, -1)
+            transactions.append(sell_transaction)
+        return transactions
+
+
     def process_transactions(self,transactions_js):
         # print(transactions_js)
         print("PROCESS TRANSACTIONS")
@@ -280,11 +296,24 @@ class Calculator:
         loans = {}
         # print('all transactions',transactions_js)
 
-
+        prev_timestamp = transactions_js[0]['ts']
         for tidx, transaction in enumerate(transactions_js):
             hash = transaction['hash']
             txid = transaction['txid']
             timestamp = transaction['ts']
+
+            if self.mtm:
+                current_year = timestamp_to_year(timestamp)
+                if current_year != timestamp_to_year(prev_timestamp):
+                    dt = datetime.date(current_year, 1, 1)
+                    new_year_ts = calendar.timegm(dt.timetuple())
+                    mtm_dispose_all = self.buysell_everything(new_year_ts-1,totals, running_rates, sell=True)
+                    print("MTM DISP")
+                    pprint.pprint(mtm_dispose_all)
+                    self.ca_transactions.extend(mtm_dispose_all)
+                    mtm_rebuy_all = self.buysell_everything(new_year_ts, totals, running_rates, sell=False)
+                    self.ca_transactions.extend(mtm_rebuy_all)
+
             if hash == self.hash:
                 pprint.pprint(transaction)
             transfers = transaction['rows']
@@ -418,6 +447,8 @@ class Calculator:
                         if close:
                             del vaults[vaddr]
 
+            prev_timestamp = timestamp
+
 
             # for vaddr in vaults_to_inspect:
             #     vault = vaults[vaddr]
@@ -440,6 +471,13 @@ class Calculator:
         # print("\n\n")
         # for ca_trans in self.ca_transactions:
         #     print(ca_trans)
+
+        if self.mtm:
+            dt = datetime.date(current_year+1, 1, 1)
+            new_year_ts = calendar.timegm(dt.timetuple())
+            mtm_dispose_all = self.buysell_everything(new_year_ts-1, totals, running_rates, sell=True)
+            self.ca_transactions.extend(mtm_dispose_all)
+
 
         print("Vaults")
         pprint.pprint(vaults)
@@ -554,6 +592,7 @@ class Calculator:
         self.ca_transactions = C.ca_transactions
         self.incomes = C.incomes
         self.interest_payments = C.interest_payments
+        self.mtm = C.mtm
 
 
     def make_forms(self, year):
@@ -563,8 +602,7 @@ class Calculator:
         def timestamp_to_date(ts):
             return datetime.datetime.fromtimestamp(ts).strftime('%m/%d/%y')
 
-        def timestamp_to_year(ts):
-            return datetime.datetime.fromtimestamp(ts).year
+
 
         def CA_to_form(CA):
             rows = []

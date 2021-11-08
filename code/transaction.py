@@ -125,10 +125,10 @@ class Transaction:
         #     if len(rows) >= 1:
         #         rate, source_code, level = rows[0]
         #         return level, rate, user.rate_sources[source_code]
-        log("Looking up rate",token_contract,ts,coingecko.initialized)
+        # log("Looking up rate",token_contract,ts,coingecko.initialized)
         if coingecko.initialized:
             level, rate, source = coingecko.lookup_rate(token_contract, ts)
-            log("rate",level,rate,source)
+            # log("rate",level,rate,source)
             #transaction_id INTEGER, transfer_idx INTEGER, rate REAL, source INTEGER, level INTEGER
             if self.txid is not None and source is not None:
                 user.add_rate(self.txid, tr_index, rate, source, level)

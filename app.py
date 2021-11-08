@@ -183,7 +183,7 @@ def calc_tax():
         chain = Chain.from_name(chain_name, address_db, address)
         C = Coingecko.init_from_cache(chain)
 
-        calculator = Calculator(user, chain, C)
+        calculator = Calculator(user, chain, C, mtm=mtm)
         calculator.process_transactions(transactions_js)
         calculator.matchup()
         calculator.cache()
