@@ -1,0 +1,4 @@
+venv
+data/*_pb
+data/users/*
+.env
