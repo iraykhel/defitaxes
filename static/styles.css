@@ -166,7 +166,7 @@ div#tax_block {
   position: fixed;
   top: 0;
   right: 0;
-  width: 200px;
+  width: 250px;
 
   background-color:white;
   border-radius: 0px 0px 0px 20px;
@@ -794,4 +794,77 @@ div#color_undo {
     display:inline-block;
     background-image: url(icons.png);
     background-position: 2px -62px;
+}
+
+ul.vault_list {
+    padding:0px;
+    margin:0px;
+    list-style-type:none;
+    max-height:400px;
+    overflow:auto;
+}
+
+li.vault {
+    clear:both;
+    padding:0px;
+    margin-bottom:3px;
+    border-radius:5px;
+    border:1px solid #DFDFDF;
+    background-color:#FAFAFA;
+
+}
+
+div.item_header:hover {
+    background-color:white;
+
+}
+
+div.item_header {
+    height:18px;
+    cursor:pointer;
+    padding:3px;
+}
+
+div.item_id {
+    float:left;
+    max-width:160px;
+    text-align:left;
+    overflow:hidden;
+}
+
+div.inspect_item_ic {
+    float:right;
+    width:16px;
+    height:16px;
+    background-image: url(icons.png);
+    background-position: -16px -128px;
+    opacity:0.7;
+}
+
+div.opened div.inspect_item_ic {
+    background-position: -48px -128px;
+}
+
+table.vault_table {
+    font-size:12px;
+    width:100%;
+}
+
+table.vault_table td {
+    padding:2px;
+    border-top:1px solid #DFDFDF;
+}
+
+td.vault_table_txnum {
+    border-right:1px solid #DFDFDF;
+    text-align:center;
+}
+
+div.vault_action {
+    margin-bottom:2px;
+}
+
+div.txnum {
+    text-decoration:underline;
+    cursor:pointer;
 }

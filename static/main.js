@@ -683,6 +683,7 @@ $(function() {
 
                             display_tax_block();
                             process_tax_js(data);
+                            show_inspections(data);
                             lookup_info['last_index'] = len;
 
                             console.log('custom types?',data['custom_types']);
