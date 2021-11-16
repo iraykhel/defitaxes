@@ -11,7 +11,7 @@ python3 -m venv venv
 . venv/bin/activate
 ```
 
-change .env.development.sample to .env
+then go to app.py and change `FLASK_ENV=...` to `FLASK_ENV="development"`
 
 then inside the virtual environment
 
@@ -20,3 +20,8 @@ pip install -r requirements.txt
 python app.py
 ```
 
+## Running app in production
+
+go to app.py and change `FLASK_ENV=...` to `FLASK_ENV="production"`
+
+...

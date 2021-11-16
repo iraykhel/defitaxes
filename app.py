@@ -20,10 +20,19 @@ from code.tax_calc import Calculator
 import pickle
 import html
 
-from dotenv import load_dotenv
-load_dotenv()
-
-FLASK_ENV = 'FLASK_ENV'
+# TODO: Fix the below error, and change this to use python-dotenv and .env file
+#   File "app.py", line 457, in <module>
+#     app.run()
+#   File "/Users/stevenli/Documents/github/taxes/venv/lib/python3.8/site-packages/flask/app.py", line 920, in run
+#     run_simple(t.cast(str, host), port, self, **options)
+#   File "/Users/stevenli/Documents/github/taxes/venv/lib/python3.8/site-packages/werkzeug/serving.py", line 907, in run_simple
+#     from .debug import DebuggedApplication
+#   File "/Users/stevenli/Documents/github/taxes/venv/lib/python3.8/site-packages/werkzeug/debug/__init__.py", line 21, in <module>
+#     from .console import Console
+#   File "/Users/stevenli/Documents/github/taxes/venv/lib/python3.8/site-packages/werkzeug/debug/console.py", line 129, in <module>
+#     class _InteractiveConsole(code.InteractiveInterpreter):
+# AttributeError: module 'code' has no attribute 'InteractiveInterpreter'
+FLASK_ENV = 'production'
 
 # from code import symbols
 app = Flask(__name__)
@@ -31,7 +40,7 @@ app = Flask(__name__)
 @app.route('/')
 @app.route('/main')
 def main():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False  
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False  
     address_cookie = request.cookies.get('address')
     address = ""
     chain_name = ""
@@ -46,7 +55,7 @@ def main():
 
 @app.route('/last_update')
 def last_update():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     address = request.args.get('address').lower()
     chain_name = request.args.get('chain')
     last = last_update_inner(address, chain_name)
@@ -67,7 +76,7 @@ def last_update_inner(address,chain_name):
 
 @app.route('/process')
 def process():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     log('xi1')
     address = request.args.get('address').lower()
     chain_name = request.args.get('chain')
@@ -162,7 +171,7 @@ def process():
 
 @app.route('/calc_tax',methods=['GET', 'POST'])
 def calc_tax():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         mtm = request.args.get('mtm')
         if mtm == 'false':
@@ -202,7 +211,7 @@ def calc_tax():
 
 @app.route('/save_type',methods=['GET', 'POST'])
 def save_type():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         form = request.form
         address = request.args.get('address').lower()
@@ -245,7 +254,7 @@ def save_type():
 
 @app.route('/delete_type',methods=['GET', 'POST'])
 def delete_type():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         form = request.form
         address = request.args.get('address').lower()
@@ -271,7 +280,7 @@ def delete_type():
 
 @app.route('/apply_type',methods=['GET', 'POST'])
 def apply_type():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         form = request.form
         address = request.args.get('address').lower()
@@ -291,7 +300,7 @@ def apply_type():
 
 @app.route('/unapply_type',methods=['GET', 'POST'])
 def unapply_type():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         form = request.form
         address = request.args.get('address').lower()
@@ -311,7 +320,7 @@ def unapply_type():
 
 @app.route('/save_custom_treatment',methods=['GET', 'POST'])
 def save_custom_treatment():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         form = request.form
         address = request.args.get('address').lower()
@@ -332,7 +341,7 @@ def save_custom_treatment():
 
 @app.route('/save_custom_rate',methods=['GET', 'POST'])
 def save_custom_rate():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         form = request.form
         address = request.args.get('address').lower()
@@ -353,7 +362,7 @@ def save_custom_rate():
 
 @app.route('/undo_custom_changes',methods=['GET', 'POST'])
 def undo_custom_changes():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         form = request.form
         address = request.args.get('address').lower()
@@ -372,7 +381,7 @@ def undo_custom_changes():
 
 @app.route('/progress_bar')
 def progress_bar():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     good = 0
     for i in range(5):
         try:
@@ -392,7 +401,7 @@ def progress_bar():
 
 @app.route('/update_progenitors')
 def update_progenitors():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         address = request.args.get('user')
         chain = request.args.get('chain')
@@ -416,7 +425,7 @@ def update_progenitors():
 
 @app.route('/download')
 def download():
-    os.chdir('/home/ubuntu/hyperboloid') if os.getenv(FLASK_ENV) == "production" else False
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         address = request.args.get('address').lower()
         type = request.args.get('type')
