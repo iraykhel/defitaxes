@@ -299,7 +299,7 @@ $('body').on('click','#tc_create',function() {
     } else {
         data = $('#tc_form').serialize();
         console.log(addr,data);
-        $.post("save_type?address="+addr, data, function(resp) {
+        $.post("save_type?address="+addr+"&chain="+chain, data, function(resp) {
             console.log(resp);
             var data = JSON.parse(resp);
             if (data.hasOwnProperty('error')) {
@@ -333,6 +333,7 @@ $('body').on('click','#tc_delete',function() {
             $('#overlay').remove();
 
             show_ajax_transactions(data);
+            need_recalc();
 
             custom_types_html = show_custom_types(data['custom_types']);
             $('#custom_types_block').replaceWith(custom_types_html);
@@ -373,7 +374,7 @@ $('body').on('change','.tc_rule_treatment', function() {
         vault_id.find('.vault_id_name').html("Vault ID<div class='help help_vaultid'></div>");
         showib(vault_id);
     } else if (val == 'borrow' || val == 'repay') {
-        vault_id.find('.vault_id_name').html("Loan ID<div class='help help_loanid'></div>");
+        vault_id.find('.vault_id_name').html("Loan ID<div class='help help_vaultid'></div>");
         showib(vault_id);
     } else {
         hide(vault_id);
@@ -440,6 +441,7 @@ $('body').on('click','#custom_types_list .applicable', function() {
             type_clicked.append("<div class='err_mes'>"+data['error']+"</div>");
         } else {
             show_ajax_transactions(data)
+            need_recalc();
         }
     });
 });
@@ -452,6 +454,8 @@ $('body').on('click','.ct_unapply', function() {
    ct_id = type_clicked.attr('id').substr(3);
    txids = [];
    transactions = $('div.secondary_selected');
+   if (transactions.length == 0)
+        return;
    transactions.each(function() {
         txid = $(this).attr('id').substr(2);
         txids.push(txid)
@@ -466,6 +470,7 @@ $('body').on('click','.ct_unapply', function() {
         } else {
             selected_id = null;
             show_ajax_transactions(data)
+            need_recalc();
         }
     });
 

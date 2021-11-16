@@ -104,15 +104,32 @@ div.note {
 
 
 .t_class_0 {
-    background-color:#FF9E9E;
+    /*background-color:#FF9E9E;*/
+    background-color:#FF0000;
+}
+.custom_recolor_0 {
+    background-color:#FF0000 !important;
+}
+
+.t_class_3 {
+    background-color:#FFAC3A;
+}
+.custom_recolor_3 {
+    background-color:#FFAC3A !important;
 }
 
 .t_class_5 {
     background-color:#FFFF9E;
 }
+.custom_recolor_5 {
+    background-color:#FFFF9E !important;
+}
 
 .t_class_10 {
     background-color:#9EFF9E;
+}
+.custom_recolor_10 {
+    background-color:#9EFF9E !important;
 }
 
 .open_scan {
@@ -130,6 +147,12 @@ div.note {
 
 input.row_rate {
     width:70px;
+    background-color:transparent;
+    border-width:0px 0px 1px 0px;
+}
+
+input.row_vaultid {
+    width:120px;
     background-color:transparent;
     border-width:0px 0px 1px 0px;
 }
@@ -286,12 +309,13 @@ span.r_token {
     margin-right: 50px;
 }
 
-td.r_treatment, span.r_treatment, td.r_rate {
+td.r_treatment, span.r_treatment, td.r_rate, td.r_vaultid {
     padding-left: 15px;
 }
 
+
 select.treatment {
-    width:70px;
+    /*width:70px;*/
     border:0px;
     background-color:transparent;
     margin-left:-3px;
@@ -391,14 +415,34 @@ div.scroll_row {
     text-align:right;
 }
 
-div#scroll_block a {
+/*div#scroll_block a {
     display:inline-block;
     color:blue;
     cursor:pointer;
     text-decoration: underline;
     margin-right:5px;
     margin-left:5px;
+}*/
+
+.next_ic, .prev_ic {
+    width:16px;
+    height:16px;
+    display:inline-block;
+    background-image: url(icons.png);
+    cursor:pointer;
 }
+
+.next_ic {
+    background-position: -128px -192px;
+    margin-right:5px;
+}
+
+.prev_ic {
+    background-position: -160px -192px;
+}
+
+
+
 
 
 
@@ -543,7 +587,7 @@ div.hidden_custom > select.tc_rule_sel {
 }
 
 .hidden {
-    display:none;
+    display:none !important;
 }
 
 .err_mes {
@@ -562,6 +606,8 @@ ul#custom_types_list {
     margin:0px;
     padding:0px;
     margin-bottom:10px;
+    max-height:400px;
+    overflow:auto;
 }
 
 ul#custom_types_list li {
@@ -578,11 +624,17 @@ ul#custom_types_list .applicable {
 div.ct_icon {
     cursor:pointer;
     display:inline-block;
-    margin-left:5px;
+    margin-left:3px;
+    position:relative;
+    border:1px solid #EEEEEE;
+    border-radius:5px;
+    top:5px;
+    background-color:#EEEEEE;
 }
 
 .custom_type div.note_red {
-    background-color:#FF9E9E;
+    /*background-color:#FF9E9E;*/
+    background-color:#FF0000;
     padding-top:5px;
     padding-bottom:5px;
 }
@@ -611,25 +663,26 @@ div.help {
 
 span.ct_name {
     display:inline-block;
-    max-width:110px;
+    max-width:90px;
     vertical-align:middle;
     line-height:12px;
+    overflow-wrap:anywhere;
 }
 
 div.ct_unapply {
-    background-position: 0px -62px;
+    background-position: 0px -64px;
 }
 
 div.ct_edit {
-    background-position: -196px -111px;
+    background-position: -193px -113px;
 }
 
 div.ct_select {
-    background-position: -160px -110px;
+    background-position: -160px -112px;
 }
 
 div.ct_delete {
-    background-position: -181px -95px;
+    background-position: -177px -97px;
 }
 
 
@@ -686,10 +739,59 @@ div.vault_id_wrap input.specific_val {
 
 
 
-
+a#download_transactions_json {
+    margin-top:5px;
+}
 
 
 
 table#tax_sums {
     font-size:14px;
+}
+
+tr.matchup td {
+    padding-left:25px;
+    padding-bottom:10px;
+}
+
+tr.matchup p {
+    margin:0px;
+    padding:0px;
+}
+
+
+div#need_recalc {
+    text-align:center;
+    color:red;
+    margin-top:20px;
+}
+
+div.tax_data_outdated {
+    opacity:0.2;
+}
+
+div#recolor_block {
+    margin-top: 30px;
+}
+
+div#color_options {
+    text-align: center;
+}
+
+div#color_options div {
+    display:inline-block;
+    width:20px;
+    height:20px;
+    border-radius:7px;
+    margin-left:10px;
+    cursor: pointer;
+    border: 1px solid #606060;
+}
+
+div#color_undo {
+    width:20px;
+    height:20px;
+    display:inline-block;
+    background-image: url(icons.png);
+    background-position: 2px -62px;
 }

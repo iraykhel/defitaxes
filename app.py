@@ -141,7 +141,7 @@ def process():
         # T = Typing()
         # builtin_types = T.load_builtin_types()
         progress_bar_update(address, 'Loading custom types', 85)
-        custom_types = user.load_custom_types()
+        custom_types = user.load_custom_types(chain_name)
 
         progress_bar_update(address, 'Calculating taxes', 87)
         calculator = Calculator(user, chain, C)
@@ -156,7 +156,8 @@ def process():
 
 
         data = {'transactions':transactions_js,'custom_types':custom_types,
-                'CA_long':calculator.CA_long,'CA_short':calculator.CA_short,'CA_errors':calculator.errors,'incomes':calculator.incomes,'interest':calculator.interest_payments}
+                'CA_long':calculator.CA_long,'CA_short':calculator.CA_short,'CA_errors':calculator.errors,'incomes':calculator.incomes,'interest':calculator.interest_payments,
+                'vaults':calculator.vaults_json()}
         progress_bar_update(address, 'Uploading to your browser', 95)
         # data = {'placeholder':'stuff'}
         log('timing:coingecko lookups 1', C.time_spent_looking_up, C.shortcut_hits)
@@ -201,7 +202,8 @@ def calc_tax():
         calculator.matchup()
         calculator.cache()
 
-        js = {'CA_long': calculator.CA_long, 'CA_short': calculator.CA_short, 'CA_errors': calculator.errors, 'incomes': calculator.incomes, 'interest': calculator.interest_payments}
+        js = {'CA_long': calculator.CA_long, 'CA_short': calculator.CA_short, 'CA_errors': calculator.errors, 'incomes': calculator.incomes, 'interest': calculator.interest_payments,
+              'vaults':calculator.vaults_json()}
     except:
         log("EXCEPTION in calc_tax", traceback.format_exc())
         js = {'error':'An error has occurred while calculating taxes'}
@@ -215,6 +217,7 @@ def save_type():
     try:
         form = request.form
         address = request.args.get('address').lower()
+        chain_name = request.args.get('chain')
         name = form['tc_name']
         description = form['tc_desc']
         balanced = 0
@@ -241,9 +244,9 @@ def save_type():
 
         # T = Typing()
         user = User(address)
-        user.save_custom_type(address,name,description, balanced, rules,id=type_id)
+        user.save_custom_type(chain_name,address,name,description, balanced, rules,id=type_id)
 
-        custom_types = user.load_custom_types()
+        custom_types = user.load_custom_types(chain_name)
         js = {'custom_types': custom_types}
     except:
         log("EXCEPTION in save_type", traceback.format_exc())
@@ -269,7 +272,7 @@ def delete_type():
         processed_transactions = user.unapply_custom_type(chain_name, address, type_id)
         user.delete_custom_type(type_id)
 
-        custom_types = user.load_custom_types()
+        custom_types = user.load_custom_types(chain_name)
         js = {'custom_types': custom_types, 'transactions': processed_transactions}
     except:
         log("EXCEPTION in delete_type", traceback.format_exc())
@@ -318,8 +321,9 @@ def unapply_type():
     data = json.dumps(js)
     return data
 
-@app.route('/save_custom_treatment',methods=['GET', 'POST'])
-def save_custom_treatment():
+
+@app.route('/save_custom_val',methods=['GET', 'POST'])
+def save_custom_val():
     os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
     try:
         form = request.form
@@ -327,38 +331,25 @@ def save_custom_treatment():
         chain_name = request.args.get('chain')
         transfer_idx = form['transfer_idx']
         transaction = form['transaction']
-        treatment = form['custom_treatment']
 
-        log('apply_custom_treatment', address, transaction, transfer_idx,treatment)
+        custom_treatment = custom_rate = custom_vaultid = None
+        if 'custom_treatment' in form:
+            custom_treatment = form['custom_treatment']
+        if 'custom_rate' in form:
+            custom_rate = form['custom_rate']
+        if 'custom_vaultid' in form:
+            custom_vaultid = form['custom_vaultid']
+
+        log('apply_custom_val', address, transaction, transfer_idx,custom_treatment,custom_rate,custom_vaultid)
         user = User(address)
-        user.save_custom_treatment(chain_name,address,transaction, transfer_idx, treatment)
+        user.save_custom_val(chain_name,address,transaction, transfer_idx, treatment=custom_treatment, rate=custom_rate, vaultid=custom_vaultid)
         js = {'success':1}
     except:
-        log("EXCEPTION in save_custom_treatment", traceback.format_exc())
-        js = {'error':'An error has occurred while saving custom treatment'}
+        log("EXCEPTION in save_custom_val", traceback.format_exc())
+        js = {'error':'An error has occurred while saving custom value'}
     data = json.dumps(js)
     return data
 
-@app.route('/save_custom_rate',methods=['GET', 'POST'])
-def save_custom_rate():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
-    try:
-        form = request.form
-        address = request.args.get('address').lower()
-        chain_name = request.args.get('chain')
-        transfer_idx = form['transfer_idx']
-        transaction = form['transaction']
-        rate = form['custom_rate']
-
-        log('apply_custom_rate', address, transaction, transfer_idx,rate)
-        user = User(address)
-        user.save_custom_rate(chain_name,address,transaction, transfer_idx, rate)
-        js = {'success':1}
-    except:
-        log("EXCEPTION in save_custom_rate", traceback.format_exc())
-        js = {'error':'An error has occurred while saving custom rate'}
-    data = json.dumps(js)
-    return data
 
 @app.route('/undo_custom_changes',methods=['GET', 'POST'])
 def undo_custom_changes():
@@ -378,6 +369,27 @@ def undo_custom_changes():
         js = {'error':'An error has occurred while undoing custom changes'}
     data = json.dumps(js)
     return data
+
+@app.route('/recolor',methods=['GET', 'POST'])
+def recolor():
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    try:
+        form = request.form
+        address = request.args.get('address').lower()
+        chain_name = request.args.get('chain')
+        color_id = form['color_id']
+        transactions = form['transactions']
+
+        log('recolor', address, color_id, transactions)
+        user = User(address)
+        user.recolor(chain_name,address,color_id, transactions.split(","))
+        js = {'success':1}
+    except:
+        log("EXCEPTION in recolor", traceback.format_exc())
+        js = {'error':'An error has occurred while recoloring'}
+    data = json.dumps(js)
+    return data
+
 
 @app.route('/progress_bar')
 def progress_bar():

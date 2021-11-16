@@ -349,7 +349,7 @@ class Classifier:
 
         #reward token is minted, not sent from pool
         elif len(CT[Transfer.MINTED]) > 0 and transaction.interacted is not None and not self.check_sig(sig,'mint') and not self.check_sig(sig,'borrow'):
-            max_certainty = 0
+            max_certainty = 3
             interactor = transaction.interacted
             pools = self.chain.pools.pool_list('A', interactor)
             rew = CT[Transfer.MINTED][0]
@@ -362,7 +362,7 @@ class Classifier:
         elif (len(CT[Transfer.RECEIVED]) >= 1 and (self.check_sig(sig,'claim') or self.check_sig(sig,'reward') or self.check_sig(sig,'withdraw') or self.check_sig(sig,'harvest')))\
                 or (len(CT[Transfer.UNVAULTED]) >= 1 and self.check_sig(sig, 'deposit')):
             if self.check_sig(sig, 'deposit'):
-                max_certainty = 0
+                max_certainty = 3
             if transaction.hash == transaction.chain.hif:
                 print("XI243", 'pools', len(pools), pools)
             interactor = transaction.interacted
@@ -389,7 +389,7 @@ class Classifier:
                 list(pools)[0].issue_reward(rew)
                 certainty = max_certainty
             else:
-                certainty = 0
+                certainty = 3
             if rew is not None:
                 rew.treatment = 'income'
             if rew2 is not None:
@@ -507,7 +507,7 @@ class Classifier:
                     if len(CT[Transfer.SENT]) >= 2: #minted liquidity pool token
                         certainty = 5
                     elif len(CT[Transfer.SENT]) == 1:
-                        certainty = 0
+                        certainty = 3
                     if certainty is not None:
                         do_add = True
                         if transaction.hash == self.chain.hif:
@@ -598,7 +598,7 @@ class Classifier:
                                 # pbt = pbt.intersection(self.chain.pools.map['I'][in_token])
 
                         if len(pbt):
-                            max_certainty = 0
+                            max_certainty = 3
                             do_remove = True
 
 
@@ -607,7 +607,7 @@ class Classifier:
                 if self.remove_liquidity(transaction):
                     return Category(Category.REMOVE_LIQUIDITY, certainty=max_certainty)
                 else:
-                    return Category(Category.REMOVE_LIQUIDITY, certainty=0)
+                    return Category(Category.REMOVE_LIQUIDITY, certainty=3)
                 # if self.check_sig(sig, 'removeliquidity'):
                 #     if self.remove_liquidity(transaction):
                 #         return Category(Category.REMOVE_LIQUIDITY, certainty=10)
@@ -664,13 +664,13 @@ class Classifier:
         CT = transaction.categorized_transfers
         if len(CT[Transfer.SENT]) and self.check_sig(sig, 'stake'):  # who am I to argue?
             self.add_liquidity(transaction)
-            return Category(Category.ADD_LIQUIDITY_NO_RECEIPT, certainty=0)
+            return Category(Category.ADD_LIQUIDITY_NO_RECEIPT, certainty=3)
 
         if len(CT[Transfer.SENT]) == 1 and len(transaction.transfers) <= 3 and self.check_sig(sig, 'deposit') and len(CT[Transfer.TO_BRIDGE]) == 0:
             if transaction.hash == self.chain.hif:
                 print("cl_vault XI1")
             self.add_liquidity(transaction)
-            return Category(Category.ADD_LIQUIDITY_NO_RECEIPT, certainty=0)
+            return Category(Category.ADD_LIQUIDITY_NO_RECEIPT, certainty=3)
             # return Category(Category.STAKE, certainty=0)
 
 
@@ -730,7 +730,7 @@ class Classifier:
                     if self.remove_liquidity(transaction, pool_type=Pool.VAULT):
                         if transaction.hash == self.chain.hif:
                             print("cl_unvault XI3", pools)
-                        return Category(Category.REMOVE_LIQUIDITY_NO_RECEIPT, certainty=0)
+                        return Category(Category.REMOVE_LIQUIDITY_NO_RECEIPT, certainty=3)
                     else:
                         return
 

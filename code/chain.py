@@ -256,7 +256,7 @@ class Chain:
         # exit(0)
 
         url = self.explorer_url + '?module=account&action=txlist&address=' + self.addr + '&apikey=' + self.api_key + '&sort=asc'
-        # log(url)
+        log(url)
         resp = requests.get(url)
         data = resp.json()['result']
         # pprint.pprint(resp.json())
@@ -382,6 +382,7 @@ class Chain:
 
         t4 = time.time()
         # pprint.pprint(transactions)
+        # log("downloaded transactions",transactions)
         log('timing:get transactions',t1-t,t2-t1,t3-t2,t4-t3)
         return transactions
 
@@ -665,23 +666,22 @@ class Chain:
         pb_update_per_transaction = 28./len(transactions)
 
         # print('transactions', len(transactions))
-        user.prepare_all_custom_types()
-        user.prepare_all_custom_treatment_and_rates()
+        user.prepare_all_custom_types(self.name)
+        # user.prepare_all_custom_treatment_and_rates()
         classifier = Classifier(self)
         for idx,transaction in enumerate(transactions.values()):
             # transaction.calc_totals()
             # transaction.calc_usd_totals(coingecko_rates)
             transaction.finalize(user,coingecko_rates,signatures)
-            txid = transaction.txid
-            if txid is not None and txid in user.tx_ctype_mapping:
-                type_id = user.tx_ctype_mapping[txid]
-                info = user.ctype_info[type_id]
-                user.apply_custom_type_one_transaction(self, transaction, type_id, info['name'], info['balanced'], info['rules'])
+            # txid = transaction.txid
+            if transaction.custom_type_id is not None:
+                info = user.ctype_info[transaction.custom_type_id]
+                user.apply_custom_type_one_transaction(self, transaction, info['name'], info['balanced'], info['rules'])
             else:
                 classifier.classify(transaction)
             transaction.add_fee_transfer()
             transaction.infer_and_adjust_rates(user,coingecko_rates)
-            user.apply_custom_treatment_or_rate(transaction)
+            user.apply_custom_val(transaction)
             # transaction.record(user.db)
             # transaction.classify()
             pb += pb_update_per_transaction

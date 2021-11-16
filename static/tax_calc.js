@@ -1,9 +1,12 @@
+mtm = false;
+matchups_visible = false;
+
 function round_usd(amount) {
     return Math.round(amount);
 }
 
 function display_tax_block() {
-    address = window.sessionStorage.getItem('address');
+
 
     var html = "<div id='tax_block'>";
     year_html ="<div id='year_selector'>Tax year:<select id='tax_year'>";
@@ -19,12 +22,15 @@ function display_tax_block() {
         year += 1;
     }
     year_html += "</select></div>\n";
-    html +="<div id='mtm_selector'><label>Mark-to-market <input type=checkbox id='mtm'></label></div>";
+    html += "<div id='matchups_selector'><label>Show tax outcomes<input type=checkbox id='matchups_visible'></label></div>";
+    html +="<div id='mtm_selector'><label>Mark-to-market <div class='help help_mtm'></div><input type=checkbox id='mtm'></label></div>";
     html +="<a id='calc_tax'>Recalculate taxes</a>";
-    html +="<a href='download?address="+address+"&type=transactions_json' id='download_transactions_json'>Download transactions (json)</a>";
+
 //    html += "<a href='download?address="+address+"&type=transactions_csv' id='download_transactions_csv'>csv</a></div>";
+    html += "<div id='tax_data'>";
     html += year_html;
     html +="<a id='download_tax_forms'>Download tax forms</a>";
+    html += "</div>";
 
 
     html += "</div>";
@@ -48,6 +54,8 @@ function process_tax_js(js) {
     interest = js['interest'];
     console.log('process_tax_js',year);
     show_sums(CA_long, CA_short, incomes, interest, year);
+    indicate_matchups(CA_long, CA_short, incomes, interest);
+//    populate_vault_info(js['vault_info']);
 
 
 
@@ -72,12 +80,223 @@ function show_sums(CA_long, CA_short, incomes, interest,year) {
     total_income = sum_up(incomes,year);
     total_interest = sum_up(interest,year);
     html = "<table id='tax_sums'>";
-    html += "<tr><td class='tax_sum_header'>Long-term cap gains</td><td class='tax_sum_val'>$"+round_usd(total_gain_long)+"</td></tr>";
-    html += "<tr><td class='tax_sum_header'>Short-term cap gains</td><td class='tax_sum_val'>$"+round_usd(total_gain_short)+"</td></tr>";
-    html += "<tr><td class='tax_sum_header'>Other income</td><td class='tax_sum_val'>$"+round_usd(total_income)+"</td></tr>";
+    if (mtm) {
+        html += "<tr><td class='tax_sum_header'>Ordinary income</td><td class='tax_sum_val'>$"+round_usd(total_income+total_gain_short)+"</td></tr>";
+    } else {
+        html += "<tr><td class='tax_sum_header'>Long-term cap gains</td><td class='tax_sum_val'>$"+round_usd(total_gain_long)+"</td></tr>";
+        html += "<tr><td class='tax_sum_header'>Short-term cap gains</td><td class='tax_sum_val'>$"+round_usd(total_gain_short)+"</td></tr>";
+        html += "<tr><td class='tax_sum_header'>Ordinary income</td><td class='tax_sum_val'>$"+round_usd(total_income)+"</td></tr>";
+    }
     html += "<tr><td class='tax_sum_header'>Loan interest paid</td><td class='tax_sum_val'>$"+round_usd(total_interest)+"</td></tr>";
     html += "</table>";
     $('#year_selector').after(html);
+}
+
+
+function define_matchups(lines) {
+    for (line of lines) {
+        let in_txid = line['in_txid'];
+        let in_tridx = line['in_tridx'];
+
+        let out_txid = line['out_txid'];
+        let out_tridx = line['out_tridx'];
+
+        let tok = line['symbol'];
+
+        if (!(in_txid in matchups_basis))
+            matchups_basis[in_txid] = {};
+        if (!(in_tridx in matchups_basis[in_txid]))
+            matchups_basis[in_txid][in_tridx] = {}
+        if (!(tok in matchups_basis[in_txid][in_tridx]))
+            matchups_basis[in_txid][in_tridx][tok] = []
+
+        matchups_basis[in_txid][in_tridx][tok].push(out_txid);
+
+        if (!(out_txid in matchups_sales))
+            matchups_sales[out_txid] = {};
+        if (!(out_tridx in matchups_sales[out_txid]))
+            matchups_sales[out_txid][out_tridx] = {}
+        if (!(tok in matchups_sales[out_txid][out_tridx]))
+            matchups_sales[out_txid][out_tridx][tok] = []
+
+        matchups_sales[out_txid][out_tridx][tok].push(in_txid);
+    }
+}
+
+function define_matchups_ii(lines,target) {
+    for (line of lines) {
+        let txid = line['txid'];
+        let tridx = line['tridx'];
+
+        if (!(txid in target))
+            target[txid] = {};
+        if (!(tridx in target[txid]))
+            target[txid][tridx] = {'text':line['text'],'amount':line['amount']}
+    }
+}
+
+function add_matchup_text(txid,tridx,text) {
+    if (!(txid in matchup_texts))
+        matchup_texts[txid] = {}
+    if (!(tridx in matchup_texts[txid]))
+        matchup_texts[txid][tridx] = []
+    matchup_texts[txid][tridx].push(text);
+}
+
+function make_matchup_html(txid,tridx,check=true) {
+    if (check) {
+        if (!(txid in matchup_texts))
+            return "";
+        if (!(tridx in matchup_texts[txid]))
+            return "";
+    }
+
+    matchup_html = "<tr class='matchup";
+    if (!matchups_visible)
+        matchup_html += ' hidden';
+    matchup_html += "'><td colspan=7>";
+    for (matchup_text of matchup_texts[txid][tridx]) {
+        matchup_html += ("<p>"+matchup_text +"</p>");
+    }
+    matchup_html += "</td></tr>";
+    return matchup_html
+}
+
+function make_all_matchup_html() {
+    $('.matchup').remove();
+    for (let txid in matchup_texts) {
+        for (let tridx in matchup_texts[txid]) {
+            let transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
+            transfer.after(make_matchup_html(txid,tridx,check=false));
+        }
+    }
+}
+
+function indicate_matchups(CA_long, CA_short, incomes, interest) {
+    lines = CA_short;
+    matchups_basis = {}
+    matchups_sales = {}
+    matchups_incomes = {}
+    matchups_interest = {}
+    define_matchups(CA_long);
+    define_matchups(CA_short);
+    define_matchups_ii(incomes,matchups_incomes)
+    define_matchups_ii(interest,matchups_interest)
+
+    matchup_texts = {}
+
+//    $('.matchup').remove();
+
+    for (let txid in matchups_basis) {
+        if (txid == -10) //mtm eoy
+            continue;
+        for (let tridx in matchups_basis[txid]) {
+//            console.log('matchup basis',txid,tridx)
+//            transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
+            //tok = $(transfer).find('.r_token').html();
+            text = "";
+            for (tok in matchups_basis[txid][tridx]) {
+                text += "This "+tok+" is later disposed ";
+                cnt = matchups_basis[txid][tridx][tok].length;
+                if (cnt <=5) {
+                    if (cnt == 1)
+                        text += "in transaction ";
+                    else
+                        text += "in transactions ";
+                    subs = [];
+                    for (o_txid of matchups_basis[txid][tridx][tok]) {
+                        if (o_txid == -10)
+                            subs.push('at end of year (mark-to-market)')
+                        else {
+                            let num = "#"+all_transactions[o_txid]['num'];
+                            if (!(subs.includes(num)))
+                                subs.push(num);
+                        }
+                    }
+                    text += subs.join(', ');
+                } else {
+                    text += "in more than 5 transactions";
+                }
+            }
+
+            add_matchup_text(txid,tridx,text)
+
+        }
+    }
+
+    for (let txid in matchups_sales) {
+        if (txid == -10) //mtm eoy
+            continue;
+        for (let tridx in matchups_sales[txid]) {
+//            console.log('matchup sale',txid,tridx)
+            transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
+            tr_tok = $(transfer).find('.r_token').html();
+            text = "";
+            for (tok in matchups_sales[txid][tridx]) {
+                if (tok != tr_tok)
+                    text += "The "+tr_tok+" was converted inside the vault from "+tok+" originally acquired ";
+                else
+                    text += "This "+tok+" was acquired in ";
+                cnt = matchups_sales[txid][tridx][tok].length;
+                if (cnt <= 5) {
+                    if (cnt == 1)
+                        text += "in transaction ";
+                    else
+                        text += "in transactions ";
+                    subs = [];
+                    for (o_txid of matchups_sales[txid][tridx][tok]) {
+                        if (o_txid == -10)
+                            subs.push('at start of year (mark-to-market)')
+                        else {
+                            let num = "#"+all_transactions[o_txid]['num'];
+                            if (!(subs.includes(num)))
+                                subs.push(num);
+                        }
+                    }
+                    text += subs.join(', ');
+                } else {
+                    text += "in more than 5 transactions";
+                }
+                text += "</p>";
+            }
+
+            add_matchup_text(txid,tridx,text)
+
+        }
+    }
+
+    for (let txid in matchups_incomes) {
+        if (txid == -10) //mtm eoy
+            continue;
+        for (let tridx in matchups_incomes[txid]) {
+//            transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
+            entry = matchups_incomes[txid][tridx];
+            if (entry['amount'] > 1) {
+                text = entry['text'] + ": $"+round_usd(entry['amount']);
+                add_matchup_text(txid,tridx,text)
+            }
+        }
+    }
+
+    for (let txid in matchups_interest) {
+        if (txid == -10) //mtm eoy
+            continue;
+        for (let tridx in matchups_interest[txid]) {
+//            transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
+            entry = matchups_interest[txid][tridx];
+            if (entry['amount'] > 1) {
+                text = entry['text'] + ": $"+round_usd(entry['amount']);
+                add_matchup_text(txid,tridx,text)
+
+            }
+        }
+    }
+
+    make_all_matchup_html();
+
+
+
+
 }
 
 
@@ -93,6 +312,21 @@ $('body').on('change','#tax_year',function() {
     year = $('#tax_year').val();
     console.log(year);
     show_sums(CA_long, CA_short, incomes, interest, year);
+});
+
+$('body').on('change','#mtm',function() {
+    if (mtm != $('#mtm').is(":checked"))
+        need_recalc();
+    else
+        need_recalc(false);
+});
+
+$('body').on('change','#matchups_visible',function() {
+    matchups_visible = $('#matchups_visible').is(':checked');
+    if (matchups_visible)
+        $('.matchup').removeClass('hidden');
+    else
+        $('.matchup').addClass('hidden');
 });
 
 
@@ -147,6 +381,7 @@ function calc_tax() {
         }
 
         process_tax_js(data);
+        need_recalc(false);
         $(document.body).css({'cursor' : 'default'});
 
     }
@@ -160,3 +395,46 @@ function download_tax_forms() {
     mtm = $('#mtm').is(":checked");
     window.open("download?type=tax_forms&year="+year+"&mtm="+mtm+"&address="+address+"&chain="+chain,'_blank');
 }
+
+function need_recalc(show=true) {
+    if (show && $('#need_recalc').length == 0) {
+        $('#calc_tax').before("<div id='need_recalc'>Recalculation needed</div>");
+        $('#tax_data').addClass('tax_data_outdated');
+    }
+
+    if (!show) {
+        $('#need_recalc').remove();
+        $('#tax_data').removeClass('tax_data_outdated');
+    }
+}
+
+//function populate_vault_info(vault_info=null,txid=null) {
+//
+//    if (vault_info == null)
+//        vault_info = saved_vault_info
+//    else
+//        saved_vault_info = vault_info
+//
+//
+//    if (txid != null) {
+//        local_vault_info = {};
+//        local_vault_info[txid] = vault_info[txid];
+//        console.log('pop vault info',txid, local_vault_info);
+//    } else
+//        local_vault_info = vault_info
+//
+//    for (let txid in local_vault_info) {
+//        for (let tridx in local_vault_info[txid]) {
+//            let vault_id = local_vault_info[txid][tridx];
+//            let transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
+//            console.log("setting vault id",txid, tridx, 'display_vault_id', vault_id, transfer.length);
+//
+//            set_transfer_val(txid, tridx, 'display_vault_id', vault_id);
+//
+//            if (vault_id != null && vault_id.toString().includes('custom:'))
+//                vault_id = vault_id.toString().substr(7);
+//
+//            transfer.find('.r_vaultid').html(vault_id);
+//        }
+//    }
+//}

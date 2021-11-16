@@ -14,13 +14,13 @@ from queue import Queue
 
 
 class SQLite:
-    def __init__(self, db=None,check_same_thread=True, isolation_level='DEFERRED', read_only=False, do_logging=False):
+    def __init__(self, db=None,check_same_thread=True, isolation_level='DEFERRED', read_only=False, do_logging=True):
         self.deferred_buffers = defaultdict(Queue)
         self.currently_processing = False
         self.conn = None
         self.read_only = read_only
         self.do_logging = do_logging
-        self.log_file = 'data/sqlite_log.txt'
+        self.log_file = 'logs/sqlite_log.txt'
 
 
         if db is not None:
@@ -29,16 +29,24 @@ class SQLite:
 
     def execute_and_log(self,cursor,query,values=None):
         tstart = time.time()
-        if values is None:
-            rv = cursor.execute(query)
-        else:
-            rv = cursor.execute(query,values)
+        error = None
+        try:
+            if values is None:
+                rv = cursor.execute(query)
+            else:
+                rv = cursor.execute(query,values)
+        except:
+            error = traceback.format_exc()
         tend = time.time()
         if self.do_logging:
             myfile = open(self.log_file, "a", encoding="utf-8")
             myfile.write('\nQUERY '+query+'\n')
+            if error is not None:
+                myfile.write('ERROR '+error+'\n')
             myfile.write('TIMING '+str(tend-tstart)+'\n')
             myfile.close()
+        if error:
+            exit(1)
         return rv
 
     def connect(self,db, check_same_thread=True, isolation_level='DEFERRED'):
@@ -306,6 +314,18 @@ class SQLite:
     def update_kw(self, table, where, **kwargs):
         # column_list = []
         # value_list = []
+
+        def infer_meaning(value):
+            if isinstance(value,str):
+                return "'"+value+"'"
+            elif isinstance(value,bytes):
+                return sqlite3.Binary(value)
+            elif value in [True,False]:
+                return str(int(value))
+            elif value is None:
+                return "null"
+            else:
+                return str(value)
         pair_list = []
         command_list = {'commit': False, 'connection': None, 'ignore': False}
         for key, value in kwargs.items():
@@ -313,18 +333,24 @@ class SQLite:
                 command_list[key] = value
                 continue
 
-            try:
-                check = float(value)
-                pair_list.append(key + " = " +str(value))
-            except Exception:
-                pair_list.append(key + " = " + "'" + value + "'")
+            pair_list.append(key + " = " + infer_meaning(value))
+
+
+            #
+            # try:
+            #     check = float(value)
+            #     pair_list.append(key + " = " +str(value))
+            # except Exception:
+            #     pair_list.append(key + " = " + "'" + value + "'")
 
         error_mode = 'REPLACE'
         if command_list['ignore']:
             error_mode = 'IGNORE'
         # if 'IGNORE' in command_list:
         #     error_mode = 'IGNORE'
-        query = "UPDATE OR " + error_mode + " "+ table + " SET " + (",").join(pair_list) + " WHERE "+ where
+        query = "UPDATE OR " + error_mode + " "+ table + " SET " + (",").join(pair_list)
+        if where is not None:
+            query += " WHERE "+ where
 
         conn_to_use = self.conn
         if command_list['connection'] is not None:
@@ -339,7 +365,7 @@ class SQLite:
             return c.rowcount
         except Error as e:
             print(self.db,"update_kw error ", e, "table", table, "kwargs", kwargs)
-            exit(0)
+            exit(1)
 
 
 

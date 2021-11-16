@@ -48,7 +48,8 @@ class Transfer:
     }
 
     ALL_FIELDS = ['type', 'fr', 'to', 'amount', 'what', 'symbol', 'input_len', 'rate_found', 'rate', 'free','treatment', 'input','amount_non_zero','input_non_zero','outbound','index','token_nft_id','vault_id']
-    def __init__(self, index, type, fr, to, val, token_contract,token_name, token_nft_id, input_len, rate_found, rate,base_fee, input=None, treatment = None, outbound=False, synthetic=False,vault_id=None):
+    def __init__(self, index, type, fr, to, val, token_contract,token_name, token_nft_id, input_len, rate_found, rate,base_fee, input=None, treatment = None, outbound=False,
+                 synthetic=False,vault_id=None, custom_treatment=None, custom_rate=None, custom_vaultid=None):
         self.type = type
         self.fr = fr
         self.to = to
@@ -68,6 +69,9 @@ class Transfer:
         self.index=index
         self.synthetic = synthetic
         self.vault_id=vault_id
+        self.custom_treatment = custom_treatment
+        self.custom_rate = custom_rate
+        self.custom_vaultid = custom_vaultid
 
     def __getitem__(self,key):
         return getattr(self,key)
@@ -95,7 +99,8 @@ class Transaction:
     MAPPED_FIELDS = ['fr','to','amount','what','type','rate_found','free','symbol','amount_non_zero','input_non_zero']
     # ALL_FIELDS = {'index':0, 'type':1, 'from':2, 'to':3, 'amount':4, 'what':5, 'input_len':6, 'rate_found':7, 'rate':8,'free':9}
 
-    def __init__(self, chain,txid = None):
+    def __init__(self, chain,txid = None, custom_type_id=None, custom_color_id = None):
+        self.hash = None
         self.type = None
         self.grouping = []
         self.chain = chain
@@ -110,10 +115,11 @@ class Transaction:
         self.local_rates = defaultdict(dict)
         self.balanced = False
         self.txid=txid
-        self.custom_type_id=None
+        self.custom_type_id=custom_type_id
+        self.custom_color_id = custom_color_id
 
-    def append(self,cl,row, transfer_idx=None):
-        self.grouping.append([cl,row, transfer_idx])
+    def append(self,cl,row, transfer_idx=None, custom_treatment=None, custom_rate=None, custom_vaultid=None):
+        self.grouping.append([cl,row, transfer_idx,custom_treatment,custom_rate,custom_vaultid])
 
 
     def lookup_rate(self,user,coingecko, token_contract, ts, tr_index):
@@ -130,8 +136,8 @@ class Transaction:
             level, rate, source = coingecko.lookup_rate(token_contract, ts)
             # log("rate",level,rate,source)
             #transaction_id INTEGER, transfer_idx INTEGER, rate REAL, source INTEGER, level INTEGER
-            if self.txid is not None and source is not None:
-                user.add_rate(self.txid, tr_index, rate, source, level)
+            # if self.txid is not None and source is not None:
+            #     user.add_rate(self.txid, tr_index, rate, source, level)
                 # user.db.insert_kw('rates',transaction_id=self.txid, transfer_idx=tr_index, rate=rate, source = sources.index(source), level=level)
 
 
@@ -153,7 +159,7 @@ class Transaction:
             self.mappings[key] = defaultdict(list)
 
 
-        for index,(type,sub_data,loaded_index) in enumerate(self.grouping):
+        for index,(type,sub_data,loaded_index,custom_treatment,custom_rate,custom_vaultid) in enumerate(self.grouping):
             hash, ts, fr, to, val, token, token_contract, token_nft_id, base_fee, input_len,input = sub_data
             self.hash = hash
             self.ts = ts
@@ -168,7 +174,8 @@ class Transaction:
             # print("RATE LOOKUP",self.hash,token_contract,ts,rate_found,rate)
             # transfer = [index, type, fr, to, val, token_contract, input_len, rate_found, rate,base_fee == 0]
             # transfer = {'type':type, 'from':fr, 'to':to, 'amount':val, 'what':token_contract,'input_len':input_len, 'rate_found':rate_found, 'rate':rate}
-            transfer = Transfer(index, type, fr, to, val, token_contract, token, token_nft_id, input_len, rate_found, rate,base_fee, outbound = (fr.lower() == self.addr.lower()))
+            transfer = Transfer(index, type, fr, to, val, token_contract, token, token_nft_id, input_len, rate_found, rate,base_fee, outbound = (fr.lower() == self.addr.lower()),
+                                custom_treatment=custom_treatment, custom_rate=custom_rate, custom_vaultid=custom_vaultid)
             self.transfers.append(transfer)
             for key in Transaction.MAPPED_FIELDS:#.keys():
                 # self.mappings[key][transfer[Transaction.MAPPED_FIELDS[key]]].append(index)
@@ -201,6 +208,18 @@ class Transaction:
             if len(counter_parties) == 0:
                 counter_parties = potentates
         self.counter_parties = counter_parties
+
+        if len(self.counter_parties):
+            cp_name = list(self.counter_parties.values())[0][0]
+        else:
+            cp_name = "UNKNOWN "
+        for transfer in self.transfers:
+            if transfer.outbound:
+                transfer.vault_id = cp_name[:6] + " " + transfer.to[2:8]  # to
+            else:
+                transfer.vault_id = cp_name[:6] + " " + transfer.fr[2:8]  # fr
+
+
         # _, self.main_asset_rate, rate_source = coingecko_rates.lookup_rate(self.main_asset, self.ts)
         _, self.main_asset_rate, rate_source = self.lookup_rate(user, coingecko_rates, self.main_asset, self.ts, -1)
 
@@ -263,9 +282,12 @@ class Transaction:
 
 
     def __str__(self):
-        rv = "HASH:"+str(self.hash)+", TIMESTAMP:"+str(self.ts)
-        for transfer in self.transfers:
-            rv += str(transfer)+"\n"
+        if self.hash is not None:
+            rv = "HASH:"+str(self.hash)+", TIMESTAMP:"+str(self.ts)
+            for transfer in self.transfers:
+                rv += str(transfer)+"\n"
+        else:
+            return str(self.grouping)
         return rv
 
     def __repr__(self):
@@ -286,7 +308,7 @@ class Transaction:
         #             counterparty_list.add(transfer.to)
         #         else:
         #             counterparty_list.add(transfer.fr)
-        for type,sub_data,loaded_index in self.grouping:
+        for type,sub_data,_,_,_,_ in self.grouping:
             hash, ts, fr, to, val, token, token_contract, token_nft_id, base_fee, input_len, input = sub_data
             if token_contract is not None:
                 contract_list.add(token_contract)
@@ -488,7 +510,7 @@ class Transaction:
                     for transfer in self.lookup({'what':add_rate_for}):
                         transfer.rate = inferred_rate
                         transfer.good_rate = 1
-                        user.add_rate(self.txid, transfer.index, inferred_rate, 'inferred', 1)
+                        # user.add_rate(self.txid, transfer.index, inferred_rate, 'inferred', 1)
                     # coingecko_rates.add_rate(add_rate_for, symbols[add_rate_for]['symbol'], self.ts, inferred_rate)
 
 
@@ -568,7 +590,7 @@ class Transaction:
                     for transfer in self.lookup({'what':contract}):
                         transfer.rate = adjusted_rate
                         transfer.good_rate = 1
-                        user.add_rate(self.txid, transfer.index, adjusted_rate, 'adjusted', 1)
+                        # user.add_rate(self.txid, transfer.index, adjusted_rate, 'adjusted', 1)
                     self.local_rates[contract][self.ts] = adjusted_rate
 
                     # coingecko_rates.add_rate(self, contract, symbols[contract]['symbol'], self.ts, adjusted_rate)
@@ -608,8 +630,13 @@ class Transaction:
 
 
 
+
+
         js = {'txid':self.txid,'type': typestr, 'ct_id':self.custom_type_id, 'nft':nft,'hash':self.hash,'ts':ts,'classification_certainty':self.classification_certainty_level,'rate_inferred':self.rate_inferred,
               'rate_adjusted':self.rate_adjusted,'counter_parties':counter_parties}
+
+        if self.custom_color_id is not None:
+            js['custom_color_id'] = self.custom_color_id
 
         rows = []
         for t in self.transfers:

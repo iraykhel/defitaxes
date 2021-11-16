@@ -28,13 +28,16 @@ class User:
         self.db.create_table('custom_names', 'chain, address, name', drop=drop)
         self.db.create_index('custom_names_idx', 'custom_names', 'chain,address', unique=True)
 
-        self.db.create_table('custom_types', 'id integer primary key autoincrement, name, description, balanced integer', drop=drop)
-        self.db.create_index('custom_types_idx', 'custom_types', 'name', unique=True)
+        self.db.create_table('custom_types', 'chain, id integer primary key autoincrement, name, description, balanced integer', drop=drop)
+        self.db.create_index('custom_types_idx', 'custom_types', 'chain, name', unique=True)
         self.db.create_table('custom_types_rules', 'id integer primary key autoincrement, type_id integer, '
                                                    'from_addr, from_addr_custom, to_addr, to_addr_custom, token, token_custom, treatment, vault_id, vault_id_custom',
                              drop=drop)
-        self.db.create_table('custom_types_applied', 'type_id integer, transaction_id integer primary key', drop=drop)
-        self.db.create_index('custom_types_applied_idx', 'custom_types_applied', 'type_id')
+        # self.db.create_table('custom_types_applied', 'type_id integer, transaction_id integer primary key', drop=drop)
+        # self.db.create_index('custom_types_applied_idx', 'custom_types_applied', 'type_id')
+
+        # self.db.create_table('custom_colors', 'transaction_id integer primary key, color integer', drop=drop)
+        # self.db.create_index('custom_colors_idx', 'custom_colors', 'color')
 
 
         # drop=False
@@ -45,20 +48,21 @@ class User:
         self.db.create_index('tokens_idx', 'tokens', 'chain, contract, symbol', unique=True)
 
 
-        self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp INTEGER',drop=drop)
+        self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp INTEGER, custom_type_id INTEGER, custom_color_id INTEGER',drop=drop)
         self.db.create_index('transactions_idx', 'transactions', 'hash', unique=True)
 
-        self.db.create_table('transaction_transfers', 'id integer primary key autoincrement, type integer, idx INTEGER, transaction_id INTEGER, from_addr_id INTEGER, to_addr_id INTEGER, val REAL, token_id INTEGER, token_nft_id INTEGER, base_fee REAL, input_len INTEGER, input', drop=drop)
+        self.db.create_table('transaction_transfers', 'id integer primary key autoincrement, type integer, idx INTEGER, transaction_id INTEGER, from_addr_id INTEGER, to_addr_id INTEGER, val REAL, token_id INTEGER, token_nft_id INTEGER, base_fee REAL, input_len INTEGER, input, '
+                                                      'custom_treatment, custom_rate REAL, custom_vaultid', drop=drop)
         self.db.create_index('transaction_transfers_idx', 'transaction_transfers', 'idx, transaction_id', unique=True)
 
-        self.db.create_table('rates', 'transaction_id INTEGER, transfer_idx INTEGER, rate REAL, source INTEGER, level INTEGER', drop=drop)
-        self.db.create_index('rates_idx', 'rates', 'transaction_id, transfer_idx', unique=True)
+        # self.db.create_table('rates', 'transaction_id INTEGER, transfer_idx INTEGER, rate REAL, source INTEGER, level INTEGER', drop=drop)
+        # self.db.create_index('rates_idx', 'rates', 'transaction_id, transfer_idx', unique=True)
 
-        self.db.create_table('custom_treatment', 'transaction_id INTEGER, transfer_idx INTEGER, treatment', drop=drop)
-        self.db.create_index('custom_treatment_idx', 'custom_treatment', 'transaction_id, transfer_idx', unique=True)
-
-        self.db.create_table('custom_rates', 'transaction_id INTEGER, transfer_idx INTEGER, rate REAL', drop=drop)
-        self.db.create_index('custom_rates_idx', 'custom_rates', 'transaction_id, transfer_idx', unique=True)
+        # self.db.create_table('custom_treatment', 'transaction_id INTEGER, transfer_idx INTEGER, treatment', drop=drop)
+        # self.db.create_index('custom_treatment_idx', 'custom_treatment', 'transaction_id, transfer_idx', unique=True)
+        #
+        # self.db.create_table('custom_rates', 'transaction_id INTEGER, transfer_idx INTEGER, rate REAL', drop=drop)
+        # self.db.create_index('custom_rates_idx', 'custom_rates', 'transaction_id, transfer_idx', unique=True)
         self.db.commit()
 
 
@@ -106,7 +110,7 @@ class User:
             # db.insert_kw('transactions', chain=chain.name, hash=hash, timestamp=timestamp)
             # txid = db.select("SELECT last_insert_rowid()")[0][0]
             txid = self.locate_insert_transaction(chain.name,hash,timestamp)
-            for index, (type, sub_data, loaded_index) in enumerate(transaction.grouping):
+            for index, (type, sub_data, loaded_index, _, _, _) in enumerate(transaction.grouping):
                 if loaded_index is not None:
                     index = loaded_index
 
@@ -128,8 +132,9 @@ class User:
         db = self.db
         # query = "select * from transactions, transaction_transfers where chain='" + self.name + " and transactions.hash = transaction_transfers.hash ORDER BY timestamp,idx"
         query = "SELECT " \
-                "tx.id, tx.hash, tx.timestamp, " \
-                "tr.id, tr.type, tr.idx, from_addr.address, to_addr.address, tr.val, tk.symbol, tk.contract, tr.token_nft_id, tr.base_fee, tr.input_len, tr.input " \
+                "tx.id, tx.hash, tx.timestamp, tx.custom_type_id, tx.custom_color_id, " \
+                "tr.id, tr.type, tr.idx, from_addr.address, to_addr.address, tr.val, tk.symbol, tk.contract, tr.token_nft_id, tr.base_fee, tr.input_len, tr.input," \
+                "tr.custom_treatment, tr.custom_rate, tr.custom_vaultid " \
                 "FROM transactions as tx, transaction_transfers as tr, addresses as from_addr, addresses as to_addr, tokens as tk " \
                 "WHERE tx.id = tr.transaction_id AND tr.from_addr_id = from_addr.id AND tr.to_addr_id = to_addr.id AND tr.token_id = tk.id "
         if chain is not None:
@@ -142,12 +147,13 @@ class User:
         rows = db.select(query)
         transactions = SortedDict()
         for row in rows:
-            txid, hash, ts, trid, transfer_type,idx,fr,to,val,token,token_contract,token_nft_id, base_fee, input_len, input = row
+            txid, hash, ts, custom_type_id, custom_color_id, trid, transfer_type,idx,fr,to,val,token,token_contract,token_nft_id, base_fee, input_len, input, \
+            custom_treatment, custom_rate, custom_vaultid = row
             uid = str(ts) + "_" + str(hash)
             if uid not in transactions:
-                transactions[uid] = Transaction(chain,txid=txid)
+                transactions[uid] = Transaction(chain,txid=txid, custom_type_id=custom_type_id, custom_color_id=custom_color_id)
             row = [hash, ts, fr, to, val, token, token_contract, token_nft_id, base_fee, input_len, input]
-            transactions[uid].append(transfer_type, row, transfer_idx=idx)
+            transactions[uid].append(transfer_type, row, transfer_idx=idx, custom_treatment=custom_treatment, custom_rate=custom_rate, custom_vaultid=custom_vaultid)
         return transactions
 
 
@@ -165,13 +171,13 @@ class User:
 
 
 
-    def save_custom_type(self,address,name,description,balanced,rules, id=None):
+    def save_custom_type(self,chain_name,address,name,description,balanced,rules, id=None):
         if id is not None:
             # self.db.query("DELETE FROM custom_types WHERE id="+id)
             self.db.query("UPDATE custom_types SET name = '"+name+"', description = '"+description+"', balanced = "+str(balanced)+" WHERE id="+str(id))
             self.db.query("DELETE FROM custom_types_rules WHERE type_id=" + id)
         else:
-            self.db.insert_kw('custom_types', name=name, description=description, balanced=balanced)
+            self.db.insert_kw('custom_types', chain=chain_name, name=name, description=description, balanced=balanced)
 
 
         rows = self.db.select("SELECT id FROM custom_types WHERE name='"+name+"'")
@@ -188,8 +194,8 @@ class User:
         self.db.query("DELETE FROM custom_types_rules WHERE type_id=" + id)
         self.db.commit()
 
-    def load_custom_types(self):
-        rows = self.db.select("SELECT t.id, t.name, t.description, t.balanced, r.* FROM custom_types as t, custom_types_rules as r WHERE t.name != '' and t.id = r.type_id ORDER BY t.name ASC, r.id ASC")
+    def load_custom_types(self,chain_name):
+        rows = self.db.select("SELECT t.id, t.name, t.description, t.balanced, r.* FROM custom_types as t, custom_types_rules as r WHERE t.chain='"+chain_name+"' and t.name != '' and t.id = r.type_id ORDER BY t.name ASC, r.id ASC")
         if len(rows) == 0:
             return []
 
@@ -206,51 +212,51 @@ class User:
         return js
 
 
-    def prepare_all_custom_types(self):
-        tx_ct_mapping = {}
-        rows = self.db.select('select * from custom_types_applied')
-        for row in rows:
-            tx_ct_mapping[row[1]] = row[0]
+    def prepare_all_custom_types(self,chain_name):
+        # tx_ct_mapping = {}
+        # rows = self.db.select('select * from custom_types_applied')
+        # for row in rows:
+        #     tx_ct_mapping[row[1]] = row[0]
 
         ct_info = {}
-        rows = self.db.select('select * from custom_types')
+        rows = self.db.select("SELECT id, name, description, balanced FROM custom_types where chain='"+chain_name+"'")
         for row in rows:
             rules = self.db.select("SELECT * FROM custom_types_rules WHERE type_id = "+str(row[0])+" ORDER BY id ASC")
             ct_info[row[0]] = {'name': row[1], 'description':row[2],'balanced':row[3],'rules':rules}
-        self.tx_ctype_mapping = tx_ct_mapping
+        # self.tx_ctype_mapping = tx_ct_mapping
         self.ctype_info = ct_info
+    #
+    # def prepare_all_custom_treatment_and_rates(self):
+    #     tx_ctreat_mapping = {}
+    #     tx_crate_mapping = {}
+    #     rows = self.db.select('select * from custom_treatment')
+    #     for row in rows:
+    #         txid = row[0]
+    #         if txid not in tx_ctreat_mapping:
+    #             tx_ctreat_mapping[txid] = {}
+    #         tx_ctreat_mapping[txid][row[1]] = row[2]
+    #     self.tx_ctreat_mapping = tx_ctreat_mapping
+    #
+    #     rows = self.db.select('select * from custom_rates')
+    #     for row in rows:
+    #         txid = row[0]
+    #         if txid not in tx_crate_mapping:
+    #             tx_crate_mapping[txid] = {}
+    #         tx_crate_mapping[txid][row[1]] = row[2]
+    #     self.tx_crate_mapping = tx_crate_mapping
 
-    def prepare_all_custom_treatment_and_rates(self):
-        tx_ctreat_mapping = {}
-        tx_crate_mapping = {}
-        rows = self.db.select('select * from custom_treatment')
-        for row in rows:
-            txid = row[0]
-            if txid not in tx_ctreat_mapping:
-                tx_ctreat_mapping[txid] = {}
-            tx_ctreat_mapping[txid][row[1]] = row[2]
-        self.tx_ctreat_mapping = tx_ctreat_mapping
 
-        rows = self.db.select('select * from custom_rates')
-        for row in rows:
-            txid = row[0]
-            if txid not in tx_crate_mapping:
-                tx_crate_mapping[txid] = {}
-            tx_crate_mapping[txid][row[1]] = row[2]
-        self.tx_crate_mapping = tx_crate_mapping
-
-
-    def apply_custom_type_one_transaction(self,chain,transaction,type_id,type_name,balanced,rules):
+    def apply_custom_type_one_transaction(self,chain,transaction,type_name,balanced,rules):
         transaction.type = Category(custom_type=type_name)
-        transaction.custom_type_id = type_id
         transaction.classification_certainty_level = 10
         transaction.balanced = balanced
-        self.custom_treatment_by_rules(chain, transaction, type_id, rules)
+        self.custom_treatment_by_rules(chain, transaction, transaction.custom_type_id, type_name, rules)
 
     def apply_custom_type(self,chain_name, address,type_id,transaction_list):
         for txid in transaction_list:
             log('apply type',type_id, txid)
-            self.db.insert_kw('custom_types_applied', type_id=type_id, transaction_id=txid)
+            # self.db.insert_kw('custom_types_applied', type_id=type_id, transaction_id=txid)
+            self.db.update_kw('transactions', 'id='+str(txid), custom_type_id=type_id)
         self.db.commit()
 
         rules = self.db.select("SELECT * FROM custom_types_rules WHERE type_id = "+type_id+" ORDER BY id ASC")
@@ -270,9 +276,10 @@ class User:
         for idx,transaction in enumerate(transactions.values()):
             transaction.finalize(self, C, S)
             # classifier.classify(transaction)
-            self.apply_custom_type_one_transaction(chain, transaction, type_id, type_name,balanced, rules)
+            self.apply_custom_type_one_transaction(chain, transaction, type_name,balanced, rules)
             transaction.add_fee_transfer()
             transaction.infer_and_adjust_rates(self,C)
+            self.apply_custom_val(transaction)
             js = transaction.to_json()
             res.append(js)
 
@@ -283,13 +290,15 @@ class User:
         if transaction_list is not None:
             for txid in transaction_list:
                 log('unapply type', type_id, txid)
-                self.db.query("DELETE FROM custom_types_applied WHERE type_id="+str(type_id)+" AND transaction_id="+str(txid))
+                self.db.update_kw('transactions', 'id=' + str(txid), custom_type_id=None)
+                # self.db.query("DELETE FROM custom_types_applied WHERE type_id="+str(type_id)+" AND transaction_id="+str(txid))
         else:
-            transaction_list = []
-            rows = self.db.select("SELECT transaction_id FROM custom_types_applied WHERE type_id="+str(type_id)+" ORDER BY transaction_id ASC")
-            for row in rows:
-                transaction_list.append(str(row[0]))
-            self.db.query("DELETE FROM custom_types_applied WHERE type_id=" + str(type_id))
+            self.db.update_kw('transactions', 'custom_type_id=' + str(type_id), custom_type_id=None)
+            # transaction_list = []
+            # rows = self.db.select("SELECT transaction_id FROM custom_types_applied WHERE type_id="+str(type_id)+" ORDER BY transaction_id ASC")
+            # for row in rows:
+            #     transaction_list.append(str(row[0]))
+            # self.db.query("DELETE FROM custom_types_applied WHERE type_id=" + str(type_id))
         self.db.commit()
 
 
@@ -310,14 +319,16 @@ class User:
             classifier.classify(transaction)
             transaction.add_fee_transfer()
             transaction.infer_and_adjust_rates(self, C)
+            self.apply_custom_val(transaction)
             js = transaction.to_json()
             res.append(js)
+
 
         address_db.disconnect()
         return res
 
 
-    def custom_treatment_by_rules(self, chain, transaction, type_id, rules):
+    def custom_treatment_by_rules(self, chain, transaction, type_id, type_name, rules):
         if transaction.hash == chain.hif:
             print("Applying custom type rules to",transaction.hash)
 
@@ -386,7 +397,7 @@ class User:
                         else:
                             vault_id = fr
                     elif vault_id == 'type_name':
-                        vault_id = type_id
+                        vault_id = type_name
                     else:
                         vault_id = vault_id_custom
                     transfer.vault_id = vault_id
@@ -404,24 +415,28 @@ class User:
 
 
 
-    def add_rate(self, transaction_id, transfer_idx, rate, source, level):
-        self.db.insert_kw('rates', transaction_id=transaction_id, transfer_idx=transfer_idx, rate=rate, source=self.rate_sources.index(source), level=level)
+    # def add_rate(self, transaction_id, transfer_idx, rate, source, level):
+    #     self.db.insert_kw('rates', transaction_id=transaction_id, transfer_idx=transfer_idx, rate=rate, source=self.rate_sources.index(source), level=level)
+    #
+    # def wipe_rates(self):
+    #     self.db.query('DELETE FROM rates')
+    #     self.db.commit()
 
-    def wipe_rates(self):
-        self.db.query('DELETE FROM rates')
+    def save_custom_val(self,chain_name,address,transaction_id, transfer_idx, treatment=None, rate=None, vaultid = None):
+        where = 'transaction_id='+str(transaction_id)+' and idx='+str(transfer_idx)
+        if treatment is not None:
+            self.db.update_kw('transaction_transfers', where, custom_treatment=treatment)
+        if rate is not None:
+            self.db.update_kw('transaction_transfers', where, custom_rate=rate)
+        if vaultid is not None:
+            self.db.update_kw('transaction_transfers', where, custom_vaultid=vaultid)
         self.db.commit()
 
-    def save_custom_treatment(self,chain_name,address,transaction_id, transfer_idx, treatment):
-        self.db.insert_kw('custom_treatment', transaction_id=transaction_id, transfer_idx=transfer_idx, treatment=treatment)
-        self.db.commit()
-
-    def save_custom_rate(self,chain_name,address,transaction_id, transfer_idx, rate):
-        self.db.insert_kw('custom_rates', transaction_id=transaction_id, transfer_idx=transfer_idx, rate=rate)
-        self.db.commit()
 
     def undo_custom_changes(self,chain_name,address,transaction_id):
-        self.db.query("DELETE FROM custom_treatment WHERE transaction_id="+str(transaction_id))
-        self.db.query("DELETE FROM custom_rates WHERE transaction_id=" + str(transaction_id))
+        # self.db.query("DELETE FROM custom_treatment WHERE transaction_id="+str(transaction_id))
+        # self.db.query("DELETE FROM custom_rates WHERE transaction_id=" + str(transaction_id))
+        self.db.update_kw('transaction_transfers',"transaction_id=" + str(transaction_id),custom_treatment=None,custom_rate=None,custom_vaultid=None)
         self.db.commit()
 
         address_db = SQLite('addresses')
@@ -437,7 +452,16 @@ class User:
         classifier = Classifier(chain)
 
         transaction.finalize(self, C, S)
-        classifier.classify(transaction)
+        # classifier.classify(transaction)
+
+
+        if transaction.custom_type_id is not None:
+            type_id = str(transaction.custom_type_id)
+            rules = self.db.select("SELECT * FROM custom_types_rules WHERE type_id = " + type_id + " ORDER BY id ASC")
+            type_name, balanced = self.db.select("SELECT name, balanced FROM custom_types WHERE id = " + type_id)[0]
+            self.apply_custom_type_one_transaction(chain, transaction, type_name,balanced, rules)
+        else:
+            classifier.classify(transaction)
         transaction.add_fee_transfer()
         transaction.infer_and_adjust_rates(self, C)
         js = transaction.to_json()
@@ -446,12 +470,20 @@ class User:
         return js
 
 
-    def apply_custom_treatment_or_rate(self, transaction):
-        txid = transaction.txid
-        if txid is not None and txid in self.tx_ctreat_mapping:
-            for tr_idx in self.tx_ctreat_mapping[txid].keys():
-                transaction.transfers[tr_idx].treatment = 'custom:' + self.tx_ctreat_mapping[txid][tr_idx]
+    def apply_custom_val(self, transaction):
+        # txid = transaction.txid
+        for transfer in transaction.transfers:
+            if transfer.custom_rate is not None:
+                transfer.rate = 'custom:'+str(transfer.custom_rate)
+            if transfer.custom_treatment is not None:
+                transfer.treatment = 'custom:'+str(transfer.custom_treatment)
+            if transfer.custom_vaultid is not None:
+                transfer.vault_id = 'custom:'+str(transfer.custom_vaultid)
 
-        if txid is not None and txid in self.tx_crate_mapping:
-            for tr_idx in self.tx_crate_mapping[txid].keys():
-                transaction.transfers[tr_idx].rate = 'custom:' + str(self.tx_crate_mapping[txid][tr_idx])
+
+    def recolor(self,chain_name, address,color_id,transaction_list):
+        if color_id == 'undo':
+            color_id = None
+        for txid in transaction_list:
+            self.db.update_kw('transactions', 'id='+str(txid), custom_color_id=color_id)
+        self.db.commit()

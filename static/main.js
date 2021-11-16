@@ -1,7 +1,12 @@
+scroll_position = null;
+
 all_transactions = {}
 
 lookup_info = {
     counterparty_mapping: {
+
+    },
+    counterparty_name_mapping: {
 
     },
     signature_mapping: {
@@ -103,12 +108,13 @@ function show_ajax_transactions(data) {
     if ($('.primary_selected').length > 0) selected_id = $('.primary_selected').attr('id');
     for (let idx in data['transactions']) {
         let transaction = data['transactions'][idx];
-        txid = transaction['txid'];
+        let txid = transaction['txid'];
         idx_html = $('#t_'+txid).find('.t_idx').html();
         transaction_html = make_transaction_html(transaction);
         $('#t_'+txid).replaceWith(transaction_html)
         $('#t_'+txid).addClass('secondary_selected');
         $('#t_'+txid).find('.t_idx').html(idx_html);
+//        populate_vault_info(vault_info=null,txid=txid);
     }
     if (selected_id != null) {
         $('#'+selected_id).click();
@@ -210,6 +216,10 @@ function map_lookups(transaction) {
         add_to_mapping('counterparty',progenitor,txid);
         hex_sig = transaction_counterparties[progenitor][1]
         add_to_mapping('signature',hex_sig,txid);
+        cp_name = transaction_counterparties[progenitor][0];
+        if (cp_name == 'unknown')
+            cp_name = progenitor
+        add_to_mapping('counterparty_name',cp_name,txid);
     }
     rows = transaction['rows'];
     outbound_count = 0;
@@ -227,6 +237,7 @@ function map_lookups(transaction) {
                 inbound_count += 1;
                 other_address = row['fr'];
             }
+            add_to_mapping('token',token_contract,txid);
             if (other_address != '0x0000000000000000000000000000000000000000')
                 add_to_mapping('address',other_address,txid);
         }
@@ -238,13 +249,17 @@ function map_lookups(transaction) {
 
 function add_to_mapping(mapping_type, value, txid) {
     if (value == null) return;
-    mapping = lookup_info[mapping_type+"_mapping"];
+    mcode = mapping_type +"_mapping"
+    if (!(mcode in lookup_info))
+        lookup_info[mcode] = {}
+
+    mapping = lookup_info[mcode];
     if (!(value in mapping))
         mapping[value] = new Set();
     mapping[value].add(txid);
 
     transaction_list = lookup_info['transactions'];
-    lookups = ['counterparty','signature','outbound_count','inbound_count','outbound_token','inbound_token','address'];
+    lookups = ['counterparty','counterparty_name','signature','outbound_count','token','inbound_count','outbound_token','inbound_token','address'];
     if (!(txid in transaction_list)) {
         transaction_list[txid] = {}
         for (i = 0; i < lookups.length; i++)
@@ -253,6 +268,14 @@ function add_to_mapping(mapping_type, value, txid) {
 
     transaction_list[txid][mapping_type].add(value);
 }
+
+function remove_from_mapping(mapping_type,value,txid) {
+    if (value == null) return;
+    mapping = lookup_info[mapping_type+"_mapping"];
+    mapping[value].delete(txid);
+    transaction_list[txid][mapping_type].delete(value);
+}
+
 
 function display_counterparty(transaction, editable=false) {
     html = "<div class='tx_row_2'>"
@@ -294,11 +317,26 @@ function display_counterparty(transaction, editable=false) {
 
 }
 
-function set_transfer_val(transaction_id, transfer_idx, what, val) {
+function del_transfer_val(transaction_id, transfer_idx, val_to_delete) {
     transfers = all_transactions[transaction_id]['rows'];
-    for (transfer of transfers) {
-        if (transfer.index  == transfer_idx) {
-            transfer[what] = val;
+    for (let transfer of transfers) {
+        if (transfer['index']  == transfer_idx) {
+            delete transfer[val_to_delete];
+            break;
+        }
+    }
+}
+
+function set_transfer_val(transaction_id, transfer_idx, what, val, append=false) {
+    transfers = all_transactions[transaction_id]['rows'];
+    for (let transfer of transfers) {
+        if (transfer['index']  == transfer_idx) {
+            if (append) {
+                if (!(what in transfer))
+                    transfer[what] = [];
+                transfer[what].push(val);
+            } else
+                transfer[what] = val;
             break;
         }
     }
@@ -306,22 +344,48 @@ function set_transfer_val(transaction_id, transfer_idx, what, val) {
 }
 
 function display_transfers(transaction, editable=false) {
+
+    rows = transaction['rows'];
     rows_table = "<div class='transfers'><table class='rows'>";
     rows_table += "<tr class='transfers_header'><td class=r_from_addr>From</td><td></td><td class=r_to_addr>To</td>"
-    rows_table += "<td class=r_amount>Amount</td><td class=r_token>Token</td><td class=r_treatment>Tax treatment</td><td class=r_rate>USD rate</td></tr>";
-    rows = transaction['rows'];
+    rows_table += "<td class=r_amount>Amount</td><td class=r_token>Token</td><td class=r_treatment>Tax treatment</td>";
+    if (editable) {
+        show_vaultid_col = true;
+        rows_table += "<td class=r_vaultid>Vault/loan ID<div class='help help_vaultid'></div></td>";
+    } else {
+        show_vaultid_col = false;
+        for (let ridx in rows) {
+            let row = rows[ridx];
+            treatment = row['treatment'];
+            if (treatment != null && treatment.includes('custom:')) {
+                treatment = treatment.substr(7);
+            }
+            if (['repay','deposit','borrow','withdraw'].includes(treatment)) {
+                show_vaultid_col = true;
+                rows_table += "<td class=r_vaultid>Vault/loan ID<div class='help help_vaultid'></div></td>";
+                break;
+            }
+        }
+    }
+    rows_table += "<td class=r_rate>USD rate</td></tr>";
+
+    let txid = transaction['txid'];
 
     for (let ridx in rows) {
         let cust_treatment_class = "";
         let cust_rate_class = "";
+        let cust_vaultid_class = "";
         let row = rows[ridx];
         from = row['fr'];
         to = row['to'];
+        if (to == null)
+            editable = false;
         amount = row['amount'];
         token_name = row['symbol'];
         token_contract = row['what'];
         treatment = row['treatment'];
         index = row['index'];
+
         if (treatment != null && treatment.includes('custom:')) {
             cust_treatment_class = " custom";
             treatment = treatment.substr(7);
@@ -331,6 +395,13 @@ function display_transfers(transaction, editable=false) {
         if (rate != null && rate.toString().includes('custom:')) {
             cust_rate_class = " custom";
             rate = parseFloat(rate.substr(7));
+        }
+
+
+        vault_id = row['vault_id'];
+        if (vault_id != null && vault_id.toString().includes('custom:')) {
+            cust_vaultid_class = " custom";
+            vault_id = vault_id.toString().substr(7);
         }
 
         if (to != null) {
@@ -353,7 +424,7 @@ function display_transfers(transaction, editable=false) {
             options = options_out;
         }
 
-
+        hidden_vaultid_class = " class='hidden'";
         treatment_found = 0;
         for (let option in options) {
             opt_exp = options[option];
@@ -367,6 +438,11 @@ function display_transfers(transaction, editable=false) {
                 }
             }*/
             if (option == treatment) {
+                if (['repay','deposit','borrow','withdraw'].includes(option)) {
+                    console.log(transaction['num'],index,'show vaultid')
+                    hidden_vaultid_class = "";
+                }
+
                 if (editable)
                     row_html += " selected ";
                 else {
@@ -374,6 +450,7 @@ function display_transfers(transaction, editable=false) {
                     treatment_found = 1;
                     break;
                 }
+
             }
             if (editable)
                 row_html +="value='"+option+"'>"+opt_exp+"</option>\n";
@@ -386,6 +463,24 @@ function display_transfers(transaction, editable=false) {
 
         row_html +="</td>";
 
+        if (show_vaultid_col) {
+            row_html += "<td class='r_vaultid"+cust_vaultid_class+"'><span"+hidden_vaultid_class+">";
+            if (editable)
+                row_html += "<input type=text class=row_vaultid value='"+vault_id+"' default='"+vault_id+"'>";
+            else
+                row_html += vault_id;
+            row_html += "</span></td>";
+        }
+
+//        if (show_vaultid) {
+//            if (editable)
+//                row_html += "<td class='r_vaultid"+cust_vaultid_class+"'><input type=text class=row_vaultid value='"+vault_id+"' default='"+vault_id+"'></td>";
+//            else
+//                row_html += "<td class='r_vaultid"+cust_vaultid_class+"'>"+vault_id+"</td>";
+//        } else
+//            row_html += "<td class='r_vaultid'></td>";
+
+
         rounded_rate = round(rate);
         if (rounded_rate == null)
             rounded_rate = 0;
@@ -394,7 +489,12 @@ function display_transfers(transaction, editable=false) {
         } else
             row_html += "<td class='r_rate"+cust_rate_class+"'>"+rounded_rate+"</td>";
 
+
         row_html+="</tr>";
+
+        if (typeof matchup_texts !== 'undefined')
+            row_html += make_matchup_html(txid,index);
+
         rows_table += row_html;
 
 
@@ -409,7 +509,7 @@ function make_transaction_html(transaction,idx=null,len=null) {
 
     transaction_color = transaction['classification_certainty']
     if (transaction['rate_adjusted'] != false && transaction['rate_adjusted'] > 0.05 && !transaction['nft']) {
-       transaction_color = 0;
+       transaction_color = 3;
        bad_rate_adjustment = true;
     } else bad_rate_adjustment = false;
 
@@ -418,6 +518,7 @@ function make_transaction_html(transaction,idx=null,len=null) {
 
     missing_rates = [];
     txid = transaction['txid'];
+    transaction['num'] = parseInt(idx)+1;
     all_transactions[txid] = transaction;
 
     rows = transaction['rows'];
@@ -434,7 +535,9 @@ function make_transaction_html(transaction,idx=null,len=null) {
             }
             for (let option in options) {
                 if ((option == treatment)) { // && ['buy','sell'].includes(option)) {
-                    transaction_color = 0;
+
+                    if (transaction['type'] != 'transfer in') //airdrops don't have rates
+                        transaction_color = 0;
                     if (!missing_rates.includes(row['symbol']))
                         missing_rates.push(row['symbol']);
                 }
@@ -455,6 +558,8 @@ function make_transaction_html(transaction,idx=null,len=null) {
     ct_id = transaction['ct_id'];
 
     transaction_html = "<div id='t_"+txid+"' class='transaction t_class_"+transaction_color+" "+type_class;
+    if ('custom_color_id' in transaction)
+        transaction_html += " custom_recolor custom_recolor_"+transaction['custom_color_id'];
     if (ct_id != null)
         transaction_html += " custom_type custom_type_"+ct_id;
     transaction_html += "'>";
@@ -462,13 +567,7 @@ function make_transaction_html(transaction,idx=null,len=null) {
     ttime = timeConverter(ts);
 
 
-    accuracy = "poor";
-    acc = transaction['classification_certainty'];
-    if (acc > 7) {
-        accuracy = 'good';
-    } else if (acc > 3) {
-        accuracy = 'medium';
-    }
+
 //                                transaction_html += "<input type=checkbox class='t_sel'>";
     transaction_html += "<div class='top_section'><div class='tx_row_0'><span class='t_time copiable' title='Copy timestamp to clipboard' full='"+ts+"'>"+ttime+"</span>";
     transaction_html += "<span class='tx_hash'>TX hash: "+display_hash(transaction['hash'], null, "hash");
@@ -568,7 +667,7 @@ $(function() {
                             window.sessionStorage.setItem('address',addr);
                             window.sessionStorage.setItem('chain',chain);
 
-                            var all_html = "<div id='top_text'>Make sure to check yellow and red transactions!</div>";
+                            var all_html = "<div id='top_text'>Make sure to check red, orange, and yellow transactions.</div>";
 
                             for (let idx in data['transactions']) {
                                 let transaction = data['transactions'][idx];
@@ -631,7 +730,7 @@ function select_transaction(txel) {
 
     t_id = txel.attr('id');
     console.log('selected',t_id);
-    txid = t_id.substr(2);
+    let txid = t_id.substr(2);
     deselect_primary();
     prev_selection = txid;
     console.log('prev_selection',prev_selection);
@@ -651,13 +750,13 @@ function select_transaction(txel) {
     else {
         var html = "<div class='select_similar'><div class='header'>Select transactions with the same:</div>";
         let lookups = {
-            counterparty:['counterparty','checked'],
+            counterparty_name:['counterparty','checked'],
             signature:['operation','checked'],
             address:['addresses'],
             outbound_count:['number of sent transfers',''],
-            inbound_count:['number of received transfers',''],
-            outbound_token:['sent tokens',''],
-            inbound_token:['received tokens','']
+            inbound_count:['number of received transfers','']
+//            outbound_token:['sent tokens',''],
+//            inbound_token:['received tokens','']
         };
         for (let lookup in lookups) {
             console.log('initial lookup',lookup);
@@ -665,6 +764,15 @@ function select_transaction(txel) {
             if (lookup_vals.size > 0)
                 html += "<label><input type=checkbox "+lookups[lookup][1]+" class='sim_"+lookup+"'>"+lookups[lookup][0]+"</label>";
         }
+
+        let tokens = {};
+        for (let transfer of all_transactions[txid]['rows']) {
+            if (transfer['to'] != null)
+                tokens[transfer['symbol']] = transfer['what'];
+        }
+
+        for (let token_symbol in tokens)
+            html += "<label><input type=checkbox class='sim_token' token_address='"+tokens[token_symbol]+"'>token:"+token_symbol+"</label>";
 
         html += "<div class='sim_buttons'><div class='select_similar_button'></div>";
         html += "<div class='undo_changes'>Undo custom changes</div>"
@@ -778,8 +886,15 @@ function activate_clickables() {
                                     if (o_progenitor == progenitor)
                                         transaction_counterparties[progenitor][0] = cp;
                                 }
+                                console.log("remove_from_mapping",current_name,o_txid);
+                                remove_from_mapping('counterparty_name',current_name,o_txid);
+                                console.log("add_to_mapping",cp,o_txid);
+                                add_to_mapping('counterparty_name',cp,o_txid);
                                 $('#t_'+o_txid).find('.tx_row_2').replaceWith(display_counterparty(transaction,o_txid == txid));
+                                if (o_txid != txid)
+                                    $('#t_'+o_txid).find('.select_similar').remove();
                             }
+                            find_similar_transactions(txid);
                         }
 
                     });
@@ -790,7 +905,7 @@ function activate_clickables() {
         }
     });
 
-    $('body').on('change','.treatment, .row_rate',function() {
+    $('body').on('change','.treatment, .row_rate, .row_vaultid',function() {
         el = $(this);
         td = $(this).closest('td')
         td.addClass('custom');
@@ -804,32 +919,30 @@ function activate_clickables() {
         if ($(this).hasClass('treatment')) {
             console.log("update treatment, transaction",txid,'transfer index',tr_idx,'val',val);
             data = 'transaction='+txid+"&transfer_idx="+tr_idx+"&custom_treatment="+val;
-            $.post("save_custom_treatment?chain="+chain+"&address="+addr, data, function(resp) {
-                console.log(resp);
-                var data = JSON.parse(resp);
-                if (data.hasOwnProperty('error')) {
-                    td.append("<div class='err_mes'>"+data['error']+"</div>");
-                } else {
-                    //all_transactions[txid]['rows'][tr_idx]['treatment'] = "custom:"+val;
-                    set_transfer_val(txid, tr_idx, 'treatment', "custom:"+val);
-                }
-            });
-        } else {
+            prop = 'treatment'
+        } else if ($(this).hasClass('row_rate')) {
             console.log("update rate, transaction",txid,'transfer index',tr_idx,'val',val);
             data = 'transaction='+txid+"&transfer_idx="+tr_idx+"&custom_rate="+val;
-            $.post("save_custom_rate?chain="+chain+"&address="+addr, data, function(resp) {
-                console.log(resp);
-                var data = JSON.parse(resp);
-                if (data.hasOwnProperty('error')) {
-                    td.append("<div class='err_mes'>"+data['error']+"</div>");
-                } else {
-                    //all_transactions[txid]['rows'][tr_idx]['rate'] = "custom:"+val;
-                    set_transfer_val(txid, tr_idx, 'rate', "custom:"+val);
-                }
-            });
+            prop = 'rate'
+        } else if ($(this).hasClass('row_vaultid')) {
+            console.log("update vault id, transaction",txid,'transfer index',tr_idx,'val',val);
+            data = 'transaction='+txid+"&transfer_idx="+tr_idx+"&custom_vaultid="+val;
+            prop = 'vault_id'
         }
 
-        showib(txel.find('.undo_changes'));
+         $.post("save_custom_val?chain="+chain+"&address="+addr, data, function(resp) {
+            console.log(resp);
+            var data = JSON.parse(resp);
+            if (data.hasOwnProperty('error')) {
+                td.append("<div class='err_mes'>"+data['error']+"</div>");
+            } else {
+                set_transfer_val(txid, tr_idx, prop, "custom:"+val);
+                need_recalc();
+                showib(txel.find('.undo_changes'));
+            }
+        });
+
+
     });
 
     $('body').on('click','.undo_changes',function() {
@@ -846,6 +959,7 @@ function activate_clickables() {
                 txel.append("<div class='err_mes'>"+data['error']+"</div>");
             } else {
                 show_ajax_transactions(data)
+                need_recalc();
             }
         });
     });
@@ -876,13 +990,17 @@ function find_similar_transactions(txid) {
     $(jqid).find('input:checked').each(function() {
         tin1 = performance.now();
         lookup = $(this).attr('class').substr(4);
-        console.log('lookup',lookup);
-        lookup_vals = lookup_info['transactions'][txid][lookup];
-        if (lookup_vals.size == 0) {
-            all = new Set();
-            $(jqid).find('.current_sims').val('');
-            return;
-        }
+        if (lookup != 'token') {
+            lookup_vals = lookup_info['transactions'][txid][lookup];
+
+            if (lookup_vals.size == 0) {
+                all = new Set();
+                $(jqid).find('.current_sims').val('');
+                return;
+            }
+        } else
+            lookup_vals = [$(this).attr('token_address')];
+        console.log('lookup',lookup,'vals',lookup_vals);
 
         single_lookup_set = new Set();
         for (let lookup_val of lookup_vals) {
@@ -903,6 +1021,7 @@ function find_similar_transactions(txid) {
     } else showib($(jqid).find('.select_similar_button'));
 
     cnt = all.size - 1;
+    console.log("find_similar_transactions",jqid,cnt);
     if (cnt == 0) {
         $(jqid).find('.select_similar_button').addClass('grayed').html('There are no matching transactions');
     } else {
@@ -937,10 +1056,16 @@ function selection_operations(builtin_types,custom_types) {
     html += "<div id='selections_placeholder'>Nothing selected. Click a transaction to select it. CTRL+click to select multiple.</div>";
 
     html += "<div id='scroll_block'><div class='header'>Scroll to:</div>";
-    html += "<div class='scroll_row'>Selected <a id='scr_selected_next'>Next</a><a id='scr_selected_prev'>Previous</a></div>";
-    html += "<div class='scroll_row'>Unknown <a id='scr_unknown_next'>Next</a><a id='scr_unknown_prev'>Previous</a></div>";
-    html += "<div class='scroll_row'>Red <a id='scr_red_next'>Next</a><a id='scr_red_prev'>Previous</a></div>";
-    html += "<div class='scroll_row'>Red or yellow <a id='scr_yellow_next'>Next</a><a id='scr_yellow_prev'>Previous</a></div>";
+    html += "<div class='scroll_row'>Top <a id='scr_top' class='prev_ic'></a></div>";
+    html += "<div class='scroll_row'>Selected <a id='scr_selected_next' class='next_ic'></a><a id='scr_selected_prev' class='prev_ic'></a></div>";
+//    html += "<div class='scroll_row'>Unknown <a id='scr_unknown_next'>Next</a><a id='scr_unknown_prev'>Previous</a></div>";
+    html += "<div class='scroll_row'>Red <a id='scr_red_next' class='next_ic'></a><a id='scr_red_prev' class='prev_ic'></a></div>";
+    html += "<div class='scroll_row'>Red or orange <a id='scr_orange_next' class='next_ic'></a><a id='scr_orange_prev' class='prev_ic'></a></div>";
+    html += "<div class='scroll_row'>Red, orange, or yellow <a id='scr_yellow_next' class='next_ic'></a><a id='scr_yellow_prev' class='prev_ic'></a></div>";
+    html += "</div>";
+
+    html += "<div id='recolor_block'><div class='header'>Recolor selected transactions:</div>";
+    html += "<div id='color_options'><div class='colopt t_class_10' id='colopt_10'></div><div class='colopt t_class_5' id='colopt_5'></div><div class='colopt t_class_3' id='colopt_3'></div><div class='colopt t_class_0' id='colopt_0'></div><div id='color_undo' title='Undo custom recoloring'></div></div>";
     html += "</div>";
 
     html += "<div id='selections_block'>";
@@ -955,6 +1080,8 @@ function selection_operations(builtin_types,custom_types) {
     html += show_custom_types(custom_types);
     html += "<a id='types_create'>Create new custom type</a>";
     html += "<div id='types_list'></div>";
+    address = window.sessionStorage.getItem('address');
+    html +="<a href='download?address="+address+"&type=transactions_json' id='download_transactions_json'>Download all transactions (json)</a>";
     html += "</div>";
 
     html +="</div>";
@@ -973,13 +1100,24 @@ function selection_operations(builtin_types,custom_types) {
 
         var bottom_of_screen = $(window).scrollTop() + window.innerHeight;
         var top_of_screen = $(window).scrollTop();
+        if (which.includes('top')) {
+            window.scrollTo(0,0);
+            return;
+        }
+
+
         var mid_screen = (top_of_screen+bottom_of_screen)/2;
         console.log('scroll',which, top_of_screen, bottom_of_screen);
 
         if (which.includes('selected')) collection = $('.secondary_selected');
         if (which.includes('unknown')) collection = $('.t_class_unknown');
-        if (which.includes('red')) collection = $('.t_class_0');
-        if (which.includes('yellow')) collection = $('.t_class_0,.t_class_5');
+//        if (which.includes('red')) collection = $('.t_class_0:not(.custom_recolor) .custom_recolor_0');
+//        if (which.includes('orange')) collection = $('.t_class_0,.t_class_3');
+//        if (which.includes('yellow')) collection = $('.t_class_0,.t_class_3,.t_class_5');
+
+        if (which.includes('red')) collection = $('.t_class_0:not(.custom_recolor),.custom_recolor_0');
+        if (which.includes('orange')) collection = $('.t_class_0:not(.custom_recolor),.t_class_3:not(.custom_recolor),.custom_recolor_0,.custom_recolor_3');
+        if (which.includes('yellow')) collection = $('.t_class_0:not(.custom_recolor),.t_class_3:not(.custom_recolor),.t_class_5:not(.custom_recolor),.custom_recolor_0,.custom_recolor_5,.custom_recolor_5');
 
         next = true;
         if (which.includes('_prev')) {
@@ -1015,19 +1153,26 @@ function selection_operations(builtin_types,custom_types) {
     });
 
     $('#sel_opt_all').on('click',function() {
+        if ($('#sel_opt_all').hasClass('sel_opt_chosen'))
+            return;
 //        $(document.body).css({'cursor' : 'wait'});
         $('.sel_opt_chosen').removeClass('sel_opt_chosen');
         $(this).addClass('sel_opt_chosen');
         showib($('.transaction'));
+        if (scroll_position != null)
+            window.scrollTo(0,scroll_position);
 //        $(document.body).css({'cursor' : 'default'});
     });
 
     $('#sel_opt_sel').on('click',function() {
+        if ($('#sel_opt_all').hasClass('sel_opt_chosen'))
+            scroll_position = window.scrollY;
 //        $(document.body).css({'cursor' : 'wait'});
         $('.sel_opt_chosen').removeClass('sel_opt_chosen');
         $(this).addClass('sel_opt_chosen');
         showib($('.secondary_selected'));
         hide($('.transaction:not(.secondary_selected)'));
+
 //        $(document.body).css({'cursor' : 'default'});
     });
 
@@ -1080,3 +1225,60 @@ function showib(el) {
 function hide(el) {
     el.css({'display':'none'});
 }
+
+
+
+$('body').on('click','.colopt',function() {
+   color_id = $(this).attr('id').substr(7);
+   txids = [];
+   transactions = $('div.secondary_selected');
+   if (transactions.length == 0)
+        return;
+   transactions.each(function() {
+        txid = $(this).attr('id').substr(2);
+        txids.push(txid)
+   });
+   console.log("recolor",color_id,"to transactions",txids);
+   data = 'color_id='+color_id+'&transactions='+txids.join(',');
+   $.post("recolor?chain="+chain+"&address="+addr, data, function(resp) {
+        console.log(resp);
+        var data = JSON.parse(resp);
+        if (data.hasOwnProperty('error')) {
+            $('#recolor_block').append("<div class='err_mes'>"+data['error']+"</div>");
+        } else {
+            transactions.removeClass('custom_recolor_0 custom_recolor_3 custom_recolor_5 custom_recolor_10').addClass('custom_recolor custom_recolor_'+color_id);
+        }
+    });
+});
+
+$('body').on('click','#color_undo',function() {
+   txids = [];
+   transactions = $('div.secondary_selected');
+   if (transactions.length == 0)
+        return;
+   transactions.each(function() {
+        txid = $(this).attr('id').substr(2);
+        txids.push(txid)
+   });
+   console.log("recolor",'undo',"to transactions",txids);
+   data = 'color_id=undo&transactions='+txids.join(',');
+   $.post("recolor?chain="+chain+"&address="+addr, data, function(resp) {
+        console.log(resp);
+        var data = JSON.parse(resp);
+        if (data.hasOwnProperty('error')) {
+            $('#recolor_block').append("<div class='err_mes'>"+data['error']+"</div>");
+        } else {
+            transactions.removeClass('custom_recolor custom_recolor_0 custom_recolor_3 custom_recolor_5 custom_recolor_10');
+        }
+    });
+});
+
+
+$('body').on('change','select.treatment',function() {
+    let selected_treatment = $(this).val();
+    let vault_id_el = $(this).closest('tr').find('.r_vaultid').find('span');
+    if (['repay','deposit','borrow','withdraw'].includes(selected_treatment))
+        vault_id_el.removeClass('hidden')
+    else
+        vault_id_el.addClass('hidden')
+});
