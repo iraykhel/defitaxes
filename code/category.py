@@ -21,6 +21,7 @@ class Category:
     MINT_NFT = 16
     ERROR = 17
     COMPOUND = 18
+    EXIT_VAULT = 19
 
 
     CLAIM = 99
@@ -42,6 +43,7 @@ class Category:
         UNWRAP: "unwrap",
         ADD_LIQUIDITY_NO_RECEIPT: "deposit",
         REMOVE_LIQUIDITY_NO_RECEIPT: "withdraw",
+        EXIT_VAULT:"exit vault",
         # NFT: "NFT-related",
         CLAIM: "claim reward",
         BORROW: "borrow",

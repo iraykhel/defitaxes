@@ -796,6 +796,23 @@ div#color_undo {
     background-position: 2px -62px;
 }
 
+
+
+
+
+
+
+
+div#tax_block a#vaults_inspect {
+    display:block;
+    margin-bottom:5px;
+}
+
+div#vaults_inspection_block, div#loans_inspection_block {
+    display:block;
+    margin-bottom:10px;
+}
+
 ul.vault_list {
     padding:0px;
     margin:0px;
@@ -855,9 +872,10 @@ table.vault_table td {
     border-top:1px solid #DFDFDF;
 }
 
-td.vault_table_txnum {
+table.vault_table td.vault_table_txnum, table.vault_table td.vault_table_tok {
     border-right:1px solid #DFDFDF;
-    text-align:center;
+    text-align:right;
+    padding-right:10px;
 }
 
 div.vault_action {
@@ -867,4 +885,15 @@ div.vault_action {
 div.txnum {
     text-decoration:underline;
     cursor:pointer;
+}
+
+div.opened_subheader {
+    padding-top:3px;
+    border-top: 1px solid #DFDFDF;
+}
+
+div.opened_spacer {
+    border-top: 1px solid #DFDFDF;
+    height:15px;
+    background-color:white;
 }

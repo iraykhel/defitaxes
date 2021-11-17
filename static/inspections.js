@@ -1,15 +1,32 @@
 function show_inspections(js) {
-    vault_data = js['vaults'];
-    mwr_counts = {};
-    vault_ids_by_mwr = {};
+    $('#inspections_block').remove();
+    let html = "<div id='inspections_block'>";
+    html += show_inspections_sub(js,'vault');
+    html += show_inspections_sub(js,'loan');
+    html += "</div>";
+    $('#tax_block').append(html);
+}
+
+function show_inspections_sub(js,which) {
+    let html = "<div id='"+which+"s_inspections_block'>";
+    let data = js[which+'s'];
+    let mwr_counts = {};
+    let ids_by_mwr = {};
     let total_problematic_cnt = 0;
-    mwr_mapping = {0:'critical',3:'moderate',5:'potential'}
-    for (vault_id in vault_data) {
-        let entry = vault_data[vault_id];
-        /*let history = entry['history'];
-        let holdings = entry['holdings'];*/
+    let total_cnt = 0;
+    mwr_mapping = {0:'critical',3:'moderate',5:'potential',10:'non-empty'}
+
+    for (vault_id in data) {
+        total_cnt += 1;
+        let entry = data[vault_id];
+        /*let history = entry['history'];*/
+        let holdings = entry['holdings'];
+
         let warnings = entry['warnings'];
         let mwr = 10;
+        /*if (!check_vault_empty(holdings))
+            mwr = 5;*/
+
         let warning_map = {};
         for (warning of warnings) {
             if (warning['level'] < mwr)
@@ -19,40 +36,44 @@ function show_inspections(js) {
                 warning_map[txid] = [];
             warning_map[txid].push(warning);
         }
-        vault_data[vault_id]['warning_map'] = warning_map;
-        vault_data[vault_id]['mwr'] = mwr;
+        data[vault_id]['warning_map'] = warning_map;
+        data[vault_id]['mwr'] = mwr;
         console.log('mwr',vault_id,mwr)
-        if (mwr != 10) {
+        if (mwr != 10 || !check_vault_empty(holdings)) {
             if (!(mwr in mwr_counts)) {
                 mwr_counts[mwr] = 0;
-                vault_ids_by_mwr[mwr] = []
+                ids_by_mwr[mwr] = []
             }
             mwr_counts[mwr] += 1;
-            vault_ids_by_mwr[mwr].push(vault_id);
+            ids_by_mwr[mwr].push(vault_id);
             total_problematic_cnt += 1;
         }
 
     }
 
-    $('#inspections_block').remove();
-    let html = "<div id='inspections_block'>";
+    if (which == 'vault') {
+        vault_data = data;
+        vault_ids_by_mwr = ids_by_mwr;
+    }
+
+    if (which == 'loan') {
+        loan_data = data;
+        loan_ids_by_mwr = ids_by_mwr;
+    }
+
+
+
 
     if (total_problematic_cnt > 0) {
         let s = "";
         if (total_problematic_cnt > 1)
             s = "s";
-        html += "<div class='vaults_summary'>You have "+total_problematic_cnt+" vault"+s+" with potential problems<a id='vaults_inspect'>Inspect</a></div>"
+        html += "<div class='inspect_summary'>You have "+total_problematic_cnt+" "+which+s+" with potential problems<a id='"+which+"s_inspect'>Inspect them</a></div>"
     }
-    html += "<a id='vaults_inspect_all'>Inspect all vaults</a>";
-    /*for (mwr in mwr_counts) {
-        let s = "";
-        if (mwr_counts[mwr] > 1)
-            s = "s";
-        html += "<div class='mwr mwr_"+mwr+"'>You have "+mwr_counts[mwr]+" vault"+s+"<a class='vault_inspect vault_inspect_"+mwr+"'>Inspect</a></div>";
-    }*/
-
+    if (total_cnt > 0)
+        html += "<a id='"+which+"s_inspect_all'>Inspect all "+which+"s</a>";
     html += "</div>";
-    $('#tax_block').append(html);
+    return html;
 
 }
 
@@ -68,7 +89,7 @@ $('body').on('click','#vaults_inspect', function() {
         }
     }
     html += "</ul>";
-    $('#tax_block').append(html);
+    $('#vaults_inspections_block').append(html);
 });
 
 $('body').on('click','#vaults_inspect_all', function() {
@@ -79,7 +100,7 @@ $('body').on('click','#vaults_inspect_all', function() {
         html += "<li class='vault'><div class='item_header t_class_"+mwr+"'><div class='item_id'>"+vault_id+"</div><div class='inspect_item_ic'></div></div></li>";
     }
     html += "</ul>";
-    $('#tax_block').append(html);
+    $('#vaults_inspections_block').append(html);
 });
 
 
@@ -115,6 +136,11 @@ function display_vault_action(history_entry, symbols) {
         html += "generated "+round(history_entry['amount'])+" "+symbol +" of income";
     }
 
+    if (action == 'loss on exit') {
+        let symbol = symbols[history_entry['what']];
+        html += "deductible loss of "+round(history_entry['amount'])+" "+symbol;
+    }
+
     html += "</div>";
     return html;
 }
@@ -124,6 +150,24 @@ function display_vault_warnings(warning_list, symbols) {
     for (warning of warning_list) {
         html +="<div class='vault_warning t_class_"+warning['level']+"'>Warning: "+warning['text']+"</div>";
     }
+    return html;
+}
+
+function check_vault_empty(holdings) {
+    for (what in holdings) {
+        if (holdings[what] > 0)
+            return false
+    }
+    return true
+}
+
+function show_holdings(holdings, symbols) {
+    html = "<table class='vault_table'><tr class='vault_table_header'><td class='vault_table_tok'>Token</td><td>Amount</td></tr>";
+    for (what in holdings) {
+        if (holdings[what] > 0)
+            html += "<tr><td class='vault_table_tok'>"+symbols[what]+"</td><td>"+round(holdings[what])+"</td></tr>";
+    }
+    html += "</table>";
     return html;
 }
 
@@ -147,35 +191,35 @@ $('body').on('click','.vault .item_header', function() {
     let mwr = vault_info['mwr'];
 
     html = "<div id='opened_item'>";
+    html += "<div class='opened_subheader'>Vault history</div>";
     html += "<table class='vault_table'><tr class='vault_table_header'><td class='vault_table_txnum'>TX #</td><td>Actions</td></tr>";
     let txid = null;
     for (let entry of history) {
         let new_txid = entry['txid'];
         if (new_txid != txid) {
             if (txid != null) {
-                if (txid in warning_map) {
-                    html += display_vault_warnings(warning_map[txid], symbols);
-                }
                 html += "</td></tr>";
             }
             txid = new_txid;
+
             let txnum = all_transactions[txid]['num'];
-            html += "<tr";
-            /*if (txid in warning_map) {
-                let local_mwr = 10;
-                for (warning of warning_map[txid]) {
-                    if (warning['level'] < local_mwr)
-                        local_mwr = warning['level'];
-                }
-                if (local_mwr < 10)
-                    html += " class='t_class_"+local_mwr+"'";
-            }*/
-            html += "><td class='vault_table_txnum'><div class='txnum' id='txid_scroll_"+txid+"'>"+txnum+"</div></td><td>";
+            html += "<tr><td class='vault_table_txnum'><div class='txnum' id='txid_scroll_"+txid+"'>"+txnum+"</div></td><td>";
+            if (txid in warning_map) {
+                html += display_vault_warnings(warning_map[txid], symbols);
+            }
         }
 
         html += display_vault_action(entry, symbols);
     }
-    html += "</td></tr></table></div>";
+    html += "</td></tr></table>";
+
+    if (!check_vault_empty(holdings)) {
+        html += "<div class='opened_spacer'></div>";
+        html += "<div class='opened_subheader'>Current vault holdings</div>";
+        html += show_holdings(holdings,symbols);
+    }
+
+    html += "</div>";
     $(this).closest('li').append(html);
     $(this).addClass('opened');
 

@@ -390,7 +390,7 @@ class User:
                 rule_found = True
                 # log("Match")
                 selected_treatment = treatment
-                if selected_treatment in ['deposit','withdraw']:
+                if selected_treatment in ['deposit','withdraw','exit']:
                     if vault_id == 'address':
                         if transfer.outbound:
                             vault_id = to

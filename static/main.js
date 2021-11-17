@@ -34,7 +34,7 @@ lookup_info = {
     }
 }
 
-options_in = {'ignore':'Ignore','buy':'Buy','gift':'Acquire for free','income':'Income','borrow':'Borrow','withdraw':'Withdraw from vault'};
+options_in = {'ignore':'Ignore','buy':'Buy','gift':'Acquire for free','income':'Income','borrow':'Borrow','withdraw':'Withdraw from vault','exit':'Exit vault'};
 options_out = {'ignore':'Ignore','sell':'Sell','burn':'Dispose for free','fee':'Transaction cost','loss':'Non-deductible loss','repay':'Repay loan','deposit':'Deposit to vault'};
 
 var prev_selection = null;
@@ -360,7 +360,7 @@ function display_transfers(transaction, editable=false) {
             if (treatment != null && treatment.includes('custom:')) {
                 treatment = treatment.substr(7);
             }
-            if (['repay','deposit','borrow','withdraw'].includes(treatment)) {
+            if (['repay','deposit','borrow','withdraw','exit'].includes(treatment)) {
                 show_vaultid_col = true;
                 rows_table += "<td class=r_vaultid>Vault/loan ID<div class='help help_vaultid'></div></td>";
                 break;
@@ -438,7 +438,7 @@ function display_transfers(transaction, editable=false) {
                 }
             }*/
             if (option == treatment) {
-                if (['repay','deposit','borrow','withdraw'].includes(option)) {
+                if (['repay','deposit','borrow','withdraw','exit'].includes(option)) {
                     console.log(transaction['num'],index,'show vaultid')
                     hidden_vaultid_class = "";
                 }
@@ -1278,7 +1278,7 @@ $('body').on('click','#color_undo',function() {
 $('body').on('change','select.treatment',function() {
     let selected_treatment = $(this).val();
     let vault_id_el = $(this).closest('tr').find('.r_vaultid').find('span');
-    if (['repay','deposit','borrow','withdraw'].includes(selected_treatment))
+    if (['repay','deposit','borrow','withdraw','exit'].includes(selected_treatment))
         vault_id_el.removeClass('hidden')
     else
         vault_id_el.addClass('hidden')

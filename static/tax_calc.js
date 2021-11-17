@@ -381,6 +381,7 @@ function calc_tax() {
         }
 
         process_tax_js(data);
+        show_inspections(data);
         need_recalc(false);
         $(document.body).css({'cursor' : 'default'});
 

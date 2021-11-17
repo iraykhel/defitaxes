@@ -157,7 +157,7 @@ def process():
 
         data = {'transactions':transactions_js,'custom_types':custom_types,
                 'CA_long':calculator.CA_long,'CA_short':calculator.CA_short,'CA_errors':calculator.errors,'incomes':calculator.incomes,'interest':calculator.interest_payments,
-                'vaults':calculator.vaults_json()}
+                'vaults':calculator.vaults_json(),'loans':calculator.loans_json()}
         progress_bar_update(address, 'Uploading to your browser', 95)
         # data = {'placeholder':'stuff'}
         log('timing:coingecko lookups 1', C.time_spent_looking_up, C.shortcut_hits)
@@ -203,7 +203,7 @@ def calc_tax():
         calculator.cache()
 
         js = {'CA_long': calculator.CA_long, 'CA_short': calculator.CA_short, 'CA_errors': calculator.errors, 'incomes': calculator.incomes, 'interest': calculator.interest_payments,
-              'vaults':calculator.vaults_json()}
+              'vaults':calculator.vaults_json(),'loans':calculator.loans_json()}
     except:
         log("EXCEPTION in calc_tax", traceback.format_exc())
         js = {'error':'An error has occurred while calculating taxes'}

@@ -296,7 +296,7 @@ class Classifier:
 
         CT = transaction.categorized_transfers
         if isinstance(transaction.type, Category):
-            if not (transaction.type.category in [Category.STAKE, Category.UNSTAKE, Category.ADD_LIQUIDITY, Category.REMOVE_LIQUIDITY, Category.REMOVE_LIQUIDITY_NO_RECEIPT, Category.ADD_LIQUIDITY_NO_RECEIPT]):
+            if not (transaction.type.category in [Category.STAKE, Category.UNSTAKE, Category.ADD_LIQUIDITY, Category.REMOVE_LIQUIDITY, Category.REMOVE_LIQUIDITY_NO_RECEIPT, Category.ADD_LIQUIDITY_NO_RECEIPT, Category.EXIT_VAULT]):
                 return
 
             #no space for a reward
@@ -366,11 +366,16 @@ class Classifier:
             if transaction.hash == transaction.chain.hif:
                 print("XI243", 'pools', len(pools), pools)
             interactor = transaction.interacted
-            reward_transfers = set(CT[Transfer.RECEIVED])-set(CT[Transfer.UNSTAKED_LP])
+            reward_transfers = set(CT[Transfer.RECEIVED])-set(CT[Transfer.UNSTAKED_LP])-set(CT[Transfer.UNVAULTED])
             if len(reward_transfers) > 0:
                 if transaction.hash == transaction.chain.hif:
                     print("XI244")
-                rew = list(reward_transfers)[0]
+                prew_list = sorted(list(reward_transfers), key=lambda x: x.index, reverse=False) #need consistent order
+                # rew = list(reward_transfers)[0]
+                for prew in prew_list:
+                    if prew.treatment is None:
+                        rew = prew
+                        break
                 pools = self.chain.pools.pool_list('A', interactor)
 
 
@@ -679,16 +684,26 @@ class Classifier:
             return
         if sig is not None and 'borrow' in sig:
             return
+        if self.check_sig(sig,'exit'):
+            cat = Category.EXIT_VAULT
+        else:
+            cat = Category.UNSTAKE
+
         CT = transaction.categorized_transfers
         if len(CT[Transfer.UNSTAKED_LP]):
             if self.remove_liquidity(transaction, pool_type=Pool.STAKING):
-                return Category(Category.UNSTAKE, certainty=5)
+                return Category(cat, certainty=5)
 
     def cl_unvault(self, transaction, sig):
         if transaction.total_fee == 0 and self.chain.name != 'Polygon':
             return
         if sig is not None and 'borrow' in sig:
             return
+
+        if self.check_sig(sig,'exit'):
+            cat = Category.EXIT_VAULT
+        else:
+            cat = Category.REMOVE_LIQUIDITY_NO_RECEIPT
 
         CT = transaction.categorized_transfers
         if len(CT[Transfer.UNSTAKED_LP]):
@@ -703,7 +718,7 @@ class Classifier:
             #     return
 
             if self.remove_liquidity(transaction, pool_type=Pool.VAULT):
-                return Category(Category.REMOVE_LIQUIDITY_NO_RECEIPT, certainty=5)
+                return Category(cat, certainty=5)
             else:
                 return
 
@@ -730,7 +745,7 @@ class Classifier:
                     if self.remove_liquidity(transaction, pool_type=Pool.VAULT):
                         if transaction.hash == self.chain.hif:
                             print("cl_unvault XI3", pools)
-                        return Category(Category.REMOVE_LIQUIDITY_NO_RECEIPT, certainty=3)
+                        return Category(cat, certainty=3)
                     else:
                         return
 
@@ -1149,6 +1164,10 @@ class Classifier:
                 set_treatment(t,'withdraw')
             for t in CT[Transfer.SENT]:
                 set_treatment(t,'deposit')
+
+        elif cat in [Category.EXIT_VAULT]:
+            for t in CT[Transfer.RECEIVED]:
+                set_treatment(t,'exit')
 
         elif cat in [Category.BORROW, Category.REPAY]:
             for t in CT[Transfer.RECEIVED]:

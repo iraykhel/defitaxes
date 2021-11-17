@@ -26,6 +26,14 @@ def rate_pick(what, timestamp, running_rates, coingecko_rates):
     else:
         return running_rate
 
+def decustom(val):
+    custom = False
+    if val is not None and val[:7] == 'custom:':
+        val = val[7:]
+        custom = True
+    return val, custom
+
+
 class Vault:
     def __init__(self,id):
         self.id = id
@@ -44,11 +52,16 @@ class Vault:
 
     def total_usd(self, timestamp, running_rates, coingecko_rates):
         total = 0
+        empty = True
+        bad = False
         for what, amt in self.holdings.items():
             rate = rate_pick(what, timestamp, running_rates, coingecko_rates)
-
+            if amt > 0:
+                empty = False
+            if rate == 0 or rate is None:
+                bad = True
             total += amt * rate
-        return total
+        return total, empty, bad
 
     def deposit(self,transaction,tridx,what, symbol,amount):
         if what not in self.holdings:
@@ -58,19 +71,21 @@ class Vault:
         self.history.append({'txid':transaction['txid'],'tridx':tridx,'action':'deposit','what':what,'amount':amount})
         print("DEPOSIT",self.id,symbol,amount)
 
-    def withdraw(self,transaction,tridx, what,symbol,amount, running_rates, coingecko_rates, fee_amount_per_transaction,fee_rate):
+    def withdraw(self,transaction,tridx, what,symbol,amount, running_rates, coingecko_rates, usd_fee, exit=False):
         orig_amount = amount
         orig_what = what
         timestamp = transaction['ts']
         txid = transaction['txid']
         print("WITHDRAW", self.id, symbol, amount)
-        usd_total = self.total_usd(timestamp, running_rates, coingecko_rates)
+        usd_total, empty, bad = self.total_usd(timestamp, running_rates, coingecko_rates)
 
 
         if usd_total > self.usd_max:
             self.usd_max = usd_total
 
+        warning_issued = False
         if what not in self.holdings:
+            warning_issued = True
             self.warnings.append({'txid': transaction['txid'], 'tridx': tridx, 'text': 'Trying to withdraw ' + symbol+' which was not previously deposited into the vault', 'level': 5})
             self.symbols[what] = symbol
             self.holdings[what] = 0
@@ -80,10 +95,16 @@ class Vault:
         incomes = []
 
         #first, withdraw from matching investment. If there's enough, we're done
-        if self.holdings[what] >= amount:
+        if self.holdings[what] >= amount*0.9999:
             self.holdings[what] -= amount
+            if self.holdings[what] < 0:
+                self.holdings[what] = 0
             amount = 0
         else:
+            amount_requested = amount
+            amount_available = self.holdings[what]
+            performed_conversion = False
+
             amount -= self.holdings[what]
             self.holdings[what] = 0
 
@@ -108,6 +129,7 @@ class Vault:
 
             log("original",holding_keys,"reordered",holding_keys_reordered)
 
+
             key_idx = 0
             while key_idx < len(holding_keys_reordered):
                 usd_amt = amount*rate
@@ -120,34 +142,46 @@ class Vault:
                 other_rate = rate_pick(other_tok, timestamp, running_rates, coingecko_rates)
                 other_available = self.holdings[other_tok]
                 other_usd_amt = other_available * other_rate
-                if other_usd_amt > usd_amt:
-                    other_sold = usd_amt / other_rate
-                    if amount * rate > 0.01:
-                        print("WITHDRAW:CONVERSION: bought", amount,'of',symbol,', sold',other_sold,'of',other_symbol)
+                if other_usd_amt > 0.01:
+                    if other_usd_amt > usd_amt:
+                        other_sold = usd_amt / other_rate
+                        if amount * rate > 0.01:
+                            print("WITHDRAW:CONVERSION: bought", amount,'of',symbol,', sold',other_sold,'of',other_symbol)
+                            self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'conversion',
+                                                 'from': {'what':other_tok, 'amount': other_sold}, 'to':{'what':what, 'amount': amount}})
+                            trades.append(CA_transaction(timestamp, what, symbol, amount, rate, txid, tridx))
+                            trades.append(CA_transaction(timestamp, other_tok, other_symbol, -other_sold, other_rate, txid, tridx))
+                            self.holdings[other_tok] -= other_sold
+                            performed_conversion = True
+                        amount = 0
+                        break
+                        # return trades, [], 0
+                    else:
+                        try:
+                            amount_bought = other_usd_amt / rate
+                        except:
+                            log("EXCEPTION",traceback.format_exc(),what,symbol,running_rates[what])
+                            log(transaction)
+                            amount_bought = other_usd_amt
+                            # exit(1)
+                        print("WITHDRAW:CONVERSION: bought", amount_bought, 'of', symbol, ', sold', other_available, 'of', other_symbol)
                         self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'conversion',
-                                             'from': {'what':other_tok, 'amount': other_sold}, 'to':{'what':what, 'amount': amount}})
-                        trades.append(CA_transaction(timestamp, what, symbol, amount, rate, txid, tridx))
-                        trades.append(CA_transaction(timestamp, other_tok, other_symbol, -other_sold, other_rate, txid, tridx))
-                        self.holdings[other_tok] -= other_sold
-                    amount = 0
-                    break
-                    # return trades, [], 0
-                else:
-                    try:
-                        amount_bought = other_usd_amt / rate
-                    except:
-                        log("EXCEPTION",traceback.format_exc(),what,symbol,running_rates[what])
-                        log(transaction)
-                        exit(1)
-                    print("WITHDRAW:CONVERSION: bought", amount_bought, 'of', symbol, ', sold', other_available, 'of', other_symbol)
-                    self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'conversion',
-                                         'from': {'what': other_tok, 'amount': other_available}, 'to': {'what': what, 'amount': amount_bought}})
-                    trades.append(CA_transaction(timestamp, what, symbol, amount_bought, rate, txid, tridx))
-                    trades.append(CA_transaction(timestamp, other_tok, other_symbol, -other_available, other_rate, txid, tridx))
-                    # trades.append([amount_bought, rate, other_available, other_rate])
-                    self.holdings[other_tok] = 0
-                    amount -= amount_bought
+                                             'from': {'what': other_tok, 'amount': other_available}, 'to': {'what': what, 'amount': amount_bought}})
+                        trades.append(CA_transaction(timestamp, what, symbol, amount_bought, rate, txid, tridx))
+                        trades.append(CA_transaction(timestamp, other_tok, other_symbol, -other_available, other_rate, txid, tridx))
+                        performed_conversion = True
+                        # trades.append([amount_bought, rate, other_available, other_rate])
+                        self.holdings[other_tok] = 0
+                        amount -= amount_bought
+
                 key_idx += 1
+
+            if performed_conversion and not warning_issued:
+                self.warnings.append({'txid': transaction['txid'], 'tridx': tridx,
+                                  'text': 'Withdrawing ' + str(amount_requested) + ' of ' + self.symbols[what] + ', but only ' + str(amount_available) + ' was deposited. Converting from other deposits.',
+                                  'level': 5})
+
+
 
         #if we're out of money, the rest is profit
         self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'withdraw', 'what': orig_what, 'amount': orig_amount})
@@ -156,7 +190,7 @@ class Vault:
             incomes.append({'timestamp':timestamp,'text':'Income upon closing a vault', 'amount':amount*rate, 'txid':txid,'tridx':tridx})
             print("WITHDRAW:profit ", amount, 'of', symbol)
             self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'income on exit', 'what': what, 'amount': amount})
-            trades.append(CA_transaction(timestamp, what, symbol, amount, rate, txid, tridx, fee_amount_per_transaction, fee_rate))
+            trades.append(CA_transaction(timestamp, what, symbol, amount, rate, txid, tridx, usd_fee))
             close = 1
             # if self.usd_max == 0:
             #     self.warnings.append({'txid': transaction['txid'], 'tridx': tridx, 'text': 'Withdrawing from an empty vault', 'level':0})
@@ -166,12 +200,16 @@ class Vault:
         else:
             close = 0
             # remaining_usd = self.total_usd(rates)
-            remaining_usd = self.total_usd(timestamp, running_rates, coingecko_rates)
-            if remaining_usd < 0.05 * self.usd_max: #assume the rest were fees, capital loss
+
+            remaining_usd, vault_empty, vault_bad_rate = self.total_usd(timestamp, running_rates, coingecko_rates)
+            log('withdrawal', self.id,remaining_usd,vault_empty,vault_bad_rate,exit)
+            if (remaining_usd < 0.001 * self.usd_max and not vault_bad_rate) or vault_empty or exit:
                 close = 1
-                for transfer in transaction['rows']:
-                    other_vault_id = transfer['vault_id']
-                    if transfer['index'] > tridx and other_vault_id is not None and self.id in other_vault_id:
+                for transfer in transaction['rows']: #make sure it's the last transfer in transaction mentionining this vault
+                    other_vault_id,_ = decustom(transfer['vault_id'])
+                    other_treatment,_ = decustom(transfer['treatment'])
+
+                    if transfer['index'] > tridx and other_vault_id == self.id and other_treatment in ['withdraw','deposit','exit']:
                         close = 0
                         break
 
@@ -180,7 +218,7 @@ class Vault:
                         if loss_amt > 0:
                             print("WITHDRAW:fee loss on exit ", loss_amt, 'of', self.symbols[loss_tok])
                             self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'loss on exit', 'what': loss_tok, 'amount': loss_amt})
-                            trades.append(CA_transaction(timestamp, loss_tok, self.symbols[loss_tok], loss_amt, 0, txid, tridx))
+                            trades.append(CA_transaction(timestamp, loss_tok, self.symbols[loss_tok], -loss_amt, 0, txid, tridx))
 
         if close:
             self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'vault closed'})
@@ -208,6 +246,8 @@ class Loan:
         self.symbols = {}
         self.usd_total = 0
         self.usd_max = 0
+        self.history = []
+        self.warnings = []
 
     def __str__(self):
         return "LOAN " + self.id + " loaned " + str(self.loaned)
@@ -223,25 +263,35 @@ class Loan:
 
     def total_usd(self, timestamp, running_rates, coingecko_rates):
         total = 0
+        empty = True
         for what, amt in self.loaned.items():
             rate = rate_pick(what, timestamp, running_rates, coingecko_rates)
+            if amt > 0:
+                empty = False
+            if rate == 0 or rate is None:
+                total = None
+            if total is not None:
+                total += amt * rate
+        return total, empty
 
-            total += amt * rate
-        return total
-
-    def borrow(self, what, symbol, amount):
+    def borrow(self, transaction,tridx, what, symbol, amount):
+        txid = transaction['txid']
         if what not in self.loaned:
             self.loaned[what] = 0
             self.symbols[what] = symbol
         self.loaned[what] += amount
+        self.history.append({'txid': txid, 'tridx': tridx, 'action': 'borrow', 'what': what, 'amount': amount})
         print("LOAN", self.id, symbol, amount)
 
-    def repay(self, what,symbol,amount, running_rates, coingecko_rates, transaction,tridx,fee_amount_per_transaction,fee_rate):
+    def repay(self, transaction,tridx, what,symbol,amount, running_rates, coingecko_rates, usd_fee):
+        txid = transaction['txid']
         if what not in self.loaned:
             self.symbols[what] = symbol
             self.loaned[what] = 0
+            self.warnings.append({'txid': txid, 'tridx': tridx, 'text':'Trying to repay ' + symbol+', which was not previously loaned', 'level': 3})
 
         interest_payments = []
+        self.history.append({'txid': txid, 'tridx': tridx, 'action': 'repay', 'what': what, 'amount': amount})
 
         # first, repay with capital. If there's enough, we're done
         if self.loaned[what] >= amount:
@@ -255,36 +305,31 @@ class Loan:
         timestamp = transaction['ts']
         # rate = rates[what]
         rate = rate_pick(what, timestamp, running_rates, coingecko_rates)
+
         if amount > 0:
             print("REPAY LOAN:REPAYING MORE THAN LOANED")
             interest_payments.append({'timestamp': timestamp, 'text': 'Interest on a loan', 'amount': amount * rate, 'txid': transaction['txid'],'tridx':tridx})
+            self.history.append({'txid': txid, 'tridx': tridx, 'action': 'pay interest', 'what': what, 'amount': amount})
             print("REPAY:interest ", amount, 'of', symbol)
+
         return interest_payments
 
+    def to_json(self):
+        js = {
+            'history':self.history,
+            'warnings':self.warnings,
+            'symbols':self.symbols,
+            'loaned':self.loaned
+        }
+        return js
 
 
 
-    #returns remaining vault holdings, i.e. losses
-    # def inspect(self,rates):
-    #     self.usd_total = 0
-    #     for what in self.holdings:
-    #         try:
-    #             self.usd_total += self.holdings[what] * rates[what]
-    #         except:
-    #             print('bad',self.holdings[what],rates[what],traceback.format_exc())
-    #             exit(1)
-    #     if self.usd_total > self.usd_max:
-    #         self.usd_max = self.usd_total
-    #     elif self.usd_total < self.usd_max * 0.05:
-    #         print("CLOSING VAULT ",self)
-    #         return self.holdings
-    #     return None
 
-        # print("INPECTING", self.id, self.usd_total, self.usd_max)
 
 
 class CA_transaction:
-    def __init__(self,timestamp,what,symbol,amount,rate, txid, tridx, fee_amount=0, fee_rate=0):
+    def __init__(self,timestamp,what,symbol,amount,rate, txid, tridx, usd_fee=0):
         if rate is None:
             rate = 0
         self.timestamp = timestamp
@@ -292,14 +337,17 @@ class CA_transaction:
         self.symbol = symbol
         self.amount = amount
         self.rate = rate
-        if fee_amount is None:
-            fee_amount = 0
-        if fee_rate is None:
-            fee_rate = 0
-        self.fee_amount = fee_amount
-        self.fee_rate = fee_rate
+        # if fee_amount is None:
+        #     fee_amount = 0
+        # if fee_rate is None:
+        #     fee_rate = 0
+        # self.fee_amount = fee_amount
+        # self.fee_rate = fee_rate
+        if usd_fee is None:
+            usd_fee = 0
+        self.usd_fee = usd_fee
         if amount > 0:
-            self.basis = amount*rate+fee_amount*fee_rate
+            self.basis = amount*rate+usd_fee
         else:
             self.basis = None
         self.txid = txid
@@ -332,6 +380,7 @@ class Calculator:
         self.CA_long = []
         self.CA_short = []
         self.vaults = {}
+        self.loans = {}
         self.errors = {}
         self.eoy_mtm = None
 
@@ -357,7 +406,7 @@ class Calculator:
 
         totals = {}
         vaults = self.vaults
-        loans = {}
+        loans = self.loans
         # print('all transactions',transactions_js)
 
         prev_timestamp = transactions_js[0]['ts']
@@ -366,10 +415,9 @@ class Calculator:
             txid = transaction['txid']
             timestamp = transaction['ts']
 
-
-
+            current_year = timestamp_to_year(timestamp)
             if self.mtm:
-                current_year = timestamp_to_year(timestamp)
+
                 if current_year != timestamp_to_year(prev_timestamp):
                     dt = datetime.date(current_year, 1, 1)
                     new_year_ts = calendar.timegm(dt.timetuple())
@@ -389,16 +437,18 @@ class Calculator:
             fee_amount_per_transaction = fee_rate = fee_amount = fee_transfer = None
             if len(transfers) > 1:
                 cnt = 0
+                usd_fee_amount = 0
                 for transfer in transfers:
-                    treatment = transfer['treatment']
+                    treatment,_ = decustom(transfer['treatment'])
                     if treatment == 'fee':
                         fee_transfer = transfer
                         fee_amount = fee_transfer['amount']
                         fee_rate = fee_transfer['rate']
+                        usd_fee_amount += fee_amount*fee_rate
                     elif treatment in ['buy','sell','burn','gift','income']:
                         cnt += 1
                 if cnt > 0 and fee_amount is not None:
-                    fee_amount_per_transaction = fee_amount / cnt
+                    fee_amount_per_transaction = usd_fee_amount / cnt
                 elif fee_transfer is not None:
                     fee_transfer['treatment'] = 'loss'
 
@@ -447,12 +497,13 @@ class Calculator:
 
 
 
-                treatment = transfer['treatment']
-                custom = False
-
-                if treatment is not None and treatment[:7] == 'custom:':
-                    treatment = treatment[7:]
-                    custom = True
+                # treatment = transfer['treatment']
+                # custom = False
+                #
+                # if treatment is not None and treatment[:7] == 'custom:':
+                #     treatment = treatment[7:]
+                #     custom = True
+                treatment, _ = decustom(transfer['treatment'])
 
                 to = transfer['to']
                 fr = transfer['fr']
@@ -460,23 +511,21 @@ class Calculator:
                 if treatment in ['buy','sell']:
                     if treatment == 'sell':
                         amount = -amount
-                    self.ca_transactions.append(CA_transaction(timestamp,what,symbol,amount,rate,txid,tridx,fee_amount_per_transaction,fee_rate))
+                    self.ca_transactions.append(CA_transaction(timestamp,what,symbol,amount,rate,txid,tridx,usd_fee=fee_amount_per_transaction))
 
                 if treatment in ['gift','burn']:
                     if treatment == 'burn':
                         amount = -amount
-                    self.ca_transactions.append(CA_transaction(timestamp,what,symbol,amount,0,txid,tridx,fee_amount_per_transaction,fee_rate))
+                    self.ca_transactions.append(CA_transaction(timestamp,what,symbol,amount,0,txid,tridx,usd_fee=fee_amount_per_transaction))
 
                 if treatment == 'income':
                     self.incomes.append({'timestamp':timestamp,'text':'Yield farming or similar income', 'amount':amount*rate, 'txid':txid,'tridx':tridx})
-                    self.ca_transactions.append(CA_transaction(timestamp, what, symbol, amount, rate, txid,tridx, fee_amount_per_transaction, fee_rate))
+                    self.ca_transactions.append(CA_transaction(timestamp, what, symbol, amount, rate, txid,tridx, usd_fee=fee_amount_per_transaction))
 
 
 
-                if treatment in ['deposit','withdraw','borrow','repay']:
-                    vault_id = transfer['vault_id']
-                    if vault_id[:7] == 'custom:':
-                        vault_id = vault_id[7:]
+                if treatment in ['deposit','withdraw','borrow','repay','exit']:
+                    vault_id, _ = decustom(transfer['vault_id'])
 
                     vaddr = vault_id
                     # if vault_id is None:
@@ -505,14 +554,13 @@ class Calculator:
 
 
                     if not outbound:
-                        loan.borrow(what,symbol,amount)
+                        loan.borrow(transaction,tridx,what,symbol,amount)
                     else:
                         print(transfer)
-                        interest_payments = loan.repay(what,symbol,amount,running_rates,self.coingecko_rates,transaction,tridx,fee_amount_per_transaction,fee_rate)
+                        interest_payments = loan.repay(transaction,tridx,what,symbol,amount,running_rates,self.coingecko_rates,usd_fee=fee_amount_per_transaction)
                         self.interest_payments.extend(interest_payments)
 
-
-                if treatment in ['deposit', 'withdraw']:
+                if treatment in ['deposit', 'withdraw','exit']:
                     if vaddr not in vaults:
                         vaults[vaddr] = Vault(vaddr)
 
@@ -522,7 +570,7 @@ class Calculator:
                         vault.deposit(transaction,tridx,what,symbol,amount)
                     else:
                         print(transfer)
-                        v_trades, v_incomes, close = vault.withdraw(transaction,tridx,what,symbol,amount,running_rates,self.coingecko_rates,fee_amount_per_transaction,fee_rate)
+                        v_trades, v_incomes, close = vault.withdraw(transaction,tridx,what,symbol,amount,running_rates,self.coingecko_rates,usd_fee=fee_amount_per_transaction,exit=treatment=='exit')
                         self.ca_transactions.extend(v_trades)
                         self.incomes.extend(v_incomes)
                         # if close:
@@ -552,12 +600,16 @@ class Calculator:
         # print("\n\n")
         # for ca_trans in self.ca_transactions:
         #     print(ca_trans)
-
+        dt = datetime.date(current_year + 1, 1, 1)
+        new_year_ts = calendar.timegm(dt.timetuple())
         if self.mtm:
-            dt = datetime.date(current_year+1, 1, 1)
-            new_year_ts = calendar.timegm(dt.timetuple())
             mtm_dispose_all = self.buysell_everything(new_year_ts-1, totals, running_rates, sell=True,eoy=False)
             self.ca_transactions.extend(mtm_dispose_all)
+
+
+        #check non-empty vaults
+        # for vault_id,vault in vaults.items():
+        #     total, empty, bad = vault.total_usd(self, new_year_ts, running_rates, self.coingecko_rates)
 
 
         print("Vaults")
@@ -593,7 +645,7 @@ class Calculator:
                 # q.append({'amount':amount,'basis':basis, 'txid':txid, 'tridx':tridx,'timestamp':ca_trans.timestamp})
             else:
                 initial_amount = amount = -amount
-                fees = initial_fees = ca_trans.fee_amount * ca_trans.fee_rate
+                fees = initial_fees = ca_trans.usd_fee
                 rate = ca_trans.rate
                 while amount > 0 and ((amount * rate > 0.01 and rate != 0) or (amount > 0.0001 and rate == 0)):
                     try:
@@ -603,7 +655,7 @@ class Calculator:
                         print(error)
                         errors[txid] = error
                         #timestamp,what,symbol,amount,rate, txid, tridx, fee_amount=0, fee_rate=0)
-                        CA_in = CA_transaction(ca_trans.timestamp-1,what,symbol,amount,0,txid,-1,0,0)
+                        CA_in = CA_transaction(ca_trans.timestamp-1,what,symbol,amount,0,txid,-1,0)
                         print("FAKE",CA_in)
                         q.append(CA_in)
                         # break
@@ -676,6 +728,7 @@ class Calculator:
         self.interest_payments = C.interest_payments
         self.mtm = C.mtm
         self.vaults = C.vaults
+        self.loans = C.loans
 
 
     def make_forms(self, year):
@@ -818,6 +871,12 @@ class Calculator:
         js = {}
         for vault_id, vault in self.vaults.items():
             js[vault_id] = vault.to_json()
+        return js
+
+    def loans_json(self):
+        js = {}
+        for loan_id, loan in self.loans.items():
+            js[loan_id] = loan.to_json()
         return js
 
 

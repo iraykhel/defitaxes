@@ -36,7 +36,7 @@ class Chain:
         if wrapper is not None:
             self.wrapper = wrapper.lower()
 
-        self.hif = '0xef42b4c07a58aa49b7e8fc5e558af854a9f1bf97428ab56e5cef7147e873b3a2'
+        self.hif = '0x77d26008e40c0830e92030ce91cdb2d52dc8cefb4bb18aa45f2fbcf1d24fc1b2'
 
         # address_db.create_table(name + '_ancestry', 'address PRIMARY KEY, progenitor', drop=False)
         # address_db.create_table(name + '_names', 'address PRIMARY KEY, name', drop=False)

@@ -68,7 +68,7 @@ function treatment_rule_options(direction,def,vault_id=null,vault_id_custom=null
         opt_list = [['ignore','Ignore'], ['sell','Sell at market price'], ['burn','Dispose for free'],['fee','Transaction cost'],['loss','Loss'],['repay','Repay loan'],['deposit','Deposit to vault']];
         vault_id_opt_list = [['address','Destination address'],['type_name','Name of this custom type'],['other','Other']];
     } else {
-        opt_list = [['ignore','Ignore'], ['buy','Buy at market price'], ['gift','Acquire for free'], ['income','Income'], ['borrow','Borrow'], ['withdraw','Withdraw from vault']];
+        opt_list = [['ignore','Ignore'], ['buy','Buy at market price'], ['gift','Acquire for free'], ['income','Income'], ['borrow','Borrow'], ['withdraw','Withdraw from vault'], ['exit','Exit vault']];
         vault_id_opt_list = [['address','Source address'],['type_name','Name of this custom type'],['other','Other']];
     }
 
@@ -80,7 +80,7 @@ function treatment_rule_options(direction,def,vault_id=null,vault_id_custom=null
         if (pair[0] == def) {
             html += " selected ";
             //if (pair[0] == 'deposit' || pair[0] == 'withdraw' || pair[0] == 'deposit' || pair[0] == 'withdraw')
-            if (['deposit','withdraw','repay','borrow'].includes(pair[0]))
+            if (['deposit','withdraw','repay','borrow','exit'].includes(pair[0]))
                 vault_id_hidden = ' style="display: inline-block;"';
         }
 
@@ -368,7 +368,7 @@ $('body').on('change','.tc_rule_treatment', function() {
     selected_option = $(this).find(':selected');
     vault_id = $(this).next();
     val = selected_option.val();
-    if (val == 'deposit' || val == 'withdraw') {
+    if (val == 'deposit' || val == 'withdraw' || val == 'exit') {
     //<span class='vault_id_name'>Vault ID<div class='help help_vaultid'></div></span>
     //html += "<div class='vault_id_wrap selspec_wrap "+hidden_custom+"'"+vault_id_hidden+">Vault ID<div class='help help_vaultid'></div>:<select type=text name=vault_id class='tc_vault_id_field tc_rule_sel'>";
         vault_id.find('.vault_id_name').html("Vault ID<div class='help help_vaultid'></div>");
