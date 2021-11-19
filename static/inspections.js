@@ -181,6 +181,11 @@ function display_action(history_entry, symbols) {
         html += "Loan repaid";
     }
 
+    if (action == 'buy loaned') {
+        let symbol = symbols[history_entry['what']];
+        html += "Buy remaining " + round(history_entry['amount']) + " "+symbol+" for $"+round_usd(history_entry['amount']*history_entry['rate']);
+    }
+
     html += "</div>";
     return html;
 }

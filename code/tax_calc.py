@@ -285,6 +285,7 @@ class Loan:
 
     def repay(self, transaction,tridx, what,symbol,amount, running_rates, coingecko_rates, usd_fee, exit=False):
         txid = transaction['txid']
+
         if what not in self.loaned:
             self.symbols[what] = symbol
             self.loaned[what] = 0
@@ -313,7 +314,14 @@ class Loan:
 
             print("REPAY:interest ", amount, 'of', symbol)
 
-        if exit:
+
+        trades = []
+        if exit:  #assuming we were liquidated, acquire the rest of the loan at market prices
+            for what, amt in self.loaned.items():
+                if amt != 0:
+                    rate = rate_pick(what, timestamp, running_rates, coingecko_rates)
+                    self.history.append({'txid': txid, 'tridx': tridx, 'action': 'buy loaned', 'what': what, 'amount': amt, 'rate': rate})
+                    trades.append(CA_transaction(timestamp, what, self.symbols[what], amt, rate, txid, tridx))
             self.loaned = {}
 
         for what, amt in self.loaned.items():
@@ -322,7 +330,7 @@ class Loan:
         else:
             self.history.append({'txid': txid, 'tridx': tridx, 'action': 'loan repaid'})
 
-        return interest_payments
+        return interest_payments, trades
 
     def liquidate(self,transaction, tridx, what,symbol,amount, running_rates, coingecko_rates):
         txid = transaction['txid']
@@ -366,9 +374,9 @@ class CA_transaction:
             usd_fee = 0
         self.usd_fee = usd_fee
         if amount > 0:
-            self.basis = amount*rate+usd_fee
+            self.basis = amount*rate
         else:
-            self.basis = None
+            self.sale = -amount*rate
         self.txid = txid
         self.tridx = tridx
 
@@ -474,6 +482,10 @@ class Calculator:
 
 
             for transfer in transfers:
+                treatment, _ = decustom(transfer['treatment'])
+                if treatment is None or treatment == 'ignore': #ignore means IGNORE!
+                    continue
+
                 tridx = transfer['index']
                 outbound = False
                 try:
@@ -522,7 +534,7 @@ class Calculator:
                 # if treatment is not None and treatment[:7] == 'custom:':
                 #     treatment = treatment[7:]
                 #     custom = True
-                treatment, _ = decustom(transfer['treatment'])
+
 
                 to = transfer['to']
                 fr = transfer['fr']
@@ -577,14 +589,15 @@ class Calculator:
 
                     if treatment == 'repay' or treatment == 'full_repay':
                         print(transfer)
-                        interest_payments = loan.repay(transaction,tridx,what,symbol,amount,running_rates,self.coingecko_rates,usd_fee=fee_amount_per_transaction,exit=treatment=='full_repay')
+                        interest_payments, v_trades = loan.repay(transaction,tridx,what,symbol,amount,running_rates,self.coingecko_rates,usd_fee=fee_amount_per_transaction,exit=treatment=='full_repay')
                         self.interest_payments.extend(interest_payments)
+                        self.ca_transactions.extend(v_trades)
 
 
 
-                    if treatment == 'liquidation':
-                        self.ca_transactions.append(CA_transaction(timestamp, what, symbol, -amount, rate, txid, tridx))
-                        loan.liquidate(transaction, tridx, what,symbol,amount,running_rates, self.coingecko_rates)
+                    # if treatment == 'liquidation':
+                    #     self.ca_transactions.append(CA_transaction(timestamp, what, symbol, -amount, rate, txid, tridx))
+                    #     loan.liquidate(transaction, tridx, what,symbol,amount,running_rates, self.coingecko_rates)
 
                 if treatment in ['deposit', 'withdraw','exit']:
                     if vaddr not in vaults:
@@ -661,68 +674,118 @@ class Calculator:
             symbol = ca_trans.symbol
             if what not in queues:
                 queues[what] = []
+                modes[what] = 1
             q = queues[what]
+            mode = modes[what]
 
             amount = ca_trans.amount
             txid = ca_trans.txid
             tridx = ca_trans.tridx
-            if amount > 0:
-                q.append(ca_trans)
-                # basis = amount * ca_trans.rate + ca_trans.fee_amount * ca_trans.fee_rate
-                # q.append({'amount':amount,'basis':basis, 'txid':txid, 'tridx':tridx,'timestamp':ca_trans.timestamp})
-            else:
-                initial_amount = amount = -amount
-                fees = initial_fees = ca_trans.usd_fee
-                rate = ca_trans.rate
-                while amount > 0 and ((amount * rate > 0.01 and rate != 0) or (amount > 0.0001 and rate == 0)):
-                    try:
+            done = False
+            while not done:
+                switch = False
+                if (amount > 0 and mode == 1) or (amount < 0 and mode == -1):
+                    if mode == -1:
+                        print("Putting short on q", ca_trans)
+                    q.append(ca_trans)
+                    done = True
+                else:
+                    initial_amount = amount = -amount
+                    fees = initial_fees = ca_trans.usd_fee
+                    rate = ca_trans.rate
+                    pos_amount = amount * mode
+                    while pos_amount > 0 and ((pos_amount * rate > 0.01 and rate != 0) or (pos_amount > 0.0001 and rate == 0)):
+
+                        if len(q) == 0:
+                            modes[what] = mode = -mode
+                            amount = -amount
+                            ca_trans.amount = amount
+                            ca_trans.usd_fee = fees
+                            if mode == 1:
+                                ca_trans.basis = ca_trans.amount * ca_trans.rate
+                            else:
+                                ca_trans.sale = -ca_trans.amount * ca_trans.rate
+                            switch = True
+                            print("switch to",mode,ca_trans,'amt rem',pos_amount,amount)
+                            # exit(1)
+                            if mode == -1:
+                                errors[txid] = {'level':3,'error':'going short','amount':amount,'what':what,'symbol':symbol}
+                            else:
+                                errors[txid] = {'level': 5, 'error': 'going long','amount':amount,'what':what,'symbol':symbol}
+                            break
+
                         CA_in = q[0]
-                    except:
-                        error = {'error':'out','what':what,'symbol':symbol,'amount':amount,'tridx':tridx}
-                        print(error)
-                        errors[txid] = error
-                        #timestamp,what,symbol,amount,rate, txid, tridx, fee_amount=0, fee_rate=0)
-                        CA_in = CA_transaction(ca_trans.timestamp-1,what,symbol,amount,0,txid,-1,0)
-                        print("FAKE",CA_in)
-                        q.append(CA_in)
-                        # break
-                        # print("NOT ENOUGH ASSET")
-                        # print(ca_trans,amount, initial_amount)
-                        # exit(1)
 
-                    # print('disp comp',ca_trans,'|',CA_in)
+                        if mode == 1:
+                            if CA_in.amount > amount:
+                                prop_in = amount / CA_in.amount
+                                basis_spent_in = CA_in.basis * prop_in
+                                fees_spent_in = CA_in.usd_fee * prop_in
+                                CA_in.amount -= amount
+                                CA_in.basis -= basis_spent_in
+                                CA_in.usd_fee -= fees_spent_in
+                                basis = basis_spent_in + fees + fees_spent_in
 
-                    if CA_in.amount > amount:
-                        prop_in = amount / CA_in.amount
-                        basis_spent_in = CA_in.basis * prop_in
-                        CA_in.amount -= amount
-                        CA_in.basis -= basis_spent_in
-                        basis = basis_spent_in + fees
+                                CA_line = {'symbol':symbol,'what':what,'amount':amount,'in_ts':CA_in.timestamp,'out_ts':ca_trans.timestamp,
+                                           'basis':basis,'sale':amount*rate,'out_txid':txid,'out_tridx':tridx, 'in_txid':CA_in.txid, 'in_tridx':CA_in.tridx}
 
-                        CA_line = {'symbol':symbol,'what':what,'amount':amount,'in_ts':CA_in.timestamp,'out_ts':ca_trans.timestamp,
-                                   'basis':basis,'sale':amount*rate,'out_txid':txid,'out_tridx':tridx, 'in_txid':CA_in.txid, 'in_tridx':CA_in.tridx}
+                                fees = 0
+                                amount = 0
 
-                        fees = 0
-                        amount = 0
+                                if CA_in.amount*CA_in.rate < 0.01 and CA_in.rate != 0:
+                                    del q[0]
+                            else:
+                                prop_out = CA_in.amount / amount
+                                fees_spent = fees * prop_out
+                                basis = CA_in.basis + fees_spent + CA_in.usd_fee
+                                fees -= fees_spent
+                                del q[0]
+                                amount -= CA_in.amount
+                                CA_line = {'symbol': symbol, 'what': what, 'amount': CA_in.amount, 'in_ts': CA_in.timestamp, 'out_ts': ca_trans.timestamp,
+                                           'basis': basis, 'sale': CA_in.amount * rate, 'out_txid': txid, 'out_tridx': tridx, 'in_txid':CA_in.txid, 'in_tridx':CA_in.tridx}
 
-                        if CA_in.amount*CA_in.rate < 0.01:
-                            del q[0]
-                    else:
-                        prop_out = CA_in.amount / amount
-                        fees_spent = fees * prop_out
-                        basis = CA_in.basis + fees_spent
-                        fees -= fees_spent
-                        del q[0]
-                        amount -= CA_in.amount
-                        CA_line = {'symbol': symbol, 'what': what, 'amount': CA_in.amount, 'in_ts': CA_in.timestamp, 'out_ts': ca_trans.timestamp,
-                                   'basis': basis, 'sale': CA_in.amount * rate, 'out_txid': txid, 'out_tridx': tridx, 'in_txid':CA_in.txid, 'in_tridx':CA_in.tridx}
-                    CA_line['gain'] = CA_line['sale']-CA_line['basis']
-                    CA_all.append(CA_line)
-                    if CA_line['out_ts']-CA_line['in_ts'] > 365*86400:
-                        CA_long.append(CA_line)
-                    else:
-                        CA_short.append(CA_line)
-                    print(CA_line)
+                        else: #short, all amounts negative
+                            if CA_in.amount < amount:
+                                prop_in = amount / CA_in.amount
+
+                                sale = CA_in.sale * prop_in
+                                fees_spent_in = CA_in.usd_fee * prop_in
+                                basis = -amount * rate + fees + fees_spent_in
+                                CA_in.amount -= amount
+                                CA_in.usd_fee -= fees_spent_in
+                                CA_in.sale -= sale
+
+
+                                CA_line = {'symbol': symbol, 'what': what, 'amount': -amount, 'out_ts': CA_in.timestamp, 'in_ts': ca_trans.timestamp,
+                                           'basis': basis, 'sale': sale, 'in_txid': txid, 'in_tridx': tridx, 'out_txid': CA_in.txid, 'out_tridx': CA_in.tridx}
+
+                                fees = 0
+                                amount = 0
+
+                                if -CA_in.amount * CA_in.rate < 0.01 and CA_in.rate != 0:
+                                    del q[0]
+                            else:
+                                prop_out = CA_in.amount / amount
+                                fees_spent = fees * prop_out
+                                sale = CA_in.sale
+                                basis = -CA_in.amount*rate + fees_spent + CA_in.usd_fee
+                                fees -= fees_spent
+                                del q[0]
+                                amount -= CA_in.amount
+                                CA_line = {'symbol': symbol, 'what': what, 'amount': -CA_in.amount, 'out_ts': CA_in.timestamp, 'in_ts': ca_trans.timestamp,
+                                           'basis': basis, 'sale': sale, 'in_txid': txid, 'in_tridx': tridx, 'out_txid': CA_in.txid, 'out_tridx': CA_in.tridx}
+
+                        pos_amount = amount * mode
+
+                        CA_line['gain'] = CA_line['sale'] - CA_line['basis']
+                        print('cl', pos_amount, amount, CA_line)
+                        CA_all.append(CA_line)
+                        if abs(CA_line['out_ts'] - CA_line['in_ts']) > 365 * 86400:
+                            CA_long.append(CA_line)
+                        else:
+                            CA_short.append(CA_line)
+                    if not switch:
+                        done = True
 
         pprint.pprint(CA_long)
         self.CA_long = CA_long

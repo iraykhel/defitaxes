@@ -114,6 +114,7 @@ function show_ajax_transactions(data) {
         $('#t_'+txid).replaceWith(transaction_html)
         $('#t_'+txid).addClass('secondary_selected');
         $('#t_'+txid).find('.t_idx').html(idx_html);
+        process_errors(CA_errors, txid=txid)
 //        populate_vault_info(vault_info=null,txid=txid);
     }
     if (selected_id != null) {
@@ -556,7 +557,7 @@ function make_transaction_html(transaction,idx=null,len=null) {
         type_class = 't_class_unknown';
 
     ct_id = transaction['ct_id'];
-
+    transaction['original_color'] = transaction_color;
     transaction_html = "<div id='t_"+txid+"' class='transaction t_class_"+transaction_color+" "+type_class;
     if ('custom_color_id' in transaction)
         transaction_html += " custom_recolor custom_recolor_"+transaction['custom_color_id'];
@@ -595,10 +596,10 @@ function make_transaction_html(transaction,idx=null,len=null) {
         transaction_html += "<div class='note'>Note: Exchange rate for "+transaction['rate_inferred']+" is inferred from the other currencies in this transaction</div>";
     }
     if (bad_rate_adjustment) {
-        transaction_html += "<div class='note note_yellow'>Note: Rates for currencies in this transaction might be wrong</div>";
+        transaction_html += "<div class='note note_5'>Note: Rates for currencies in this transaction might be wrong</div>";
     }
     if (missing_rates.length > 0) {
-        transaction_html += "<div class='note note_red'>Note: Could not find required rate ("+missing_rates.join(', ')+") for this transaction, assuming 0</div>";
+        transaction_html += "<div class='note note_0'>Note: Could not find required rate ("+missing_rates.join(', ')+") for this transaction, assuming 0</div>";
     }
     transaction_html += "</div>";
 

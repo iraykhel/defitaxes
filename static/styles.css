@@ -98,12 +98,10 @@ div.tx_row_1 {
     margin-bottom:5px;
 }
 
-div.note {
-    margin-top:5px;
-}
 
 
-.t_class_0 {
+
+.t_class_0, div.t_class_ca_0 {
     /*background-color:#FF9E9E;*/
     background-color:#FF0000;
 }
@@ -111,14 +109,14 @@ div.note {
     background-color:#FF0000 !important;
 }
 
-.t_class_3 {
+.t_class_3, div.t_class_ca_3 {
     background-color:#FFAC3A;
 }
 .custom_recolor_3 {
     background-color:#FFAC3A !important;
 }
 
-.t_class_5 {
+.t_class_5, div.t_class_5 {
     background-color:#FFFF9E;
 }
 .custom_recolor_5 {
@@ -632,17 +630,24 @@ div.ct_icon {
     background-color:#EEEEEE;
 }
 
-.custom_type div.note_red {
-    /*background-color:#FF9E9E;*/
-    background-color:#FF0000;
+div.note {
+    margin-top:5px;
     padding-top:5px;
     padding-bottom:5px;
+    max-width:600px;
 }
 
-.custom_type div.note_yellow {
+.custom_type div.note_0 {
+    background-color:#FFFFFF;
+
+}
+
+.custom_type div.note_3 {
+    background-color:#FFAC3A;
+}
+
+.custom_type div.note_5 {
     background-color:#FFFF9E;
-    padding-top:5px;
-    padding-bottom:5px;
 }
 
 
@@ -752,6 +757,7 @@ table#tax_sums {
 tr.matchup td {
     padding-left:25px;
     padding-bottom:10px;
+    max-width: 600px;
 }
 
 tr.matchup p {
@@ -803,7 +809,7 @@ div#color_undo {
 
 
 
-div#tax_block a#vaults_inspect {
+div#tax_block a#vaults_inspect, div#tax_block a#loans_inspect {
     display:block;
     margin-bottom:5px;
 }

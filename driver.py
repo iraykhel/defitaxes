@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
     # address = '0x6867115787080d4e95cbcb6471fa85a9458a5e43' #subvert
     # address = '0x3401ea5a8d91c5e3944962c0148b08ac4a77f153' #so many nfts
-    name = 'ETH'
+    name = 'BSC'
     address_db = SQLite('addresses')
     chain = Chain.from_name(name,address_db,address)
 
@@ -65,8 +65,8 @@ if __name__ == "__main__":
     # print(progenitor)
     # exit(0)
     user = User(address)
-    transactions = chain.get_transactions()
-    user.store_transactions(chain,transactions)
+    # transactions = chain.get_transactions()
+    # user.store_transactions(chain,transactions)
 
 
     transactions = user.load_transactions(chain)

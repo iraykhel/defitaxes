@@ -55,6 +55,7 @@ function process_tax_js(js) {
     console.log('process_tax_js',year);
     show_sums(CA_long, CA_short, incomes, interest, year);
     indicate_matchups(CA_long, CA_short, incomes, interest);
+    process_errors(CA_errors);
 //    populate_vault_info(js['vault_info']);
 
 
@@ -102,24 +103,27 @@ function define_matchups(lines) {
         let out_tridx = line['out_tridx'];
 
         let tok = line['symbol'];
+        let gain = line['gain'];
 
         if (!(in_txid in matchups_basis))
             matchups_basis[in_txid] = {};
         if (!(in_tridx in matchups_basis[in_txid]))
             matchups_basis[in_txid][in_tridx] = {}
         if (!(tok in matchups_basis[in_txid][in_tridx]))
-            matchups_basis[in_txid][in_tridx][tok] = []
+            matchups_basis[in_txid][in_tridx][tok] = {'txids':[],'gain':0}
 
-        matchups_basis[in_txid][in_tridx][tok].push(out_txid);
+        matchups_basis[in_txid][in_tridx][tok]['txids'].push(out_txid);
+        matchups_basis[in_txid][in_tridx][tok]['gain'] += gain;
 
         if (!(out_txid in matchups_sales))
             matchups_sales[out_txid] = {};
         if (!(out_tridx in matchups_sales[out_txid]))
             matchups_sales[out_txid][out_tridx] = {}
         if (!(tok in matchups_sales[out_txid][out_tridx]))
-            matchups_sales[out_txid][out_tridx][tok] = []
+            matchups_sales[out_txid][out_tridx][tok] = {'txids':[],'gain':0}
 
-        matchups_sales[out_txid][out_tridx][tok].push(in_txid);
+        matchups_sales[out_txid][out_tridx][tok]['txids'].push(in_txid);
+        matchups_sales[out_txid][out_tridx][tok]['gain'] += gain;
     }
 }
 
@@ -178,6 +182,7 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
     matchups_sales = {}
     matchups_incomes = {}
     matchups_interest = {}
+    matchup_gains = {}
     define_matchups(CA_long);
     define_matchups(CA_short);
     define_matchups_ii(incomes,matchups_incomes)
@@ -188,6 +193,7 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
 //    $('.matchup').remove();
 
     for (let txid in matchups_basis) {
+        let cur_num = all_transactions[txid]['num']
         if (txid == -10) //mtm eoy
             continue;
         for (let tridx in matchups_basis[txid]) {
@@ -195,28 +201,33 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
 //            transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
             //tok = $(transfer).find('.r_token').html();
             text = "";
+            let short = false;
             for (tok in matchups_basis[txid][tridx]) {
-                text += "This "+tok+" is later disposed ";
-                cnt = matchups_basis[txid][tridx][tok].length;
+                text += "This "+tok+" is disposed ";
+                cnt = matchups_basis[txid][tridx][tok]['txids'].length;
                 if (cnt <=5) {
                     if (cnt == 1)
                         text += "in transaction ";
                     else
                         text += "in transactions ";
                     subs = [];
-                    for (o_txid of matchups_basis[txid][tridx][tok]) {
+                    for (o_txid of matchups_basis[txid][tridx][tok]['txids']) {
                         if (o_txid == -10)
                             subs.push('at end of year (mark-to-market)')
                         else {
-                            let num = "#"+all_transactions[o_txid]['num'];
-                            if (!(subs.includes(num)))
-                                subs.push(num);
+                            let num = all_transactions[o_txid]['num'];
+                            if (!(subs.includes("#"+num)))
+                                subs.push("#"+num);
+                            if (num < cur_num) short = true;
                         }
                     }
                     text += subs.join(', ');
                 } else {
                     text += "in more than 5 transactions";
                 }
+
+                text += ", total cap gain is $"+round_usd(matchups_basis[txid][tridx][tok]['gain']);
+                if (short) text += "<br><b>This involves a short sale</b>";
             }
 
             add_matchup_text(txid,tridx,text)
@@ -225,6 +236,7 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
     }
 
     for (let txid in matchups_sales) {
+        let cur_num = all_transactions[txid]['num']
         if (txid == -10) //mtm eoy
             continue;
         for (let tridx in matchups_sales[txid]) {
@@ -232,31 +244,35 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
             transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
             tr_tok = $(transfer).find('.r_token').html();
             text = "";
+            let short = false;
             for (tok in matchups_sales[txid][tridx]) {
                 if (tok != tr_tok)
                     text += "The "+tr_tok+" was converted inside the vault from "+tok+" originally acquired ";
                 else
-                    text += "This "+tok+" was acquired in ";
-                cnt = matchups_sales[txid][tridx][tok].length;
+                    text += "This "+tok+" was acquired ";
+                cnt = matchups_sales[txid][tridx][tok]['txids'].length;
                 if (cnt <= 5) {
                     if (cnt == 1)
                         text += "in transaction ";
                     else
                         text += "in transactions ";
                     subs = [];
-                    for (o_txid of matchups_sales[txid][tridx][tok]) {
+                    for (o_txid of matchups_sales[txid][tridx][tok]['txids']) {
                         if (o_txid == -10)
                             subs.push('at start of year (mark-to-market)')
                         else {
-                            let num = "#"+all_transactions[o_txid]['num'];
-                            if (!(subs.includes(num)))
-                                subs.push(num);
+                            let num = all_transactions[o_txid]['num'];
+                            if (!(subs.includes("#"+num)))
+                                subs.push("#"+num);
+                            if (num > cur_num) short = true;
                         }
                     }
                     text += subs.join(', ');
                 } else {
                     text += "in more than 5 transactions";
                 }
+                text += ", total cap gain is $"+round_usd(matchups_sales[txid][tridx][tok]['gain']);
+                if (short) text += "<br><b>This involves a short sale</b>";
                 text += "</p>";
             }
 
@@ -297,6 +313,56 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
 
 
 
+}
+
+function process_errors(CA_errors, txid=null) {
+    let level_options = [0,3,5,10]
+    let err_list = {}
+    if (txid != null) {
+        if (txid in CA_errors)
+            err_list[txid] = CA_errors[txid]
+    } else {
+        err_list = CA_errors
+        $('.ca_error').remove();
+        $('.t_class_ca').removeClass('t_class_ca t_class_ca_0 t_class_ca_3 t_class_ca_5');
+    }
+    for (let txid in err_list) {
+        let el = $('#t_'+txid);
+        let tx_below_level = false;
+        let entry = err_list[txid];
+        let error = entry['error'];
+        let level = entry['level'];
+//        for (lopt of level_options) {
+//            if (el.hasClass('t_class_'+lopt)) {
+//                if (lopt < level)
+//                    tx_below_level = true;
+//                all_transactions[txid]['original_level'] = lopt;
+//                break
+//            }
+//        }
+
+//        if (!('additional_notes' in all_transactions[txid]))
+//            all_transactions[txid]['additional_notes'] = []
+        el.removeClass('t_class_ca t_class_ca_0 t_class_ca_3 t_class_ca_5')
+        if (level < all_transactions[txid]['original_color'])
+            el.addClass('t_class_ca t_class_ca_'+level)
+
+//            el.removeClass('t_class_10 t_class_5 t_class_3').addClass('t_class_'+level);
+
+        let note_text = "";
+        let amount = entry['amount'];
+        let symbol = entry['symbol']
+        if (error == 'going short') {
+            note_text = "Note: At this point you do not have "+round(Math.abs(amount))+" "+symbol+" to complete one of the transfers. This transaction opens a short position. "+
+            "This is correct behaviour if you previously borrowed " +symbol+"."
+        }
+
+        if (error == 'going long') {
+            note_text = "Note: This transaction closes previously opened short position on "+symbol+".";
+        }
+        let error_note = "<div class='note note_"+level+" ca_error'>"+note_text+"</div>";
+        el.find('.tx_row_2').after(error_note);
+    }
 }
 
 
