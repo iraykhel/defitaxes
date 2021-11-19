@@ -813,7 +813,7 @@ div#vaults_inspection_block, div#loans_inspection_block {
     margin-bottom:10px;
 }
 
-ul.vault_list {
+ul.item_list {
     padding:0px;
     margin:0px;
     list-style-type:none;
@@ -821,7 +821,7 @@ ul.vault_list {
     overflow:auto;
 }
 
-li.vault {
+li.vault, li.loan {
     clear:both;
     padding:0px;
     margin-bottom:3px;
@@ -878,7 +878,7 @@ table.vault_table td.vault_table_txnum, table.vault_table td.vault_table_tok {
     padding-right:10px;
 }
 
-div.vault_action {
+div.action {
     margin-bottom:2px;
 }
 

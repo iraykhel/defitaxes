@@ -24,6 +24,7 @@ class Category:
     EXIT_VAULT = 19
 
 
+
     CLAIM = 99
     NFT = 100
 

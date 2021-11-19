@@ -65,7 +65,7 @@ function treatment_rule_options(direction,def,vault_id=null,vault_id_custom=null
     html ="<select name=rule_treatment class='tc_rule_sel tc_rule_treatment'>";
 
     if (direction == 'out') {
-        opt_list = [['ignore','Ignore'], ['sell','Sell at market price'], ['burn','Dispose for free'],['fee','Transaction cost'],['loss','Loss'],['repay','Repay loan'],['deposit','Deposit to vault']];
+        opt_list = [['ignore','Ignore'], ['sell','Sell at market price'], ['burn','Dispose for free'],['fee','Transaction cost'],['loss','Loss'],['repay','Repay loan'],['full_repay','Fully repay loan'],['deposit','Deposit to vault']];
         vault_id_opt_list = [['address','Destination address'],['type_name','Name of this custom type'],['other','Other']];
     } else {
         opt_list = [['ignore','Ignore'], ['buy','Buy at market price'], ['gift','Acquire for free'], ['income','Income'], ['borrow','Borrow'], ['withdraw','Withdraw from vault'], ['exit','Exit vault']];
@@ -80,7 +80,7 @@ function treatment_rule_options(direction,def,vault_id=null,vault_id_custom=null
         if (pair[0] == def) {
             html += " selected ";
             //if (pair[0] == 'deposit' || pair[0] == 'withdraw' || pair[0] == 'deposit' || pair[0] == 'withdraw')
-            if (['deposit','withdraw','repay','borrow','exit'].includes(pair[0]))
+            if (['deposit','withdraw','repay','borrow','exit','liquidation','full_repay'].includes(pair[0]))
                 vault_id_hidden = ' style="display: inline-block;"';
         }
 
@@ -373,7 +373,7 @@ $('body').on('change','.tc_rule_treatment', function() {
     //html += "<div class='vault_id_wrap selspec_wrap "+hidden_custom+"'"+vault_id_hidden+">Vault ID<div class='help help_vaultid'></div>:<select type=text name=vault_id class='tc_vault_id_field tc_rule_sel'>";
         vault_id.find('.vault_id_name').html("Vault ID<div class='help help_vaultid'></div>");
         showib(vault_id);
-    } else if (val == 'borrow' || val == 'repay') {
+    } else if (val == 'borrow' || val == 'repay' || val == 'liquidation' || val == 'full_repay') {
         vault_id.find('.vault_id_name').html("Loan ID<div class='help help_vaultid'></div>");
         showib(vault_id);
     } else {

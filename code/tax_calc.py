@@ -283,7 +283,7 @@ class Loan:
         self.history.append({'txid': txid, 'tridx': tridx, 'action': 'borrow', 'what': what, 'amount': amount})
         print("LOAN", self.id, symbol, amount)
 
-    def repay(self, transaction,tridx, what,symbol,amount, running_rates, coingecko_rates, usd_fee):
+    def repay(self, transaction,tridx, what,symbol,amount, running_rates, coingecko_rates, usd_fee, exit=False):
         txid = transaction['txid']
         if what not in self.loaned:
             self.symbols[what] = symbol
@@ -310,9 +310,28 @@ class Loan:
             print("REPAY LOAN:REPAYING MORE THAN LOANED")
             interest_payments.append({'timestamp': timestamp, 'text': 'Interest on a loan', 'amount': amount * rate, 'txid': transaction['txid'],'tridx':tridx})
             self.history.append({'txid': txid, 'tridx': tridx, 'action': 'pay interest', 'what': what, 'amount': amount})
+
             print("REPAY:interest ", amount, 'of', symbol)
 
+        if exit:
+            self.loaned = {}
+
+        for what, amt in self.loaned.items():
+            if amt != 0:
+                break
+        else:
+            self.history.append({'txid': txid, 'tridx': tridx, 'action': 'loan repaid'})
+
         return interest_payments
+
+    def liquidate(self,transaction, tridx, what,symbol,amount, running_rates, coingecko_rates):
+        txid = transaction['txid']
+        self.symbols[what] = symbol
+        self.loaned = {}
+        self.usd_total = 0
+        self.history.append({'txid': txid, 'tridx': tridx, 'action': 'liquidation', 'what': what, 'amount': amount})
+        self.history.append({'txid': txid, 'tridx': tridx, 'action': 'loan repaid'})
+        self.warnings.append({'txid': txid, 'tridx': tridx, 'text': 'Liquidated ' + str(amount)+' of '+ symbol + ' collateral, loan considered repaid ', 'level': 5})
 
     def to_json(self):
         js = {
@@ -524,7 +543,7 @@ class Calculator:
 
 
 
-                if treatment in ['deposit','withdraw','borrow','repay','exit']:
+                if treatment in ['deposit','withdraw','borrow','repay','full_repay','exit','liquidation']:
                     vault_id, _ = decustom(transfer['vault_id'])
 
                     vaddr = vault_id
@@ -546,19 +565,26 @@ class Calculator:
                     #     self.vaddr_info[txid] = {}
                     # self.vaddr_info[txid][tridx] = vaddr
 
-                if treatment in ['borrow','repay']:
+                if treatment in ['borrow','repay','full_repay','liquidation']:
                     if vaddr not in loans:
                         loans[vaddr] = Loan(vaddr)
                     loan = loans[vaddr]
 
 
 
-                    if not outbound:
+                    if treatment == 'borrow':
                         loan.borrow(transaction,tridx,what,symbol,amount)
-                    else:
+
+                    if treatment == 'repay' or treatment == 'full_repay':
                         print(transfer)
-                        interest_payments = loan.repay(transaction,tridx,what,symbol,amount,running_rates,self.coingecko_rates,usd_fee=fee_amount_per_transaction)
+                        interest_payments = loan.repay(transaction,tridx,what,symbol,amount,running_rates,self.coingecko_rates,usd_fee=fee_amount_per_transaction,exit=treatment=='full_repay')
                         self.interest_payments.extend(interest_payments)
+
+
+
+                    if treatment == 'liquidation':
+                        self.ca_transactions.append(CA_transaction(timestamp, what, symbol, -amount, rate, txid, tridx))
+                        loan.liquidate(transaction, tridx, what,symbol,amount,running_rates, self.coingecko_rates)
 
                 if treatment in ['deposit', 'withdraw','exit']:
                     if vaddr not in vaults:
@@ -625,6 +651,7 @@ class Calculator:
         print("YOYO", len(self.ca_transactions))
         pprint.pprint(self.ca_transactions)
         queues = {}
+        modes = {}
         CA_short = []
         CA_long = []
         CA_all = []
