@@ -1165,6 +1165,12 @@ class Classifier:
             for t in CT[Transfer.SENT]:
                 set_treatment(t,'deposit')
 
+        elif cat in [Category.COMPOUND]:
+            for t in CT[Transfer.RECEIVED]:
+                set_treatment(t,'income')
+            for t in CT[Transfer.SENT]:
+                set_treatment(t,'deposit')
+
         elif cat in [Category.EXIT_VAULT]:
             for t in CT[Transfer.RECEIVED]:
                 set_treatment(t,'exit')

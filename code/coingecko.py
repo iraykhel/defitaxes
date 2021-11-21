@@ -247,6 +247,9 @@ class Coingecko:
 
     def lookup_rate(self,contract,ts):
         t = time.time()
+        verbose = self.verbose
+        if verbose:
+            log('coingecko rate lookup',contract,ts)
         found = 0
         source = 'unknown'
         if contract == 'USD':
@@ -255,11 +258,13 @@ class Coingecko:
         try:
             rv = self.shortcut_rates[contract][ts]
             self.shortcut_hits += 1
+            if verbose:
+                log('shortcut hit', rv)
             return rv + ['shortcut']
         except:
             pass
 
-        verbose = self.verbose
+
         good = 1
         ts = int(ts)
         # assert contract in self.contracts_map
@@ -267,6 +272,8 @@ class Coingecko:
             if verbose:
                 log("Bad rate for in lookup", contract, ts, "contract is not in the map")
             if contract in self.inferred_rates:
+                if verbose:
+                    log("Contract present in inferred rates")
                 rates_table = self.inferred_rates[contract]
                 idx = rates_table.bisect_left(ts)
                 if idx == 0:

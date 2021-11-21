@@ -120,7 +120,6 @@ def process():
         if import_new:
             C = Coingecko()
             C.init_from_db(chain.main_asset, contract_list, address)
-            C.dump(chain)
         else:
             C = Coingecko.init_from_cache(chain)
         log('timing:coingecko init_from_db',time.time()-t)
@@ -146,6 +145,10 @@ def process():
         progress_bar_update(address, 'Calculating taxes', 87)
         calculator = Calculator(user, chain, C)
         calculator.process_transactions(transactions_js)
+
+        #process_transactions affects coingecko rates! Need to cache it after, not before.
+        C.dump(chain)
+
         progress_bar_update(address, 'Calculating taxes', 90)
         calculator.matchup()
         calculator.cache()

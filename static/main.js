@@ -105,21 +105,33 @@ function round(rate) {
 
 function show_ajax_transactions(data) {
     selected_id = null;
+    let selected_secondary = [];
     if ($('.primary_selected').length > 0) selected_id = $('.primary_selected').attr('id');
+//    $('.secondary_selected').each(function() {
+//        selected_secondary.push($(this).attr('id'));
+//    });
     for (let idx in data['transactions']) {
         let transaction = data['transactions'][idx];
         let txid = transaction['txid'];
-        idx_html = $('#t_'+txid).find('.t_idx').html();
-        transaction_html = make_transaction_html(transaction);
+        let num = all_transactions[txid]['num'];
+        let len = Object.keys(all_transactions).length;
+//        console.log('ajax num',num, all_transactions.length, all_transactions.size, );
+//        idx_html = $('#t_'+txid).find('.t_idx').html();
+        transaction_html = make_transaction_html(transaction,idx=num-1, len=len);
         $('#t_'+txid).replaceWith(transaction_html)
         $('#t_'+txid).addClass('secondary_selected');
-        $('#t_'+txid).find('.t_idx').html(idx_html);
+//        $('#t_'+txid).find('.t_idx').html(idx_html);
         process_errors(CA_errors, txid=txid)
 //        populate_vault_info(vault_info=null,txid=txid);
     }
     if (selected_id != null) {
-        $('#'+selected_id).click();
+        select_transaction($('#'+selected_id),keep_secondary=true);
+//        $('#'+selected_id).click();
     }
+//    if (selected_secondary.length > 0) {
+//        let secondary_id_list =
+//    }
+
 }
 
 $( document ).ready(function() {
@@ -529,20 +541,28 @@ function make_transaction_html(transaction,idx=null,len=null) {
         if (rate == null) {
             to = row['to'];
             treatment = row['treatment'];
-            if (to != null && to.toUpperCase() == addr) {
-                options = options_in;
-            } else {
-                options = options_out;
+            let symbol = row['symbol'];
+            if (treatment != 'ignore' && treatment != null) {
+                if (transaction['type'] != 'transfer in') //airdrops don't have rates
+                    transaction_color = 0;
+                if (!missing_rates.includes(symbol))
+                    missing_rates.push(symbol);
             }
-            for (let option in options) {
-                if ((option == treatment)) { // && ['buy','sell'].includes(option)) {
-
-                    if (transaction['type'] != 'transfer in') //airdrops don't have rates
-                        transaction_color = 0;
-                    if (!missing_rates.includes(row['symbol']))
-                        missing_rates.push(row['symbol']);
-                }
-            }
+//
+//            if (to != null && to.toUpperCase() == addr) {
+//                options = options_in;
+//            } else {
+//                options = options_out;
+//            }
+//            for (let option in options) {
+//                if ((option == treatment)) { // && ['buy','sell'].includes(option)) {
+//
+//                    if (transaction['type'] != 'transfer in') //airdrops don't have rates
+//                        transaction_color = 0;
+//                    if (!missing_rates.includes(row['symbol']))
+//                        missing_rates.push(row['symbol']);
+//                }
+//            }
         }
     }
 
@@ -724,7 +744,7 @@ $('body').on('click',function() {
     console.log('gc');
 });
 
-function select_transaction(txel) {
+function select_transaction(txel,keep_secondary=false) {
     t1 = performance.now();
     if (txel.hasClass('primary_selected')) {
         return;
@@ -736,7 +756,7 @@ function select_transaction(txel) {
     deselect_primary();
     prev_selection = txid;
     console.log('prev_selection',prev_selection);
-    if (!event.ctrlKey)
+    if (!event.ctrlKey && !keep_secondary)
         $('.secondary_selected').removeClass('secondary_selected');
 
     txel.addClass('primary_selected').addClass('secondary_selected');

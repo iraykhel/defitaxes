@@ -172,6 +172,7 @@ class User:
 
 
     def save_custom_type(self,chain_name,address,name,description,balanced,rules, id=None):
+        log('save_custom_type',chain_name,name,description,balanced,rules)
         if id is not None:
             # self.db.query("DELETE FROM custom_types WHERE id="+id)
             self.db.query("UPDATE custom_types SET name = '"+name+"', description = '"+description+"', balanced = "+str(balanced)+" WHERE id="+str(id))
@@ -180,7 +181,7 @@ class User:
             self.db.insert_kw('custom_types', chain=chain_name, name=name, description=description, balanced=balanced)
 
 
-        rows = self.db.select("SELECT id FROM custom_types WHERE name='"+name+"'")
+        rows = self.db.select("SELECT id FROM custom_types WHERE name='"+name+"' and chain='"+chain_name+"'")
         type_id = rows[0][0]
         for rule in rules:
             from_addr, from_addr_custom, to_addr, to_addr_custom, token, token_custom, treatment, vault_id, vault_id_custom = rule
