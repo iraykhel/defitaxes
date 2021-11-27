@@ -63,6 +63,10 @@ class Signatures:
         self.signatures = mapping
 
     def lookup_signature(self,input):
+        decustomed, is_custom = decustom(input)
+        if is_custom:
+            return decustomed, decustomed
+
         hex_sig = self.input_to_sig(input)
         if hex_sig is None or hex_sig not in self.signatures:
             return None, hex_sig

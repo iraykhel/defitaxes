@@ -6,6 +6,8 @@ from .coingecko import Coingecko
 from .signatures import Signatures
 from .classifiers import Classifier
 from .chain import Chain
+from datetime import datetime
+import re
 import os
 
 class User:
@@ -48,7 +50,7 @@ class User:
         self.db.create_index('tokens_idx', 'tokens', 'chain, contract, symbol', unique=True)
 
 
-        self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp INTEGER, custom_type_id INTEGER, custom_color_id INTEGER',drop=drop)
+        self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp INTEGER, custom_type_id INTEGER, custom_color_id INTEGER, manual INTEGER',drop=drop)
         self.db.create_index('transactions_idx', 'transactions', 'hash', unique=True)
 
         self.db.create_table('transaction_transfers', 'id integer primary key autoincrement, type integer, idx INTEGER, transaction_id INTEGER, from_addr_id INTEGER, to_addr_id INTEGER, val REAL, token_id INTEGER, token_nft_id INTEGER, base_fee REAL, input_len INTEGER, input, '
@@ -91,10 +93,10 @@ class User:
     def locate_insert_token(self,chain_name,contract,symbol):
         db = self.db
         if contract is None:
-            row = db.select("SELECT id FROM tokens WHERE chain='" + chain_name + "' and symbol = '" + symbol + "'")
+            row = db.select("SELECT id FROM tokens WHERE chain='" + chain_name + "' and symbol = '" + symbol + "' ORDER BY id ASC")
         else:
-            row = db.select("SELECT id FROM tokens WHERE chain='" + chain_name + "' and contract = '" + contract + "'")
-        if len(row) == 1:
+            row = db.select("SELECT id FROM tokens WHERE chain='" + chain_name + "' and contract = '" + contract + "'  ORDER BY id ASC")
+        if len(row) >= 1:
             return row[0][0]
         else:
             db.insert_kw('tokens', chain=chain_name, contract=contract, symbol=symbol)
@@ -132,7 +134,7 @@ class User:
         db = self.db
         # query = "select * from transactions, transaction_transfers where chain='" + self.name + " and transactions.hash = transaction_transfers.hash ORDER BY timestamp,idx"
         query = "SELECT " \
-                "tx.id, tx.hash, tx.timestamp, tx.custom_type_id, tx.custom_color_id, " \
+                "tx.id, tx.hash, tx.timestamp, tx.custom_type_id, tx.custom_color_id, tx.manual, " \
                 "tr.id, tr.type, tr.idx, from_addr.address, to_addr.address, tr.val, tk.symbol, tk.contract, tr.token_nft_id, tr.base_fee, tr.input_len, tr.input," \
                 "tr.custom_treatment, tr.custom_rate, tr.custom_vaultid " \
                 "FROM transactions as tx, transaction_transfers as tr, addresses as from_addr, addresses as to_addr, tokens as tk " \
@@ -147,11 +149,11 @@ class User:
         rows = db.select(query)
         transactions = SortedDict()
         for row in rows:
-            txid, hash, ts, custom_type_id, custom_color_id, trid, transfer_type,idx,fr,to,val,token,token_contract,token_nft_id, base_fee, input_len, input, \
+            txid, hash, ts, custom_type_id, custom_color_id, manual, trid, transfer_type,idx,fr,to,val,token,token_contract,token_nft_id, base_fee, input_len, input, \
             custom_treatment, custom_rate, custom_vaultid = row
             uid = str(ts) + "_" + str(hash)
             if uid not in transactions:
-                transactions[uid] = Transaction(chain,txid=txid, custom_type_id=custom_type_id, custom_color_id=custom_color_id)
+                transactions[uid] = Transaction(chain,txid=txid, custom_type_id=custom_type_id, custom_color_id=custom_color_id, manual=manual)
             row = [hash, ts, fr, to, val, token, token_contract, token_nft_id, base_fee, input_len, input]
             transactions[uid].append(transfer_type, row, transfer_idx=idx, custom_treatment=custom_treatment, custom_rate=custom_rate, custom_vaultid=custom_vaultid)
         return transactions
@@ -487,4 +489,95 @@ class User:
             color_id = None
         for txid in transaction_list:
             self.db.update_kw('transactions', 'id='+str(txid), custom_color_id=color_id)
+        self.db.commit()
+
+
+    def save_manual_transaction(self,chain_name,address,dt,tm,hash,op,cp,transfers, txid=None):
+        log('save_manual_transaction',chain_name,address,dt,tm,hash,op,cp,transfers,txid)
+
+        ts = None
+        try:
+            ts = datetime.strptime(dt+" "+tm, "%m/%d/%Y %H:%M:%S")
+        except:
+            try:
+                ts = datetime.strptime(dt, "%m/%d/%Y")
+            except:
+                exit(1)
+
+        assert len(transfers) >= 1
+
+        address_db = SQLite('addresses')
+        chain = Chain.from_name(chain_name, address_db, address)
+
+
+        ts = int(ts.timestamp())
+        log('ts',ts)
+        if hash == '':
+            hash = None
+        if txid is None:
+            self.db.insert_kw('transactions', chain=chain_name, hash=hash, timestamp=ts, manual=1)
+            txid = self.db.select("SELECT MAX(id) FROM transactions")
+            txid = txid[0][0]
+        else:
+            self.db.update_kw('transactions','id='+str(txid),hash=hash,timestamp=ts)
+            self.db.query("DELETE FROM transaction_transfers WHERE transaction_id="+str(txid))
+
+
+        for tridx, transfer in enumerate(transfers):
+            fr, to, what, amount, nft_id = transfer
+            input = None
+            input_len = -1
+            if tridx == 0:
+                if op is not None and len(op) > 0:
+                    input = 'custom:'+op
+                    input_len = 10
+
+            log('trtop',fr,to,what,amount,nft_id)
+            fr = fr.lower()
+            to = to.lower()
+            if nft_id == '':
+                nft_id = None
+            if tridx == 0:
+                pass
+            transfer_type = 3
+            if nft_id is not None:
+                transfer_type = 4
+            elif what.upper() == chain.main_asset.upper():
+                transfer_type = 1
+                what = what.upper()
+
+            if transfer_type != 1:
+                contract = re.search(r'0x[0-9a-fA-F]{40}', what)
+                if contract is not None:
+                    contract = contract.group()
+                else:
+                    contract = what
+                tok_id = self.locate_insert_token(chain_name, contract, contract[:8])
+            else:
+                tok_id = self.locate_insert_token(chain_name, None, what)
+
+            fr_id = self.locate_insert_address(chain_name,fr)
+            to_id = self.locate_insert_address(chain_name,to)
+
+
+            log('tr',fr_id,to_id,tok_id)
+
+            self.db.insert_kw('transaction_transfers',
+                              type=transfer_type, idx=tridx, transaction_id=txid, from_addr_id=fr_id, to_addr_id=to_id, val=amount, token_id=tok_id, token_nft_id = nft_id,
+                              base_fee=0, input=input, input_len=input_len)
+        self.db.commit()
+
+        S = Signatures()
+        transactions = self.load_transactions(chain, tx_id_list=[str(txid)])
+        contract_list, counterparty_list, input_list = chain.get_contracts(transactions)
+        S.init_from_db(input_list)
+        C = Coingecko.init_from_cache(chain)
+        transactions_js = chain.transactions_to_log(self, C, S, transactions, mode='js')
+
+        address_db.disconnect()
+        return transactions_js
+
+    def delete_manual_transaction(self,txid):
+        self.db.query("DELETE FROM transactions WHERE id=" + txid)
+        self.db.query("DELETE FROM transaction_transfers WHERE transaction_id=" + txid)
         self.db.commit()

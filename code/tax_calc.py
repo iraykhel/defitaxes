@@ -26,12 +26,7 @@ def rate_pick(what, timestamp, running_rates, coingecko_rates):
     else:
         return running_rate
 
-def decustom(val):
-    custom = False
-    if val is not None and val[:7] == 'custom:':
-        val = val[7:]
-        custom = True
-    return val, custom
+
 
 
 class Vault:
@@ -516,8 +511,13 @@ class Calculator:
                 if transfer['outbound']:
                     outbound = True
                     totals[what]['amount'] -= amount
-                    if nft_id is not None:
-                        totals[what]['nft_ids'].remove(nft_id)
+                    if nft_id is not None and nft_id in totals[what]['nft_ids']:
+                        try:
+                            totals[what]['nft_ids'].remove(nft_id)
+                        except:
+                            log("erroring transfer",transfer)
+                            log(traceback.format_exc())
+                            exit(1)
 
                 else:
                     totals[what]['amount'] += amount

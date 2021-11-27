@@ -393,6 +393,67 @@ def recolor():
     data = json.dumps(js)
     return data
 
+@app.route('/save_manual_transaction',methods=['GET', 'POST'])
+def save_manual_transaction():
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    try:
+        form = request.form
+        address = request.args.get('address').lower()
+        chain_name = request.args.get('chain')
+        date = form['mt_date']
+        time = form['mt_time']
+        hash = form['mt_hash']
+        op = form['mt_op']
+        # cp = form['mt_cp']
+        cp = None
+
+        froms = form.getlist('mt_from')
+        tos = form.getlist('mt_to')
+        whats = form.getlist('mt_what')
+        amounts = form.getlist('mt_amount')
+        nft_ids = form.getlist('mt_nft_id')
+        transfers = list(zip(froms,tos,whats,amounts,nft_ids))
+
+        txid = None
+        if 'mt_txid' in form:
+            txid = form['mt_txid']
+
+
+        user = User(address)
+        transactions_js = user.save_manual_transaction(chain_name,address,date,time,hash,op,cp,transfers, txid=txid)
+
+        js = {'success': 1, 'transactions':transactions_js}
+    except:
+        log("EXCEPTION in save_type", traceback.format_exc())
+        js = {'error':'An error has occurred while saving manual transaction'}
+    data = json.dumps(js)
+    return data
+
+@app.route('/delete_manual_transaction',methods=['GET', 'POST'])
+def delete_manual_transaction():
+    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    try:
+        form = request.form
+        address = request.args.get('address').lower()
+        chain_name = request.args.get('chain')
+        txid = form['txid']
+
+
+        log('delete manual transaction', address, txid)
+
+        user = User(address)
+        user.delete_manual_transaction(txid)
+
+        js = {'success': 1}
+    except:
+        log("EXCEPTION in delete_manual_transaction", traceback.format_exc())
+        js = {'error':'An error has occurred while deleting a transaction'}
+    data = json.dumps(js)
+    return data
+
+
+
+
 
 @app.route('/progress_bar')
 def progress_bar():
@@ -470,6 +531,9 @@ def download():
     except:
         log("EXCEPTION in download", traceback.format_exc())
         return "EXCEPTION " + str(traceback.format_exc())
+
+
+
 
 def wrapper(func,*args):
     try:

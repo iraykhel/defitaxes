@@ -125,3 +125,10 @@ def progress_bar_update(filename, entry, percent):
     pb_file = open('data/' + filename + "_pb", "wb")
     pickle.dump({'phase':entry,'pb':percent}, pb_file)
     pb_file.close()
+
+def decustom(val):
+    custom = False
+    if val is not None and val[:7] == 'custom:':
+        val = val[7:]
+        custom = True
+    return val, custom

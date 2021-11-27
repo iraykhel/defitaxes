@@ -276,11 +276,11 @@ tr.transfers_header td.r_to_addr,tr.transfers_header td.r_from_addr {
 }
 
 
-td.r_arrow, span.r_arrow {
+td.r_arrow, span.r_arrow, span.mt_r_arrow {
     vertical-align:middle;
 }
 
-td.r_arrow div, span.r_arrow div {
+td.r_arrow div, span.r_arrow div, span.mt_r_arrow div {
     background-image: url(icons.png);
     background-position: -32px -49px;
     width: 16px;
@@ -339,6 +339,8 @@ div.select_similar label {
 
 div.sim_buttons {
     text-align:center;
+    max-width:600px;
+    margin:auto;
 }
 
 div.sim_buttons div {
@@ -452,6 +454,8 @@ a#types_create {
     color:blue;
     cursor:pointer;
     text-decoration:underline;
+    margin-bottom: 15px;
+    display:block;
 }
 
 div#tc {
@@ -482,6 +486,12 @@ div.rule_treatment {
     display:inline-block;
 }
 
+input#tc_name {
+    border: 1px solid #777777;
+    border-radius: 5px;
+    height: 24px;
+}
+
 .tc_expl {
     display:inline-block;
     width:150px;
@@ -497,6 +507,8 @@ div.rule_treatment {
     vertical-align: middle;
     height:42px;
     width:500px;
+    border: 1px solid #777777;
+    border-radius:5px;
 }
 
 
@@ -515,17 +527,17 @@ select.tc_rule_sel {
     margin-left: 5px;
 }
 
-.r_rem, .r_mov, .r_add {
+.r_rem, .r_mov, .r_add, .mt_r_rem {
     vertical-align:middle;
 }
 
-.r_rem div, .r_mov div, .r_add div, div.ct_icon  {
+.r_rem div, .r_mov div, .r_add div, div.ct_icon, .mt_r_rem div  {
     background-image: url(icons.png);
     width: 16px;
     height: 16px;
 }
 
-.r_rem div {
+.r_rem div, .mt_r_rem div {
     cursor:pointer;
     background-position: -96px -129px;
 }
@@ -580,8 +592,8 @@ div.hidden_custom > select.tc_rule_sel {
 
 
 .shifted {
-    position:relative;
-    top:300px;
+    /*position:relative;
+    top:300px;*/
 }
 
 .hidden {
@@ -706,15 +718,11 @@ div#popup {
     left: 50%;
     transform: translate(-50%, -50%);
     width:600px;
-    height:100px;
+    height:60px;
     border-radius: 20px;
     background-color:white;
     padding:30px;
     border: 3px solid #464646;
-}
-
-div#popup div.sim_buttons div {
-    width:100px;
 }
 
 div.custom_type, .custom {
@@ -902,4 +910,117 @@ div.opened_spacer {
     border-top: 1px solid #DFDFDF;
     height:15px;
     background-color:white;
+}
+
+
+
+
+
+
+
+
+a#mt_create {
+    color:blue;
+    cursor:pointer;
+    text-decoration:underline;
+    margin-bottom: 15px;
+    display:block;
+}
+
+div#mt {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: auto;
+  border: 3px solid #464646;
+  width: 50%;
+  min-width: 850px;
+  padding: 20px;
+  background-color: white;
+  border-radius: 20px;
+  text-align: left;
+}
+
+div.mt_row {
+    margin-bottom:10px;
+}
+
+div.mt_field {
+    display:inline-block;
+}
+
+div.mt_r_add div {
+    width:16px;
+    height:16px;
+    display:inline-block;
+    background-image: url(icons.png);
+    background-position: -32px -126px;
+}
+
+div.mt_r_add {
+    display:inline-block;
+    cursor: pointer;
+}
+
+div.mt_r_add:hover {
+    text-decoration:underline;
+}
+
+div.mt_field_header {
+    display:inline-block;
+    width:130px;
+    text-align:right;
+    margin-right:5px;
+}
+
+div.mt_transfer {
+    margin-bottom:10px;
+}
+
+div.mt_field input {
+    border:1px solid #777777;
+    border-radius: 5px;
+    height: 24px;
+}
+
+div.mt_transfer {
+    margin:5px;
+}
+
+input.mt_from, input.mt_to, input.mt_what, input.mt_amount, span.mt_r_arrow, span.mt_r_rem {
+    display:inline-block;
+}
+
+div.mt_transfer input {
+    border:1px solid #777777;
+    border-radius: 5px;
+    height: 24px;
+    margin:3px;
+}
+
+ul.ui-autocomplete, div.ui-timepicker {
+    text-align:left;
+    font-size: 12px;
+    border-radius:5px;
+}
+
+input.mt_nft_id {
+    width:60px;
+}
+
+.manual {
+    background-image: repeating-linear-gradient(45deg,
+      transparent 0 60px,
+      rgba(0, 0, 0, 0.02) 60px 120px)
+}
+
+form > .header {
+    text-align:center;
+    margin-bottom:10px;
+}
+
+#mt_transfers {
+    width:840px;
+    margin-top:5px;
 }

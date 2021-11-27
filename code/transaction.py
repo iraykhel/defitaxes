@@ -99,7 +99,7 @@ class Transaction:
     MAPPED_FIELDS = ['fr','to','amount','what','type','rate_found','free','symbol','amount_non_zero','input_non_zero']
     # ALL_FIELDS = {'index':0, 'type':1, 'from':2, 'to':3, 'amount':4, 'what':5, 'input_len':6, 'rate_found':7, 'rate':8,'free':9}
 
-    def __init__(self, chain,txid = None, custom_type_id=None, custom_color_id = None):
+    def __init__(self, chain,txid = None, custom_type_id=None, custom_color_id = None, manual=None):
         self.hash = None
         self.type = None
         self.grouping = []
@@ -117,6 +117,10 @@ class Transaction:
         self.txid=txid
         self.custom_type_id=custom_type_id
         self.custom_color_id = custom_color_id
+        if manual == 1:
+            self.manual = 1
+        else:
+            self.manual = 0
 
     def append(self,cl,row, transfer_idx=None, custom_treatment=None, custom_rate=None, custom_vaultid=None):
         self.grouping.append([cl,row, transfer_idx,custom_treatment,custom_rate,custom_vaultid])
@@ -175,8 +179,12 @@ class Transaction:
             # log("RATE LOOKUP",self.hash,token_contract,ts,rate_found,rate)
             # transfer = [index, type, fr, to, val, token_contract, input_len, rate_found, rate,base_fee == 0]
             # transfer = {'type':type, 'from':fr, 'to':to, 'amount':val, 'what':token_contract,'input_len':input_len, 'rate_found':rate_found, 'rate':rate}
+            decustomed_input, is_custom_op = decustom(input)
+            if not is_custom_op:
+                input = None
+
             transfer = Transfer(index, type, fr, to, val, token_contract, token, token_nft_id, input_len, rate_found, rate,base_fee, outbound = (fr.lower() == self.addr.lower()),
-                                custom_treatment=custom_treatment, custom_rate=custom_rate, custom_vaultid=custom_vaultid)
+                                custom_treatment=custom_treatment, custom_rate=custom_rate, custom_vaultid=custom_vaultid, input=input)
             self.transfers.append(transfer)
             for key in Transaction.MAPPED_FIELDS:#.keys():
                 # self.mappings[key][transfer[Transaction.MAPPED_FIELDS[key]]].append(index)
@@ -192,7 +200,7 @@ class Transaction:
 
 
 
-
+            cp_found = False
             for addr in [fr, to]:
                 if addr != self.addr and addr != '0x0000000000000000000000000000000000000000':
                     # prog_addr, prog_name, editable = self.chain.get_progenitor_name(addr)
@@ -206,6 +214,11 @@ class Transaction:
                             counter_parties[prog_addr] = (prog_name, sig, decoded_sig, editable, addr)
                         else:
                             potentates[prog_addr] = (prog_name,None,None, editable, addr)
+                        cp_found = True
+
+            if not cp_found and is_custom_op:
+                counter_parties[addr] = ('UNKNOWN', decustomed_input, decustomed_input, 0, addr)
+
             if len(counter_parties) == 0:
                 counter_parties = potentates
         self.counter_parties = counter_parties
@@ -638,6 +651,9 @@ class Transaction:
 
         if self.custom_color_id is not None:
             js['custom_color_id'] = self.custom_color_id
+
+        if self.manual:
+            js['manual'] = self.manual
 
         rows = []
         for t in self.transfers:

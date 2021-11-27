@@ -2,6 +2,8 @@ scroll_position = null;
 
 all_transactions = {}
 
+all_symbols = {}
+
 lookup_info = {
     counterparty_mapping: {
 
@@ -44,13 +46,14 @@ var prev_selection = null;
 function timeConverter(UNIX_timestamp){
   var a = new Date(UNIX_timestamp * 1000);
   var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var year = a.getFullYear();
-  var month = months[a.getMonth()];
-  var date = a.getDate();
-  var hour = a.getHours();
-  var min = ("0" +a.getMinutes()).substr(-2);
-  var sec = ("0" +a.getSeconds()).substr(-2);
+  var year = a.getUTCFullYear();
+  var month = months[a.getUTCMonth()];
+  var date = a.getUTCDate();
+  var hour = a.getUTCHours();
+  var min = ("0" +a.getUTCMinutes()).substr(-2);
+  var sec = ("0" +a.getUTCSeconds()).substr(-2);
   var time = hour + ':' + min+':'+sec + ', ' + month + ' ' + date+' '+year;
+//  return a.toUTCString();
   return time;
 }
 
@@ -67,23 +70,30 @@ function startend(hash) {
     return hash.substring(0,5)+"..."+hash.substring(hash.length-3);
 }
 
-function display_hash(hash, my_addr=null, name='address') {
-    if (hash == null) {
+function display_hash(zerox, my_addr=null, name='address') {
+    if (zerox == null) {
         return "<span class='hash'></span>";
     }
 
-    hash = hash.toLowerCase();
+    zerox = zerox.toLowerCase();
 
-
-    if (my_addr != null && my_addr.toUpperCase() == hash.toUpperCase()) {
-        var html = "<span class='hash'>My address</span>";
-//        var disp = "My address";
+    let html = "";
+    if (my_addr != null && my_addr.toUpperCase() == zerox.toUpperCase()) {
+        html = "<span class='hash'>My address</span>";
     } else {
-        var html = "<span class='hash copiable' title='Copy full "+name+" to clipboard' full='"+hash+"'>"+startend(hash)+"</span>";
-//        var disp = startend(hash);
+        html = "<span class='hash copiable' title='Copy full "+name+" to clipboard' full='"+zerox+"'>"+startend(zerox)+"</span>";
     }
-//    html += disp;
-//    html += "</span>";
+    return html;
+}
+
+function display_token(token_name, token_address, nft_id) {
+    let html = "";
+    if (token_name == token_address || token_address == null)
+        html = token_name;
+    else
+        html = "<span class='token copiable' title='Copy token address' full='"+token_address+"'>"+token_name+"</span>";
+    if (nft_id != null)
+        html += " ("+nft_id+")"
     return html;
 }
 
@@ -222,17 +232,20 @@ function start_progress_bar() {
 
 }
 
-function map_lookups(transaction) {
+function map_lookups(transaction, unmap_instead=false) {
+    func = add_to_mapping
+    if (unmap_instead)
+        func = remove_from_mapping
     txid = transaction['txid'];
     transaction_counterparties = transaction['counter_parties'];
     for (let progenitor in transaction_counterparties) {
-        add_to_mapping('counterparty',progenitor,txid);
+        func('counterparty',progenitor,txid);
         hex_sig = transaction_counterparties[progenitor][1]
-        add_to_mapping('signature',hex_sig,txid);
+        func('signature',hex_sig,txid);
         cp_name = transaction_counterparties[progenitor][0];
         if (cp_name == 'unknown')
             cp_name = progenitor
-        add_to_mapping('counterparty_name',cp_name,txid);
+        func('counterparty_name',cp_name,txid);
     }
     rows = transaction['rows'];
     outbound_count = 0;
@@ -242,23 +255,25 @@ function map_lookups(transaction) {
         if (row['to'] != null) { //network fee
             token_contract = row['what'];
             if (row['outbound']) {
-                add_to_mapping('outbound_token',token_contract,txid);
+                func('outbound_token',token_contract,txid);
                 outbound_count += 1;
                 other_address = row['to'];
             } else {
-                add_to_mapping('inbound_token',token_contract,txid);
+                func('inbound_token',token_contract,txid);
                 inbound_count += 1;
                 other_address = row['fr'];
             }
-            add_to_mapping('token',token_contract,txid);
+            func('token',token_contract,txid);
             if (other_address != '0x0000000000000000000000000000000000000000')
-                add_to_mapping('address',other_address,txid);
+                func('address',other_address,txid);
         }
     }
 
-    add_to_mapping('outbound_count',outbound_count,txid);
-    add_to_mapping('inbound_count',inbound_count,txid);
+    func('outbound_count',outbound_count,txid);
+    func('inbound_count',inbound_count,txid);
 }
+
+
 
 function add_to_mapping(mapping_type, value, txid) {
     if (value == null) return;
@@ -282,6 +297,7 @@ function add_to_mapping(mapping_type, value, txid) {
     transaction_list[txid][mapping_type].add(value);
 }
 
+
 function remove_from_mapping(mapping_type,value,txid) {
     if (value == null) return;
     mapping = lookup_info[mapping_type+"_mapping"];
@@ -291,6 +307,7 @@ function remove_from_mapping(mapping_type,value,txid) {
 
 
 function display_counterparty(transaction, editable=false) {
+    console.log('display_counterparty', transaction)
     html = "<div class='tx_row_2'>"
     transaction_counterparties = transaction['counter_parties'];
     cp_len = Object.keys(transaction_counterparties).length
@@ -394,8 +411,10 @@ function display_transfers(transaction, editable=false) {
         if (to == null)
             editable = false;
         amount = row['amount'];
-        token_name = row['symbol'];
-        token_contract = row['what'];
+        let token_name = row['symbol'];
+        let token_contract = row['what'];
+        let nft_id = row['token_nft_id'];
+
         treatment = row['treatment'];
         index = row['index'];
 
@@ -423,7 +442,7 @@ function display_transfers(transaction, editable=false) {
             disp_to = 'Network fee';
         }
 
-        row_html = "<tr index="+index+"><td class='r_from_addr'>"+display_hash(from,addr)+"</td><td class='r_arrow'><div></div></td><td class='r_to_addr'>"+disp_to+"</td><td class='r_amount'>"+round(amount)+"</td><td class='r_token'>"+token_name+"</td>";
+        row_html = "<tr index="+index+"><td class='r_from_addr'>"+display_hash(from,addr)+"</td><td class='r_arrow'><div></div></td><td class='r_to_addr'>"+disp_to+"</td><td class='r_amount'>"+round(amount)+"</td><td class='r_token'>"+display_token(token_name,token_contract,nft_id)+"</td>";
 
 
         row_html+="<td class='r_treatment"+cust_treatment_class+"'>"
@@ -537,11 +556,19 @@ function make_transaction_html(transaction,idx=null,len=null) {
     rows = transaction['rows'];
     for (let ridx in rows) {
         let row = rows[ridx];
+        let symbol = row['symbol'];
+        let what = row['what'];
+        if (!(symbol in all_symbols))
+            all_symbols[symbol] = new Set();
+        all_symbols[symbol].add(what);
+
+
         rate = row['rate'];
         if (rate == null) {
             to = row['to'];
             treatment = row['treatment'];
-            let symbol = row['symbol'];
+
+
             if (treatment != 'ignore' && treatment != null) {
                 if (transaction['type'] != 'transfer in') //airdrops don't have rates
                     transaction_color = 0;
@@ -583,6 +610,8 @@ function make_transaction_html(transaction,idx=null,len=null) {
         transaction_html += " custom_recolor custom_recolor_"+transaction['custom_color_id'];
     if (ct_id != null)
         transaction_html += " custom_type custom_type_"+ct_id;
+    if ('manual' in transaction && transaction['manual'])
+        transaction_html += " manual";
     transaction_html += "'>";
     ts = transaction['ts'];
     ttime = timeConverter(ts);
@@ -591,13 +620,14 @@ function make_transaction_html(transaction,idx=null,len=null) {
 
 //                                transaction_html += "<input type=checkbox class='t_sel'>";
     transaction_html += "<div class='top_section'><div class='tx_row_0'><span class='t_time copiable' title='Copy timestamp to clipboard' full='"+ts+"'>"+ttime+"</span>";
-    transaction_html += "<span class='tx_hash'>TX hash: "+display_hash(transaction['hash'], null, "hash");
-//                                transaction_html += "<input type=hidden name='tx_hash' class='tx_hash_inp' value="+transaction['hash']+">";
-    transaction_html += "<a class='open_scan' title='Open in scanner' href='https://"+scanner+"/tx/"+transaction['hash']+"' target=_blank></a></span>";
+    if (transaction['hash'] != null) {
+        transaction_html += "<span class='tx_hash'>TX hash: "+display_hash(transaction['hash'], null, "hash");
+        transaction_html += "<a class='open_scan' title='Open in scanner' href='https://"+scanner+"/tx/"+transaction['hash']+"' target=_blank></a></span>";
+    }
     if (idx == null)
         transaction_html += "<span class='t_idx'></span>";
     else
-        transaction_html += "<span class='t_idx'>"+(parseInt(idx)+1)+"/"+len+"</span>";
+        transaction_html += "<span class='t_idx'><span class='t_num'>#"+(parseInt(idx)+1)+"</span>/<span class='len'>"+len+"</span></span>";
     transaction_html += "</div>";
 
     ct_id = transaction['ct_id'];
@@ -753,6 +783,9 @@ function select_transaction(txel,keep_secondary=false) {
     t_id = txel.attr('id');
     console.log('selected',t_id);
     let txid = t_id.substr(2);
+    console.log("select_transaction",txid);
+    let transaction = all_transactions[txid]
+    console.log('trdisp1',transaction);
     deselect_primary();
     prev_selection = txid;
     console.log('prev_selection',prev_selection);
@@ -764,9 +797,9 @@ function select_transaction(txel,keep_secondary=false) {
 
     t2 = performance.now();
     el = txel.find('.select_similar');
-
-    txel.find('.tx_row_2').replaceWith(display_counterparty(all_transactions[txid],true));
-    txel.find('.transfers').replaceWith(display_transfers(all_transactions[txid],true));
+    console.log('trdisp2',transaction);
+    txel.find('.tx_row_2').replaceWith(display_counterparty(transaction,true));
+    txel.find('.transfers').replaceWith(display_transfers(transaction,true));
     if (el.length)
         show(el);
     else {
@@ -787,18 +820,23 @@ function select_transaction(txel,keep_secondary=false) {
                 html += "<label><input type=checkbox "+lookups[lookup][1]+" class='sim_"+lookup+"'>"+lookups[lookup][0]+"</label>";
         }
 
-        let tokens = {};
+        let local_tokens = {}
         for (let transfer of all_transactions[txid]['rows']) {
             if (transfer['to'] != null)
-                tokens[transfer['symbol']] = transfer['what'];
+                local_tokens[transfer['symbol']] = transfer['what'];
         }
 
-        for (let token_symbol in tokens)
-            html += "<label><input type=checkbox class='sim_token' token_address='"+tokens[token_symbol]+"'>token:"+token_symbol+"</label>";
+        for (let token_symbol in local_tokens)
+            html += "<label><input type=checkbox class='sim_token' token_address='"+local_tokens[token_symbol]+"'>token:"+token_symbol+"</label>";
 
         html += "<div class='sim_buttons'><div class='select_similar_button'></div>";
         html += "<div class='undo_changes'>Undo custom changes</div>"
-        html += "<div class='deselect_this_button'>Deselect this transaction</div></div>";
+        html += "<div class='deselect_this_button'>Deselect this transaction</div>"
+        if (txel.hasClass('manual')) {
+            html += "<div class='mt_edit'>Edit this transaction</div>"
+            html += "<div class='mt_delete_popup'>Delete this transaction</div>"
+        }
+        html += "</div>";
         html += "<input type=hidden class='current_sims' value=''>";
         html += "</div>";
         txel.append(html);
@@ -1101,8 +1139,8 @@ function selection_operations(builtin_types,custom_types) {
     html += "<div id='types_block'>";
     html += show_custom_types(custom_types);
     html += "<a id='types_create'>Create new custom type</a>";
-    html += "<div id='types_list'></div>";
     address = window.sessionStorage.getItem('address');
+    html +="<a id='mt_create'>Manually add a transaction</a>";
     html +="<a href='download?address="+address+"&type=transactions_json' id='download_transactions_json'>Download all transactions (json)</a>";
     html += "</div>";
 
