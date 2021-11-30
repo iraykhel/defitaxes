@@ -245,7 +245,7 @@ function create_edit_custom_type(id) {
 }
 
 function delete_custom_type_popup(id) {
-    html ="<div id='overlay'></div><div id='popup'><form id='tc_delete_form'><input type=hidden name=type_id value="+id+"> ";
+    html ="<div id='overlay'></div><div id='popup' class='popup'><form id='tc_delete_form'><input type=hidden name=type_id value="+id+"> ";
     name = custom_types_js[id]['name'];
     html += "Really delete "+name+"? This will also unapply this type from all transactions it was previously applied to.";
     html += "<div class='sim_buttons'>";

@@ -712,11 +712,14 @@ div#overlay {
     background-color:rgba(0,0,0,0.3);
 }
 
-div#popup {
+.popup {
     position:fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+}
+
+div#popup {
     width:600px;
     height:60px;
     border-radius: 20px;
@@ -1023,4 +1026,142 @@ form > .header {
 #mt_transfers {
     width:840px;
     margin-top:5px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+div#assist_block {
+    position:fixed;
+    bottom:0;
+    left:0;
+    padding:20px;
+    width:200px;
+    text-align:left;
+    color:#555555;
+}
+
+div#help_main {
+    text-decoration:underline;
+    cursor:pointer;
+    margin:auto;
+    margin-bottom:10px;
+    color:#555555;
+    display:inline-block;
+}
+
+div#assist_block a {
+    color:#555555;
+}
+
+div#attribution {
+    margin-top:10px;
+}
+
+
+
+div#help_popup {
+    border-radius: 20px;
+    background-color:white;
+    padding:30px;
+    border: 3px solid #464646;
+}
+
+div.help_header {
+    margin-bottom:10px;
+}
+
+div.help_text {
+    text-align:left;
+}
+
+div.help_content {
+    width:600px;
+}
+
+
+div#help_main_popup {
+    border-radius: 20px;
+    background-color:#FAFAFA;
+    /*padding:30px;*/
+    border: 3px solid #464646;
+    width:90%;
+    height:90%;
+    min-width:700px;
+}
+
+div.help_main_content {
+    /*width: 1000px;*/
+}
+
+div.help_topics {
+    float:left;
+    width:20%;
+    height:100%;
+    border-right:1px solid #CCCCCC;
+    box-sizing:border-box;
+    padding:20px;
+
+    background-color:white;
+    border-radius:20px 0px 0px 20px;
+}
+
+ul.help_topics_list {
+    padding:0px;
+    margin:0px;
+    list-style-type:none;
+}
+
+ul.help_topics_list li {
+    margin-bottom:15px;
+    cursor:pointer;
+    text-align:left;
+    color:#CCCCCC;
+}
+ul.help_topics_list li:hover {
+    text-decoration:underline;
+    color:black;
+}
+
+ul.help_topics_list li.help_topic_selected {
+    color:black;
+}
+
+div.help_topic_content {
+    float:right;
+    width:80%;
+    box-sizing:border-box;
+    padding:20px;
+    height:100%;
+    overflow:auto;
+}
+
+div#close_help_main {
+    width:16px;
+    height:16px;
+    display:inline-block;
+    background-image: url(icons.png);
+    background-position: -96px -129px;
+    position:absolute;
+    top:10px;
+    right:10px;
+    cursor:pointer;
+}
+
+div.help_text h4 {
+    margin-bottom:-5px;
+    margin-top:30px;
 }

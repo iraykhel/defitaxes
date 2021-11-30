@@ -50,6 +50,8 @@ class Transfer:
     ALL_FIELDS = ['type', 'fr', 'to', 'amount', 'what', 'symbol', 'input_len', 'rate_found', 'rate', 'free','treatment', 'input','amount_non_zero','input_non_zero','outbound','index','token_nft_id','vault_id']
     def __init__(self, index, type, fr, to, val, token_contract,token_name, token_nft_id, input_len, rate_found, rate,base_fee, input=None, treatment = None, outbound=False,
                  synthetic=False,vault_id=None, custom_treatment=None, custom_rate=None, custom_vaultid=None):
+        if val is None or val == '':
+            val = 0
         self.type = type
         self.fr = fr
         self.to = to

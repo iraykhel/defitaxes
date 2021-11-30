@@ -155,7 +155,7 @@ $('body').on('click','#mt_delete_cancel',function() {
 });
 
 function delete_manual_transaction_popup(id) {
-    html ="<div id='overlay'></div><div id='popup'><form id='mt_delete_form'><input type=hidden name=txid id=txid_to_delete value="+id+"> ";
+    html ="<div id='overlay'></div><div id='popup' class='popup'><form id='mt_delete_form'><input type=hidden name=txid id=txid_to_delete value="+id+"> ";
     html += "Really delete this transaction?";
     html += "<div class='sim_buttons'>";
     html += "<div id='mt_delete'>Delete transaction</div>";

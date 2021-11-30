@@ -676,10 +676,10 @@ $(function() {
                 chain = $('#chain').find(':selected').val();
                 document.cookie = "address="+addr+"|"+chain+";path=/;expires=Fri, 31 Dec 9999 23:59:59 GMT";
                 addr = addr.toUpperCase();
-                scanner = 'etherscan.io'; base_token = 'ETH';
-                if (chain == 'Polygon') { scanner = 'polygonscan.com'; base_token = 'MATIC'; }
-                if (chain == 'BSC') { scanner = 'bscscan.com'; base_token = 'BNB'; }
-                if (chain == 'HECO') { scanner = 'hecoinfo.com'; base_token = 'HT'; }
+                scanner = 'etherscan.io'; base_token = 'ETH'; scanner_name = 'Etherscan';
+                if (chain == 'Polygon') { scanner = 'polygonscan.com'; base_token = 'MATIC'; scanner_name = 'Polygonscan';}
+                if (chain == 'BSC') { scanner = 'bscscan.com'; base_token = 'BNB'; scanner_name = 'BSCscan';}
+                if (chain == 'HECO') { scanner = 'hecoinfo.com'; base_token = 'HT'; scanner_name = 'HECOinfo.com';}
                 if (addr[0] !=0 || addr[1] != 'X' || addr.length != 42) {
                     $('#content').html('Not a valid address');
                     return
@@ -739,6 +739,7 @@ $(function() {
 
                             console.log('custom types?',data['custom_types']);
                             selection_operations(data['builtin_types'],data['custom_types']);
+                            assist_block();
                         }
 
                         $(document.body).css({'cursor' : 'default'});
@@ -1342,3 +1343,12 @@ $('body').on('change','select.treatment',function() {
     else
         vault_id_el.addClass('hidden')
 });
+
+function assist_block() {
+    let html = "<div id='assist_block'>"
+    html += "<div class='assist_line'><div id='help_main'>HELP!</div></div>"
+    html += "<div class='assist_line'><div id='social'><a id='discord_link' href='https://discord.gg/E7yuUZ3W4X' target='_blank'>Discord</a></div></div>"
+    html += "<div class='assist_line'><div id='attribution'>Powered by "+scanner_name+"</div></div>"
+    html += "</div>";
+    $('#content').append(html);
+}
