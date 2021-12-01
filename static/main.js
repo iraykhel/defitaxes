@@ -36,6 +36,23 @@ lookup_info = {
     }
 }
 
+chain_config = {
+    ETH:{scanner:'etherscan.io', base_token:'ETH', scanner_name:'Etherscan'},
+    Polygon:{scanner:'polygonscan.com', base_token:'MATIC', scanner_name:'PolygonScan'},
+    BSC:{scanner:'bscscan.com', base_token:'BNB', scanner_name:'BscScan'},
+    HECO:{scanner:'hecoinfo.com', base_token:'HT', scanner_name:'HecoInfo'},
+    Arbitrum:{scanner:'arbiscan.io', base_token:'ETH', scanner_name:'ArbiScan'},
+    Avalanche:{scanner:'snowtrace.io', base_token:'AVAX', scanner_name:'SnowTrace'},
+    Fantom:{scanner:'ftmscan.com', base_token:'FTM', scanner_name:'FtmScan'},
+    Moonriver:{scanner:'moonscan.io', base_token:'MOVR', scanner_name:'MoonScan'},
+
+}
+
+//scanner = 'etherscan.io'; base_token = 'ETH'; scanner_name = 'Etherscan';
+//                if (chain == 'Polygon') { scanner = 'polygonscan.com'; base_token = 'MATIC'; scanner_name = 'Polygonscan';}
+//                if (chain == 'BSC') { scanner = 'bscscan.com'; base_token = 'BNB'; scanner_name = 'BSCscan';}
+//                if (chain == 'HECO') { scanner = 'hecoinfo.com'; base_token = 'HT'; scanner_name = 'HECOinfo.com';}
+
 options_in = {'ignore':'Ignore','buy':'Buy','gift':'Acquire for free','income':'Income','borrow':'Borrow','withdraw':'Withdraw from vault','exit':'Exit vault'};
 options_out = {'ignore':'Ignore','sell':'Sell','burn':'Dispose for free','fee':'Transaction cost','loss':'Non-deductible loss','repay':'Repay loan','full_repay':'Fully repay loan','deposit':'Deposit to vault'};
 
@@ -670,17 +687,15 @@ $(function() {
 //            $('a#submit_address').click(function() {
         $('#main_form').submit( function(e) {
                 e.preventDefault();
-//                counterparty_list = []
-//                progenitor_counts = {}
                 addr = $('#your_address').val();
                 chain = $('#chain').find(':selected').val();
                 document.cookie = "address="+addr+"|"+chain+";path=/;expires=Fri, 31 Dec 9999 23:59:59 GMT";
-                addr = addr.toUpperCase();
-                scanner = 'etherscan.io'; base_token = 'ETH'; scanner_name = 'Etherscan';
-                if (chain == 'Polygon') { scanner = 'polygonscan.com'; base_token = 'MATIC'; scanner_name = 'Polygonscan';}
-                if (chain == 'BSC') { scanner = 'bscscan.com'; base_token = 'BNB'; scanner_name = 'BSCscan';}
-                if (chain == 'HECO') { scanner = 'hecoinfo.com'; base_token = 'HT'; scanner_name = 'HECOinfo.com';}
-                if (addr[0] !=0 || addr[1] != 'X' || addr.length != 42) {
+                addr = addr.toLowerCase();
+                chain_info = chain_config[chain];
+                scanner = chain_info['scanner'];
+                base_token = chain_info['base_token'];
+                scanner_name = chain_info['scanner_name'];
+                if (addr[0] !=0 || addr[1] != 'x' || addr.length != 42) {
                     $('#content').html('Not a valid address');
                     return
                 } else {
@@ -693,6 +708,8 @@ $(function() {
                         if ($('#import_new_transactions').is(':checked')) import_new=1;
                         else import_new = 0;
                     }
+
+                    make_help_strings();
 
                     $.get("process?address="+addr+"&chain="+chain+"&import_new="+import_new, function( js ) {
                         $('#address_form').css({'margin-top':'0px'});
@@ -707,6 +724,7 @@ $(function() {
                         }
                         if (data.hasOwnProperty('error')) {
                             $('#content').html(data['error']);
+                            $(document.body).css({'cursor' : 'default'});
                             return;
                         }
                         all_transactions = {}

@@ -104,6 +104,11 @@ def process():
 
         transactions = user.load_transactions(chain)
 
+        if len(transactions) == 0:
+            data = {'error':'You don\'t have any transactions on '+chain_name}
+            data = json.dumps(data)
+            return data
+
         progress_bar_update(address, 'Looking up counterparties', 20)
         contract_list, counterparty_list, input_list = chain.get_contracts(transactions)
         # log("counterparty_list",counterparty_list)

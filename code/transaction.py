@@ -432,7 +432,8 @@ class Transaction:
                     out_cnt += 1
                     amounts[transfer.what] -= val
                     symbols[transfer.what] = {'symbol': transfer.symbol, 'rate': transfer.rate, 'good_rate': transfer.rate_found}
-        log('infer_and_adjust_rates symbols',symbols)
+        if self.hash == self.chain.hif:
+            log('infer_and_adjust_rates symbols',symbols)
         combo = (out_cnt, in_cnt)
 
         do_print = False
@@ -662,6 +663,9 @@ class Transaction:
             if t.amount != 0:
                 row = t.to_dict()
                 rows.append(row)
+
+        if self.hash == self.chain.hif:
+            print("json transaction",rows)
 
         js['rows'] = rows
         return js

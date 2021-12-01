@@ -19,7 +19,10 @@ class Chain:
     def __init__(self,address_db,name,domain,main_asset, api_key, addr='0xd603a49886c9B500f96C0d798aed10068D73bF7C',outbound_bridges=(),inbound_bridges=(),wrapper=None):
         addr = addr.lower()
         self.domain = domain
-        self.explorer_url = 'https://api.'+domain+'/api'
+        if name == 'Moonriver':
+            self.explorer_url = 'https://api-moonriver.moonscan.io/api'
+        else:
+            self.explorer_url = 'https://api.'+domain+'/api'
         self.main_asset = main_asset
         self.addr = addr
         self.api_key = api_key
@@ -36,7 +39,7 @@ class Chain:
         if wrapper is not None:
             self.wrapper = wrapper.lower()
 
-        self.hif = '0x77d26008e40c0830e92030ce91cdb2d52dc8cefb4bb18aa45f2fbcf1d24fc1b2'
+        self.hif = '0x56dce5031502acacc62ddf5ef2d27c3ac79318b8dcafe2223c50201840996929'
 
         # address_db.create_table(name + '_ancestry', 'address PRIMARY KEY, progenitor', drop=False)
         # address_db.create_table(name + '_names', 'address PRIMARY KEY, name', drop=False)
@@ -110,6 +113,18 @@ class Chain:
 
         if chain_name == 'HECO':
             chain = Chain(address_db,'HECO', 'hecoinfo.com', 'HT', 'T4UDKXYGYSFA3ACAX3XCD546IMH622HNV5', addr=address, wrapper='0x5545153ccfca01fbd7dd11c0b23ba694d9509a6f')
+
+        if chain_name == 'Arbitrum':
+            chain = Chain(address_db,'Arbitrum', 'arbiscan.io', 'ETH', '19RVD81VR63SER25U17JG998GKU2NF35NQ', addr=address)
+
+        if chain_name == 'Avalanche':
+            chain = Chain(address_db, 'Avalanche', 'snowtrace.io', 'AVAX', 'NQ63S9M3VZ8JVUY6DS5X3AM2Q8ZAZ2XVJS', addr=address)
+
+        if chain_name == 'Fantom':
+            chain = Chain(address_db,'Fantom', 'ftmscan.com', 'FTM', 'AATCCIEAS1AV6WPETCBIATS4H972TNADK4', addr=address)
+
+        if chain_name == 'Moonriver':
+            chain = Chain(address_db,'Moonriver', 'moonscan.io', 'MOVR', 'P6F13BP25JBD8B8K17UMHIB75R9EA2BYPD', addr=address)
 
         return chain
 
