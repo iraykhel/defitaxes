@@ -229,7 +229,7 @@ class User:
         #     tx_ct_mapping[row[1]] = row[0]
 
         ct_info = {}
-        rows = self.db.select("SELECT id, name, description, balanced FROM custom_types where chain='"+chain_name+"'")
+        rows = self.db.select("SELECT id, name, description, balanced FROM custom_types where chain='"+chain_name+"' or chain='ALL'")
         for row in rows:
             rules = self.db.select("SELECT * FROM custom_types_rules WHERE type_id = "+str(row[0])+" ORDER BY id ASC")
             ct_info[row[0]] = {'name': row[1], 'description':row[2],'balanced':row[3],'rules':rules}

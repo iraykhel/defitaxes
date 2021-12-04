@@ -690,6 +690,7 @@ class Chain:
             transaction.finalize(user,coingecko_rates,signatures)
             # txid = transaction.txid
             if transaction.custom_type_id is not None:
+                # log('transaction.custom_type_id',transaction.custom_type_id,user.ctype_info)
                 info = user.ctype_info[transaction.custom_type_id]
                 user.apply_custom_type_one_transaction(self, transaction, info['name'], info['balanced'], info['rules'])
             else:

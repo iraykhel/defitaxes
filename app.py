@@ -235,18 +235,27 @@ def save_type():
         if 'tc_balanced' in form:
             balanced = int(form['tc_balanced'] == 'on')
 
-        froms = form.getlist('from_addr')
-        from_custom_addrs = form.getlist('from_addr_custom')
+        # froms = form.getlist('from_addr')
+        # from_custom_addrs = form.getlist('from_addr_custom')
+        #
+        # tos = form.getlist('to_addr')
+        # tos_custom_addrs = form.getlist('to_addr_custom')
+        #
+        # toks = form.getlist('rule_tok')
+        # custom_toks = form.getlist('rule_tok_custom')
+        # treatments = form.getlist('rule_treatment')
+        # vault_ids = form.getlist('vault_id')
+        # vault_ids_custom = form.getlist('vault_id_custom')
+        # rules = list(zip(froms,from_custom_addrs,tos,tos_custom_addrs,toks,custom_toks,treatments,vault_ids,vault_ids_custom))
+        rules = []
+        idx = 0
+        while 'from_addr'+str(idx) in form:
+            sidx = str(idx)
+            rule = [form['from_addr'+sidx],form['from_addr_custom'+sidx],form['to_addr'+sidx],form['to_addr_custom'+sidx],
+                    form['rule_tok'+sidx],form['rule_tok_custom'+sidx],form['rule_treatment' + sidx],form['vault_id'+sidx],form['vault_id_custom'+sidx]]
+            rules.append(rule)
+            idx += 1
 
-        tos = form.getlist('to_addr')
-        tos_custom_addrs = form.getlist('to_addr_custom')
-
-        toks = form.getlist('rule_tok')
-        custom_toks = form.getlist('rule_tok_custom')
-        treatments = form.getlist('rule_treatment')
-        vault_ids = form.getlist('vault_id')
-        vault_ids_custom = form.getlist('vault_id_custom')
-        rules = list(zip(froms,from_custom_addrs,tos,tos_custom_addrs,toks,custom_toks,treatments,vault_ids,vault_ids_custom))
         type_id = None
         if 'type_id' in form:
             type_id = form['type_id']
@@ -439,7 +448,7 @@ def save_manual_transaction():
 
         js = {'success': 1, 'transactions':transactions_js}
     except:
-        log("EXCEPTION in save_type", traceback.format_exc())
+        log("EXCEPTION in save_manual_transaction", traceback.format_exc())
         js = {'error':'An error has occurred while saving manual transaction'}
     data = json.dumps(js)
     return data
