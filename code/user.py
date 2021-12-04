@@ -9,6 +9,7 @@ from .chain import Chain
 from datetime import datetime
 import re
 import os
+import json, csv
 
 class User:
 
@@ -56,6 +57,10 @@ class User:
         self.db.create_table('transaction_transfers', 'id integer primary key autoincrement, type integer, idx INTEGER, transaction_id INTEGER, from_addr_id INTEGER, to_addr_id INTEGER, val REAL, token_id INTEGER, token_nft_id INTEGER, base_fee REAL, input_len INTEGER, input, '
                                                       'custom_treatment, custom_rate REAL, custom_vaultid', drop=drop)
         self.db.create_index('transaction_transfers_idx', 'transaction_transfers', 'idx, transaction_id', unique=True)
+
+        # self.db.create_table('transactions_json_cache', 'id integer primary key, chain, timestamp INTEGER, json TEXT',drop=drop)
+
+
 
         # self.db.create_table('rates', 'transaction_id INTEGER, transfer_idx INTEGER, rate REAL, source INTEGER, level INTEGER', drop=drop)
         # self.db.create_index('rates_idx', 'rates', 'transaction_id, transfer_idx', unique=True)
@@ -173,17 +178,19 @@ class User:
 
 
 
-    def save_custom_type(self,chain_name,address,name,description,balanced,rules, id=None):
-        log('save_custom_type',chain_name,name,description,balanced,rules)
+    def save_custom_type(self,chain_name,address,name,chain_specific,description,balanced,rules, id=None):
+        log('save_custom_type',chain_name,name,chain_specific,description,balanced,rules)
+        if not chain_specific:
+            chain_name = 'ALL'
         if id is not None:
-            # self.db.query("DELETE FROM custom_types WHERE id="+id)
-            self.db.query("UPDATE custom_types SET name = '"+name+"', description = '"+description+"', balanced = "+str(balanced)+" WHERE id="+str(id))
+            self.db.query("UPDATE custom_types SET name = '"+name+"', chain = '"+chain_name+"', description = '"+description+"', balanced = "+str(balanced)+" WHERE id="+str(id))
             self.db.query("DELETE FROM custom_types_rules WHERE type_id=" + id)
         else:
+
             self.db.insert_kw('custom_types', chain=chain_name, name=name, description=description, balanced=balanced)
 
 
-        rows = self.db.select("SELECT id FROM custom_types WHERE name='"+name+"' and chain='"+chain_name+"'")
+        rows = self.db.select("SELECT id FROM custom_types WHERE name='"+name+"' and (chain='"+chain_name+"' or chain='ALL')")
         type_id = rows[0][0]
         for rule in rules:
             from_addr, from_addr_custom, to_addr, to_addr_custom, token, token_custom, treatment, vault_id, vault_id_custom = rule
@@ -198,17 +205,17 @@ class User:
         self.db.commit()
 
     def load_custom_types(self,chain_name):
-        rows = self.db.select("SELECT t.id, t.name, t.description, t.balanced, r.* FROM custom_types as t, custom_types_rules as r WHERE t.chain='"+chain_name+"' and t.name != '' and t.id = r.type_id ORDER BY t.name ASC, r.id ASC")
+        rows = self.db.select("SELECT t.id, t.name, t.chain, t.description, t.balanced, r.* FROM custom_types as t, custom_types_rules as r WHERE (t.chain='"+chain_name+"' or t.chain='ALL') and t.name != '' and t.id = r.type_id ORDER BY t.name COLLATE NOCASE ASC, r.id ASC")
         if len(rows) == 0:
             return []
 
         js = []
-        cur_type = {'id':rows[0][0], 'name':rows[0][1], 'rules':[], 'description':rows[0][2],'balanced':rows[0][3]}
+        cur_type = {'id':rows[0][0], 'name':rows[0][1], 'chain_specific':rows[0][2]!='ALL', 'rules':[], 'description':rows[0][3],'balanced':rows[0][4]}
         for row in rows:
-            type_id, type_name, type_desc, type_balanced, rule_id, _, from_addr, from_addr_custom, to_addr, to_addr_custom, token, token_custom, treatment, vault_id, vault_id_custom = row
+            type_id, type_name, chain, type_desc, type_balanced, rule_id, _, from_addr, from_addr_custom, to_addr, to_addr_custom, token, token_custom, treatment, vault_id, vault_id_custom = row
             if cur_type['id'] != type_id:
                 js.append(cur_type)
-                cur_type = {'id':type_id,'name':type_name,'description':type_desc,'balanced':type_balanced,'rules':[]}
+                cur_type = {'id':type_id,'name':type_name,'chain_specific':chain != 'ALL','description':type_desc,'balanced':type_balanced,'rules':[]}
             cur_type['rules'].append([rule_id,from_addr,from_addr_custom,to_addr,to_addr_custom,token,token_custom,treatment,vault_id,vault_id_custom])
         js.append(cur_type)
         log(js)
@@ -290,18 +297,14 @@ class User:
         return res
 
     def unapply_custom_type(self, chain_name, address, type_id, transaction_list=None):
-        if transaction_list is not None:
-            for txid in transaction_list:
-                log('unapply type', type_id, txid)
-                self.db.update_kw('transactions', 'id=' + str(txid), custom_type_id=None)
-                # self.db.query("DELETE FROM custom_types_applied WHERE type_id="+str(type_id)+" AND transaction_id="+str(txid))
-        else:
-            self.db.update_kw('transactions', 'custom_type_id=' + str(type_id), custom_type_id=None)
-            # transaction_list = []
-            # rows = self.db.select("SELECT transaction_id FROM custom_types_applied WHERE type_id="+str(type_id)+" ORDER BY transaction_id ASC")
-            # for row in rows:
-            #     transaction_list.append(str(row[0]))
-            # self.db.query("DELETE FROM custom_types_applied WHERE type_id=" + str(type_id))
+        if transaction_list is None:
+            transaction_list = []
+            rows = self.db.select("SELECT id FROM transactions WHERE custom_type_id="+type_id)
+            for row in rows:
+                transaction_list.append(str(row[0]))
+
+        self.db.update_kw('transactions', 'id IN (' + ','.join(transaction_list)+')', custom_type_id=None)
+
         self.db.commit()
 
 
@@ -581,3 +584,62 @@ class User:
         self.db.query("DELETE FROM transactions WHERE id=" + txid)
         self.db.query("DELETE FROM transaction_transfers WHERE transaction_id=" + txid)
         self.db.commit()
+
+
+
+    def json_to_csv(self,chain_name):
+        custom_types_js = self.load_custom_types(chain_name)
+        custom_types = {}
+        for entry in custom_types_js:
+            custom_types[entry['id']] = entry
+
+        path = 'data/users/'+self.address+'/transactions_'+chain_name+'.json'
+        f = open(path,'r')
+        js = json.load(f)
+        f.close()
+        color_map = {0:'red',3:'orange',5:'yellow',10:'green'}
+        type_map = {1:'base token transfer',2:'internal transfer',3:'ERC20 transfer',4:'ERC721 (NFT) transfer'}
+        csv_rows = []
+        for T in js:
+            if 'custom_color_id' in T:
+                color = color_map[T['custom_color_id']]
+            else:
+                color = color_map[T['classification_certainty']]
+
+            if 'ct_id' in T and T['ct_id']:
+                type = custom_types[T['ct_id']]['name']
+            else:
+                type = T['type']
+
+            common = [T['ts'],datetime.utcfromtimestamp(T['ts']),T['hash'],color,type]
+            if len(T['counter_parties']) ==0:
+                cp = ['','','','']
+            else:
+                counter_parties = T['counter_parties']
+                cp_adr = list(counter_parties.keys())[0]
+                cp_val = counter_parties[cp_adr]
+                cp = [cp_val[4], cp_val[0], cp_val[1], cp_val[2]]
+
+
+            for t in T['rows']:
+                rate,_ = decustom(t['rate'])
+                treatment,_ = decustom(t['treatment'])
+                vault_id = ''
+                if treatment in ['deposit','withdraw','exit','borrow','repay','full_repay']:
+                    vault_id = t['vault_id']
+                transfer = [t['fr'],t['to'],t['amount'],t['what'],t['symbol'],t['token_nft_id'],type_map[t['type']],treatment,vault_id,rate]
+
+                csv_row = common + cp + transfer
+                csv_rows.append(csv_row)
+
+        fields = ['timestamp','UTC datetime','transaction hash','color','classification',
+                  'counterparty address','counterparty name',
+                  'function hex signature','operation (decoded hex signature)',
+                  'source address','destination address','amount transfered','token contract address','token symbol','NFT ID','transfer type','tax treatment','vault id','USD rate']
+
+        path = 'data/users/' + self.address + '/transactions_' + chain_name + '.csv'
+        f = open(path, 'w')
+        csvwriter = csv.writer(f)
+        csvwriter.writerow(fields)
+        csvwriter.writerows(csv_rows)
+        f.close()

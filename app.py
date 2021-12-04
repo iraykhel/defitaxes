@@ -158,8 +158,8 @@ def process():
         calculator.matchup()
         calculator.cache()
 
-        js_file = open('data/users/' + address + '/transactions.json', 'w', newline='')
-        js_file.write(json.dumps(transactions_js))
+        js_file = open('data/users/' + address + '/transactions_'+chain_name+'.json', 'w', newline='')
+        js_file.write(json.dumps(transactions_js,indent=2, sort_keys=True))
         js_file.close()
 
 
@@ -193,8 +193,8 @@ def calc_tax():
         data = request.get_json()
         # log('data',data)
         transactions_js = json.loads(data)
-        js_file = open('data/users/' + address + '/transactions.json', 'w', newline='')
-        js_file.write(json.dumps(transactions_js))
+        js_file = open('data/users/' + address + '/transactions_' + chain_name + '.json', 'w', newline='')
+        js_file.write(json.dumps(transactions_js,indent=2, sort_keys=True))
         js_file.close()
 
         log('tran0',transactions_js[0])
@@ -227,6 +227,9 @@ def save_type():
         address = request.args.get('address').lower()
         chain_name = request.args.get('chain')
         name = form['tc_name']
+        chain_specific = False
+        if 'tc_chain' in form:
+            chain_specific = True
         description = form['tc_desc']
         balanced = 0
         if 'tc_balanced' in form:
@@ -248,11 +251,11 @@ def save_type():
         if 'type_id' in form:
             type_id = form['type_id']
 
-        log('create_type', address, name, type_id, rules)
+        log('create_type', address, name, chain_specific, type_id, rules)
 
         # T = Typing()
         user = User(address)
-        user.save_custom_type(chain_name,address,name,description, balanced, rules,id=type_id)
+        user.save_custom_type(chain_name,address,name,chain_specific,description, balanced, rules,id=type_id)
 
         custom_types = user.load_custom_types(chain_name)
         js = {'custom_types': custom_types}
@@ -412,12 +415,19 @@ def save_manual_transaction():
         # cp = form['mt_cp']
         cp = None
 
-        froms = form.getlist('mt_from')
-        tos = form.getlist('mt_to')
-        whats = form.getlist('mt_what')
-        amounts = form.getlist('mt_amount')
-        nft_ids = form.getlist('mt_nft_id')
-        transfers = list(zip(froms,tos,whats,amounts,nft_ids))
+        max_tr_disp_idx = int(form['tr_disp_idx'])
+        transfers = []
+        for tr_disp_idx in range(max_tr_disp_idx):
+            s_tr_idx = str(tr_disp_idx)
+            if 'mt_from'+s_tr_idx in form:
+                transfers.append([form['mt_from'+s_tr_idx],form['mt_to'+s_tr_idx],form['mt_what'+s_tr_idx],form['mt_amount'+s_tr_idx],form['mt_nft_id'+s_tr_idx]])
+
+        # froms = form.getlist('mt_from')
+        # tos = form.getlist('mt_to')
+        # whats = form.getlist('mt_what')
+        # amounts = form.getlist('mt_amount')
+        # nft_ids = form.getlist('mt_nft_id')
+        # transfers = list(zip(froms,tos,whats,amounts,nft_ids))
 
         txid = None
         if 'mt_txid' in form:
@@ -510,17 +520,45 @@ def download():
     try:
         address = request.args.get('address').lower()
         type = request.args.get('type')
-        # if type == 'transactions_csv':
-        #     path = 'data/'+address+'_transactions.csv'
-        #     return send_file(path, as_attachment=True, cache_timeout=0)
+        chain_name = request.args.get('chain')
+
 
         if type == 'transactions_json':
-            path = 'data/users/'+address+'/transactions.json'
+
+            # try:
+            #     S = Signatures()
+            #     address_db = SQLite('addresses')
+            #     chain = Chain.from_name(chain_name, address_db, address)
+            #
+            #     user = User(address)
+            #     transactions = user.load_transactions(chain)
+            #
+            #     if len(transactions) == 0:
+            #         data = {'error': 'You don\'t have any transactions on ' + chain_name}
+            #         transactions_js = json.dumps(data)
+            #     else:
+            #         contract_list, counterparty_list, input_list = chain.get_contracts(transactions)
+            #         address_db.disconnect()
+            #         S.init_from_db(input_list)
+            #         C = Coingecko.init_from_cache(chain)
+            #         transactions_js = chain.transactions_to_log(user, C, S, transactions, mode='js')
+            # except:
+            #     transactions_js = {'error': 'An error has occurred while preparing the download file'}
+
+            # js_file = open('data/users/' + address + '/transactions_'+chain_name+'.json', 'w', newline='')
+            # js_file.write(json.dumps(transactions_js))
+            # js_file.close()
+
+            path = 'data/users/'+address+'/transactions_'+chain_name+'.json'
+            return send_file(path, as_attachment=True, cache_timeout=0)
+
+        if type == 'transactions_csv':
+            user = User(address)
+            user.json_to_csv(chain_name)
+            path = 'data/users/' + address + '/transactions_' + chain_name + '.csv'
             return send_file(path, as_attachment=True, cache_timeout=0)
 
         if type == 'tax_forms':
-            address = request.args.get('address').lower()
-            chain_name = request.args.get('chain')
             year = request.args.get('year')
             address_db = SQLite('addresses')
             chain = Chain.from_name(chain_name, address_db, address)

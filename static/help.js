@@ -35,6 +35,11 @@ function make_help_strings() {
             'transaction acquiring these tokens at the correct date and price.</p>'+
             '<p>Another usage would be to add transfers and transactions that etherscan missed. Right now we do not support ERC-1155 transfers; if you have any you might want to add them.</p>'
         },
+        'cpop':{'header':'Counterparty and operation','explanation':
+            '<p>We try to infer the counterparty you transacted with and what function you called from third-party sources. Counterparty is coming from '+scanner_name+', and may '+
+            'sometimes be very wrong. You can rename it; it will fix it in every transaction with the same counterparty. Operation is coming from www.4byte.directory and is '+
+            'typically correct, this is the function you are calling when interacting with the smart contract.</p>'
+        },
 
         'start':{'header':'How do I use this thing?','explanation':
             '<p>We built this service to allow DeFi users to turn their blockchain transactions into tax forms, with the intention that these forms are then taken to a CPA '+
@@ -44,7 +49,8 @@ function make_help_strings() {
             'want your filing to be remotely close to correct. We aim to provide you with tools to do it in a reasonable amount of time (measured in hours), even if you have '+
             'a very large number of transactions.</p>'+
             '<p>The main, ahem, game loop is as follows:</p><p>Scroll down your transactions, looking for any that isn\'t green. Found one? Check if we processed it correctly. Don\'t know '+
-            'if we did? Read "Kinds of transactions you might have" and find this kind of transaction. If we processed it correctly, recolor it green. If not, adjust tax treatments. '+
+            'if we did? Read "Kinds of transactions you might have" and find this kind of transaction. If we processed it correctly, recolor it green so you don\'t notice it anymore '+
+            '(you don\'t actually have to recolor it, it doesn\'t do anything besides change colors). If we got it wrong, adjust the tax treatments. '+
             'If you performed this kind of transaction many times, create a custom type for it so you can get them all corrected at once.</p>'+
             '<p>After you processed all your transactions this way, hit "Recalculate taxes". Check the vaults and loans with potential problems and fix if they need fixing. '+
             'Hit "Recalculate taxes" again, pick your tax year, and download your tax forms.</p>'
@@ -83,7 +89,7 @@ function make_help_strings() {
             '<h4>You transferring money to/from your blockchain address</h4><p>Normally, this is not a taxable event and shouldn\'t show up on the tax forms. However, that is not how we treat '+
             'it. We treat transfers into your address as purchases at market price, and transfers out as sales at market price. This is because otherwise we have no idea when you bought '+
             'your token and for how much. If the counterparty (wherever your source/destination address is) treats it the same way, it should not present a problem. There are two '+
-            'potential issues with this approach. First, you may have some realized gains (losses) when you should not have any. Second, this may break your long-term status for your '+
+            'potential issues with this approach. First, you may have some realized gains or losses when you should not have any. Second, this may break your long-term status for your '+
             'capital gains.</p>If you want to improve the filing for this kind of transactions: for transfers into your account you can set the treatment on the inbound transfer to "ignore", '+
             'and manually create a transaction where you are buying this token at the time and price you specified. For outbound transfers, you can set the treatment to "non-deductible loss".</p>' +
             '<h4>Exchange token A for token B</h4><p>This is a sale of token A, and a simultaneous purchase of token B. It is a balanced transaction, meaning total amount of USD going out and '+
@@ -116,7 +122,7 @@ function make_help_strings() {
             'the mint price from the amount you spent. If you paid first, and received the NFT(s) later, you will need to set the payment transfer to "sell" and '+
             'manually provide the mint price in the minting transaction.</p>'+
             '<h4>Anything dealing with ERC-1155</h4><p>There is a small subset of NFT-related Ethereum transfers that Etherscan API currently does not support. You will need to '+
-            'manually create transaction for them. Your list is <a target=_blank href="https://etherscan.io/address/'+addr+'#tokentxnsErc1155">here</a>.</p>'
+            'manually create transactions for them. Your list is <a target=_blank href="https://etherscan.io/address/'+addr+'#tokentxnsErc1155">here</a>.</p>'
         }
     }
 }

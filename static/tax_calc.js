@@ -26,8 +26,13 @@ function display_tax_block() {
     html +="<div id='mtm_selector'><label>Mark-to-market <div class='help help_mtm'></div><input type=checkbox id='mtm'></label></div>";
     html +="<a id='calc_tax'>Recalculate taxes</a>";
 
+
 //    html += "<a href='download?address="+address+"&type=transactions_csv' id='download_transactions_csv'>csv</a></div>";
     html += "<div id='tax_data'>";
+    html += "<div id='download_transactions_block'><div class='header'>Download all transactions:</div>";
+    html +="<a id='download_transactions_json'>json (raw data)</a>";
+    html +="<a id='download_transactions_csv'>csv (easier to read)</a>";
+    html += "</div>";
     html += year_html;
     html +="<a id='download_tax_forms'>Download tax forms</a>";
     html += "</div>";
@@ -43,6 +48,22 @@ function display_tax_block() {
 
 
 }
+
+$('body').on('click','#download_transactions_json, #download_transactions_csv',function() {
+    let address = window.sessionStorage.getItem('address');
+    let chain = window.sessionStorage.getItem('chain');
+    let type = $(this).attr('id').substr(22);
+    window.open("download?type=transactions_"+type+"&address="+address+"&chain="+chain,'_blank');
+//    $.post("download?chain="+chain+"&address="+address+"&type=transactions_json", data, function(resp) {
+//        console.log(resp);
+//        var data = JSON.parse(resp);
+//        if (data.hasOwnProperty('error')) {
+//            $('#recolor_block').append("<div class='err_mes'>"+data['error']+"</div>");
+//        } else {
+//            transactions.removeClass('custom_recolor_0 custom_recolor_3 custom_recolor_5 custom_recolor_10').addClass('custom_recolor custom_recolor_'+color_id);
+//        }
+//    });
+});
 
 function process_tax_js(js) {
     year = $('#tax_year').val();
@@ -381,10 +402,10 @@ $('body').on('change','#tax_year',function() {
 });
 
 $('body').on('change','#mtm',function() {
-    if (mtm != $('#mtm').is(":checked"))
-        need_recalc();
-    else
-        need_recalc(false);
+//    if (mtm != $('#mtm').is(":checked"))
+    need_recalc();
+//    else
+//        need_recalc(false);
 });
 
 $('body').on('change','#matchups_visible',function() {

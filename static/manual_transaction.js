@@ -1,3 +1,16 @@
+$.validator.addMethod('atleastonetransfer', function(val,el) {
+        console.log('custom val method called',$('#tc_form').find('.rule').length);
+        if ($('#mt_form').find('.mt_transfer').length == 0)
+            return false
+        return true
+    },'You need at least one transfer')
+
+$.validator.addMethod('mmddyyyy', function(value, element) {
+    let re = new RegExp("^((0?[1-9]|1[012])[- /.](0?[1-9]|[12][0-9]|3[01])[- /.](19|20)?[0-9]{2})*$")
+    return this.optional(element) || re.test(value);
+},
+"Needs to be MM/DD/YYYY")
+
 $('body').on('click','#mt_create',function() {
     create_edit_custom_transaction(null);
 });
@@ -12,6 +25,7 @@ $('body').on('click','#mt_r_add',function() {
     html = make_mt_transfer_html(null);
     $('#mt_r_add').before(html);
     $('.mt_what').autocomplete({  source: ac_token_list });
+//    resetFormValidator();
 });
 
 $('body').on('click','.mt_r_rem div',function() {
@@ -23,24 +37,44 @@ $('body').on('click','#mt_cancel',function() {
     $('.transaction').removeClass('shifted');
 });
 
+
 $('body').on('click','#mt_save',function() {
     $('.err_mes').remove();
 
-    let err = null;
-    let dt = $('#mt_date').val();
-    console.log('dt',dt)
-    if (dt.length == 0) {
-        err = "Please enter date"
-        $('#mt_date').css({'background-color':'#FF9E9E'});
-    }
+    //jquery validation plugin is an utter piece of shit.
+    $('.mt_from,.mt_to,.mt_what').each(function() {
+        $(this).rules("add", {
+            required:true,
+            messages: {
+                required:'required'
+            }
+        });
+    });
 
-    if ($('#mt div.mt_transfer').length == 0) {
-        err = "Please enter at least one transfer"
-    }
+    $('.mt_amount').each(function() {
+        $(this).rules("add", {
+            required:true,
+            number:true,
+            messages: {
+                required:'required',
+                number:'must be a number'
+            }
+        });
+    });
 
-    if (err != null) {
-        $("#mt .sim_buttons").before("<div class='err_mes'>"+err+"</div>");
-    } else {
+    $('.mt_nft_id').each(function() {
+        $(this).rules("add", {
+            digits:true,
+            messages: {
+                digits:'must be an integer'
+            }
+        });
+    });
+
+    let is_valid = $('#mt_form').valid();
+
+    if (is_valid) {
+        $('#mt_form').append("<input type=hidden name=tr_disp_idx value="+tr_disp_idx+">");
         data = $('#mt_form').serialize();
         console.log(addr,data);
         $.post("save_manual_transaction?address="+addr+"&chain="+chain, data, function(resp) {
@@ -204,18 +238,20 @@ function create_edit_custom_transaction(id) {
 
      }
     html += "<div class='mt_row'><div class='mt_field'><div class='mt_field_header'>Date:</div><input type=text id='mt_date' name='mt_date' placeholder='required'"+mt_date+"></div>";
-    html += "<div class='mt_field'><div class='mt_field_header'>Time:</div><input type=text id='mt_time' name='mt_time' placeholder='optional'"+mt_time+"></div></div>";
+    html += "<div class='mt_field'><div class='mt_field_header'>Time:</div><input type=text id='mt_time' required name='mt_time' placeholder='optional'"+mt_time+"></div></div>";
     html += "<div class='mt_row'><div class='mt_field'><div class='mt_field_header'>TX hash:</div><input type=text id='mt_hash' name='mt_hash' placeholder='optional'"+mt_hash+"></div></div>";
     html += "<div class='mt_row'><div class='mt_field'><div class='mt_field_header'>Operation:</div><input type=text id='mt_op' name='mt_op' placeholder='optional'"+mt_op+"></div>";
 //    html += "<div class='mt_field'><div class='mt_field_header'>Counterparty:</div><input type=text id='mt_cp' name='mt_cp' placeholder='optional'></div></div>";
 
 
     html += "<div id='mt_transfers' class='transfers'>";
+    tr_disp_idx = 0;
     for (let transfer of transfer_list)
         html += make_mt_transfer_html(transfer)
 //    html += make_mt_transfer_html();
     html+="<div class='mt_r_add' id='mt_r_add'><div></div>Add a transfer</div>";
     html += "</div>";
+    html += "<input type=hidden name=validation_hook>";
 
 
     html += "<div class='sim_buttons'>";
@@ -226,6 +262,25 @@ function create_edit_custom_transaction(id) {
     $('#mt_date').datepicker();
     $('#mt_time').timepicker({ timeFormat: 'HH:mm:ss', interval:60, dropdown:false });
     $('.mt_what').autocomplete({  source: ac_token_list });
+    $('#mt_form').validate({
+        ignore:[],
+        messages: {
+
+            mt_time:'required',
+            mt_date: {
+                required:'required'
+            }
+        },
+        rules: {
+            mt_date: {
+                required:true,
+                mmddyyyy:true
+            },
+            validation_hook: { //this is an ugly hack because jquery validation plugin is a POS
+                atleastonetransfer:true
+            },
+        }
+    });
 }
 
 function prep_ac_token_list() {
@@ -266,14 +321,15 @@ function make_mt_transfer_html(transfer) {
     }
 
     let html = "<div class='mt_transfer'>";
-    html += "<input class='mt_from' name='mt_from' type=text placeholder='From address'"+mt_from+">";
+    html += "<input class='mt_from' name='mt_from"+tr_disp_idx+"' type=text placeholder='From address'"+mt_from+">";
     html += "<span class='mt_r_arrow'><div></div></span>";
-    html += "<input class='mt_to' name='mt_to' type=text placeholder='To address'"+mt_to+">";
-    html += "<input class='mt_what' name='mt_what' type=text placeholder='Token name or address'"+mt_what+">";
-    html += "<input class='mt_amount' name='mt_amount' type=text placeholder='Amount'"+mt_amount+">";
-    html += "<input class='mt_nft_id' name='mt_nft_id' type=text placeholder='NFT ID'"+mt_nft_id+">";
+    html += "<input class='mt_to' name='mt_to"+tr_disp_idx+"' type=text placeholder='To address'"+mt_to+">";
+    html += "<input class='mt_what' name='mt_what"+tr_disp_idx+"' type=text placeholder='Token name or address'"+mt_what+">";
+    html += "<input class='mt_amount' name='mt_amount"+tr_disp_idx+"' type=text placeholder='Amount'"+mt_amount+">";
+    html += "<input class='mt_nft_id' name='mt_nft_id"+tr_disp_idx+"' type=text placeholder='NFT ID'"+mt_nft_id+">";
     html += "<span class='mt_r_rem' title='Delete transfer'><div></div></span>";
     html += "</div>";
+    tr_disp_idx += 1;
     return html;
 }
 

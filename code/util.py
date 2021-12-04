@@ -128,7 +128,11 @@ def progress_bar_update(filename, entry, percent):
 
 def decustom(val):
     custom = False
-    if val is not None and val[:7] == 'custom:':
-        val = val[7:]
-        custom = True
-    return val, custom
+    try:
+        if val is not None and val[:7] == 'custom:':
+            val = val[7:]
+            custom = True
+        return val, custom
+    except:
+        return val, custom
+

@@ -183,10 +183,12 @@ class Transaction:
             # transfer = {'type':type, 'from':fr, 'to':to, 'amount':val, 'what':token_contract,'input_len':input_len, 'rate_found':rate_found, 'rate':rate}
             decustomed_input, is_custom_op = decustom(input)
             if not is_custom_op:
-                input = None
+                passed_input = None
+            else:
+                passed_input = input
 
             transfer = Transfer(index, type, fr, to, val, token_contract, token, token_nft_id, input_len, rate_found, rate,base_fee, outbound = (fr.lower() == self.addr.lower()),
-                                custom_treatment=custom_treatment, custom_rate=custom_rate, custom_vaultid=custom_vaultid, input=input)
+                                custom_treatment=custom_treatment, custom_rate=custom_rate, custom_vaultid=custom_vaultid, input=passed_input)
             self.transfers.append(transfer)
             for key in Transaction.MAPPED_FIELDS:#.keys():
                 # self.mappings[key][transfer[Transaction.MAPPED_FIELDS[key]]].append(index)
@@ -668,6 +670,7 @@ class Transaction:
             print("json transaction",rows)
 
         js['rows'] = rows
+
         return js
 
 

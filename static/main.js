@@ -352,12 +352,14 @@ function display_counterparty(transaction, editable=false) {
                     html += "Operation: <span class='op'>"+signature+" @ "+cp+"</span>";
                 } else
                     html += "Counterparty: <span class='op'>"+cp+"</span>";
-                transaction_html += cp+"</span>";
             }
+
 
             if (cp_idx != cp_len -1) transaction_html += ","
             cp_idx += 1
         }
+        if (editable)
+            html += "<div class='help help_cpop'></div>";
     }
     html += "</div>";
     return html;
@@ -680,9 +682,45 @@ function make_transaction_html(transaction,idx=null,len=null) {
 
 
 
+function show_eula() {
+    if (!document.cookie.split('; ').find(row => row.startsWith('eula_agreed')))
+    {
+        let html ="<div id='overlay'></div><div id='eula' class='popup'>";
+        html += "<h3>BEWARE! DISCLAIMITY DISCLAIMER!</h3>";
+        html += "<p>So, we could've hired a lawyer and written a regular 74-page terms agreement and ask you to say you read it but we both know it's bullshit.</p>";
+        html += "<p>Here's what you need to know:</p><p>We made this service to help you with your blockchain tax filing. It will NOT magically turn your transactions "+
+        "into tax forms. We will attempt to classify and pick correct tax treatment for your transfers; we also absolutely 100% guarantee that it's going to "+
+        "occasionally be wrong. Sometimes we will have no idea what this or that transfer is. You MUST go over your transactions and inspect them. "+
+        "We will give you tools to make corrections, and those tools are better than what anyone else currently offers. Even after you make corrections, due to bugs "+
+        "and half-assed programming the tax filing may still end up wrong.</p>"+
+        "<p>So, to recap. We don't guarantee correctness in any way. This warning isn't here just to cover our asses,"+
+        " we really mean it! You promise not to blame us if IRS comes a knocking. Oh, and also we'll stick some cookies in your browser. We good?</p>"
+        html += "<div class='sim_buttons'>";
+        html += "<div id='agree_eula'>We good. I'm not gonna blame you for wrong tax filing.</div>";
+        html += "<div id='disagree_eula'>Nah, I'm outta here!</div>";
+        html += "</div>";
+        html += "</div>";
+        $('#content').append(html);
+
+        $('#agree_eula').on('click',function() {
+            document.cookie = "eula_agreed=1;path=/;expires=Fri, 31 Dec 9999 23:59:59 GMT";
+            $('#overlay').remove();
+            $('#eula').remove();
+        });
+
+        $('#disagree_eula').on('click',function() {
+            window.open("https://www.google.com/search?q=hire+a+programmer+to+do+my+blockchain+taxes")
+        });
+    }
+}
+
+
+
 
 $(function() {
     $( document ).ready(function() {
+        show_eula();
+
         activate_clickables();
 //            $('a#submit_address').click(function() {
         $('#main_form').submit( function(e) {
@@ -1130,6 +1168,9 @@ function deselect_primary(and_secondary=false) {
     }
 }
 
+
+
+
 function selection_operations(builtin_types,custom_types) {
     var html = "<div id='operations_block'>";
     html += "<div id='selections_placeholder'>Nothing selected. Click a transaction to select it. CTRL+click to select multiple.</div>";
@@ -1158,9 +1199,11 @@ function selection_operations(builtin_types,custom_types) {
     html += "<div id='types_block'>";
     html += show_custom_types(custom_types);
     html += "<a id='types_create'>Create new custom type</a>";
-    address = window.sessionStorage.getItem('address');
+//    address = window.sessionStorage.getItem('address');
+//    chain = window.sessionStorage.getItem('chain');
     html +="<a id='mt_create'>Manually add a transaction</a>";
-    html +="<a href='download?address="+address+"&type=transactions_json' id='download_transactions_json'>Download all transactions (json)</a>";
+//    html +="<a href='download?address="+address+"&chain="+chain+"&type=transactions_json' id='download_transactions_json'>Download all transactions (json)</a>";
+
     html += "</div>";
 
     html +="</div>";
