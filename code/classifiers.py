@@ -1188,13 +1188,13 @@ class Classifier:
         elif cat == Category.WRAP:
             t = CT[Transfer.SENT][0]
             set_treatment(t, 'sell')
-            extra_transfer = Transfer(len(transaction.transfers), 3, transaction.chain.wrapper, transaction.addr, t.amount, transaction.chain.wrapper, 'W' + t.what, None, -1, 1, t.rate, 0, treatment='buy', outbound=False, synthetic=True)
+            extra_transfer = Transfer(len(transaction.transfers), 3, transaction.chain.wrapper, transaction.addr, t.amount, transaction.chain.wrapper, 'W' + t.what, None, -1, 1, t.rate, t.rate_source, 0, treatment='buy', outbound=False, synthetic=True)
             transaction.transfers.append(extra_transfer)
 
         elif cat == Category.UNWRAP:
             t = CT[Transfer.RECEIVED][0]
             set_treatment(t, 'buy')
-            extra_transfer = Transfer(len(transaction.transfers), 3, transaction.addr, transaction.chain.wrapper, t.amount, transaction.chain.wrapper, 'W' + t.what, None, -1, 1, t.rate, 0,
+            extra_transfer = Transfer(len(transaction.transfers), 3, transaction.addr, transaction.chain.wrapper, t.amount, transaction.chain.wrapper, 'W' + t.what, None, -1, 1, t.rate, t.rate_source, 0,
                                       treatment='sell', outbound=True, synthetic=True)
             transaction.transfers.append(extra_transfer)
 

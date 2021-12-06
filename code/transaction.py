@@ -47,8 +47,8 @@ class Transfer:
 
     }
 
-    ALL_FIELDS = ['type', 'fr', 'to', 'amount', 'what', 'symbol', 'input_len', 'rate_found', 'rate', 'free','treatment', 'input','amount_non_zero','input_non_zero','outbound','index','token_nft_id','vault_id']
-    def __init__(self, index, type, fr, to, val, token_contract,token_name, token_nft_id, input_len, rate_found, rate,base_fee, input=None, treatment = None, outbound=False,
+    ALL_FIELDS = ['type', 'fr', 'to', 'amount', 'what', 'symbol', 'input_len', 'rate_found', 'rate', 'rate_source', 'free','treatment', 'input','amount_non_zero','input_non_zero','outbound','index','token_nft_id','vault_id']
+    def __init__(self, index, type, fr, to, val, token_contract,token_name, token_nft_id, input_len, rate_found, rate, rate_source, base_fee, input=None, treatment = None, outbound=False,
                  synthetic=False,vault_id=None, custom_treatment=None, custom_rate=None, custom_vaultid=None):
         if val is None or val == '':
             val = 0
@@ -63,6 +63,7 @@ class Transfer:
         self.input_non_zero = input_len > 2
         self.rate_found = rate_found
         self.rate = rate
+        self.rate_source = rate_source
         self.free = base_fee == 0
         self.treatment = treatment
         self.input = input
@@ -114,7 +115,7 @@ class Transaction:
         self.classification_certainty_level = 0
         self.rate_inferred = False
         self.rate_adjusted = False
-        self.local_rates = defaultdict(dict)
+        # self.local_rates = defaultdict(dict)
         self.balanced = False
         self.txid=txid
         self.custom_type_id=custom_type_id
@@ -187,7 +188,7 @@ class Transaction:
             else:
                 passed_input = input
 
-            transfer = Transfer(index, type, fr, to, val, token_contract, token, token_nft_id, input_len, rate_found, rate,base_fee, outbound = (fr.lower() == self.addr.lower()),
+            transfer = Transfer(index, type, fr, to, val, token_contract, token, token_nft_id, input_len, rate_found, rate, rate_source,base_fee, outbound = (fr.lower() == self.addr.lower()),
                                 custom_treatment=custom_treatment, custom_rate=custom_rate, custom_vaultid=custom_vaultid, input=passed_input)
             self.transfers.append(transfer)
             for key in Transaction.MAPPED_FIELDS:#.keys():
@@ -239,7 +240,7 @@ class Transaction:
 
 
         # _, self.main_asset_rate, rate_source = coingecko_rates.lookup_rate(self.main_asset, self.ts)
-        _, self.main_asset_rate, rate_source = self.lookup_rate(user, coingecko_rates, self.main_asset, self.ts, -1)
+        _, self.main_asset_rate, self.main_asset_rate_source = self.lookup_rate(user, coingecko_rates, self.main_asset, self.ts, -1)
 
         self.amounts = dict(amounts)
 
@@ -429,11 +430,11 @@ class Transaction:
                 if transfer.treatment == 'buy':
                     in_cnt += 1
                     amounts[transfer.what] += val
-                    symbols[transfer.what] = {'symbol': transfer.symbol, 'rate': transfer.rate, 'good_rate': transfer.rate_found}
+                    symbols[transfer.what] = {'symbol': transfer.symbol, 'rate': transfer.rate, 'rate_found': transfer.rate_found, 'rate_source':transfer.rate_source}
                 elif transfer.treatment == 'sell':
                     out_cnt += 1
                     amounts[transfer.what] -= val
-                    symbols[transfer.what] = {'symbol': transfer.symbol, 'rate': transfer.rate, 'good_rate': transfer.rate_found}
+                    symbols[transfer.what] = {'symbol': transfer.symbol, 'rate': transfer.rate, 'rate_found': transfer.rate_found, 'rate_source':transfer.rate_source}
         if self.hash == self.chain.hif:
             log('infer_and_adjust_rates symbols',symbols)
         combo = (out_cnt, in_cnt)
@@ -457,9 +458,11 @@ class Transaction:
             total_in_iffy = 0
             total_out = 0
             total_out_iffy = 0
+            worst_inferrer = 1
             for contract, amt in amounts.items():
-                good = symbols[contract]['good_rate']
+                good = symbols[contract]['rate_found']
                 rate = symbols[contract]['rate']
+                source = symbols[contract]['rate_source']
                 if rate == 0 or rate is None:
                     good = 0
                 # good, rate = coingecko_rates.lookup_rate(contract, ts)
@@ -475,6 +478,8 @@ class Transaction:
                         bad_contract = contract
                         bad_total = amt
                 else:
+                    if good < worst_inferrer:
+                        worst_inferrer = good
                     unaccounted_total += rate * amt
                     if amt > 0:
                         total_in += rate * amt
@@ -506,6 +511,7 @@ class Transaction:
             if bad_in + bad_out == 1:
                 add_rate_for = bad_contract
             elif bad_in + bad_out == 0 and iffy_in + iffy_out == 1:
+                worst_inferrer = 1
                 add_rate_for = iffy_contract
                 bad_total = iffy_total
                 unaccounted_total = unaccounted_total_iffy
@@ -523,18 +529,24 @@ class Transaction:
                     symbol = symbols[add_rate_for]['symbol']
                     # print("ADDING INFERRED RATE",add_rate_for,symbol,ts,self.transaction_value,unaccounted_total,bad_total)
                     inferred_rate = unaccounted_total / bad_total
-                    self.local_rates[add_rate_for][self.ts] = inferred_rate
+                    # self.local_rates[add_rate_for][self.ts] = inferred_rate
                     # coingecko_rates.add_rate(add_rate_for,symbol,ts,unaccounted_total/bad_total)
                     self.rate_inferred = symbol
+                    if worst_inferrer == 1:
+                        rate_source = "inferred"
+                    else:
+                        rate_source = "inferred from " + str(worst_inferrer)
                     for transfer in self.lookup({'what':add_rate_for}):
                         transfer.rate = inferred_rate
-                        transfer.good_rate = 1
+                        transfer.rate_found = worst_inferrer
+                        transfer.rate_source = rate_source
+                        log("changing rate ",self.hash,transfer.index)
                         # user.add_rate(self.txid, transfer.index, inferred_rate, 'inferred', 1)
                     # coingecko_rates.add_rate(add_rate_for, symbols[add_rate_for]['symbol'], self.ts, inferred_rate)
 
 
                     # if self.type not in ['remove liquidity', 'add liquidity']:
-                    coingecko_rates.add_rate(add_rate_for, self.ts, inferred_rate, 1)
+                    coingecko_rates.add_rate(add_rate_for, self.ts, inferred_rate, worst_inferrer, rate_source)
 
                 except:
                     print('EXCEPTION','contract', add_rate_for)
@@ -565,7 +577,7 @@ class Transaction:
                 if adjustment_factor > 0.05:
                     rate_fluxes = []
                     for contract, amt in amounts.items():
-                        good = symbols[contract]['good_rate']
+                        good = symbols[contract]['rate_found']
                         if contract == self.main_asset:
                             sid1 = -2
                             sid2 = -3
@@ -596,21 +608,24 @@ class Transaction:
                         mult_adjustment_in = total_out / total_in
                         mult_adjustment_out = 1
 
+
                 for contract, amt in amounts.items():
-
-
                     rate = symbols[contract]['rate']
+                    local_adjustment = 1
                     if amt < 0:
-                        adjusted_rate = rate * mult_adjustment_out
+                        local_adjustment = mult_adjustment_out
                     if amt > 0:
-                        adjusted_rate = rate * mult_adjustment_in
-                    if do_print:
-                        print('adjusted rate',contract,rate,'->',adjusted_rate)
-                    for transfer in self.lookup({'what':contract}):
-                        transfer.rate = adjusted_rate
-                        transfer.good_rate = 1
+                        local_adjustment = mult_adjustment_in
+                    if local_adjustment != 1:
+                        adjusted_rate = rate * local_adjustment
+                        if do_print:
+                            print('adjusted rate',contract,rate,'->',adjusted_rate)
+                        for transfer in self.lookup({'what':contract}):
+                            transfer.rate = adjusted_rate
+                            transfer.rate_source += ", adjusted by "+str(local_adjustment)
+                        # transfer.good_rate = 1
                         # user.add_rate(self.txid, transfer.index, adjusted_rate, 'adjusted', 1)
-                    self.local_rates[contract][self.ts] = adjusted_rate
+                    # self.local_rates[contract][self.ts] = adjusted_rate
 
                     # coingecko_rates.add_rate(self, contract, symbols[contract]['symbol'], self.ts, adjusted_rate)
 
@@ -630,7 +645,7 @@ class Transaction:
                 # log("AFT fee",self.type.category,self.type.claim)
 
 
-            extra_transfer = Transfer(len(self.transfers),1, self.addr, None, self.total_fee, self.main_asset, self.main_asset, None, -1, 1, self.main_asset_rate, 0, treatment=treatment, outbound=True, synthetic=True)
+            extra_transfer = Transfer(len(self.transfers),1, self.addr, None, self.total_fee, self.main_asset, self.main_asset, None, -1, 1, self.main_asset_rate, 'normal', 0, treatment=treatment, outbound=True, synthetic=True)
             self.transfers.append(extra_transfer)
 
     def to_json(self):
@@ -651,8 +666,7 @@ class Transaction:
 
 
 
-        js = {'txid':self.txid,'type': typestr, 'ct_id':self.custom_type_id, 'nft':nft,'hash':self.hash,'ts':ts,'classification_certainty':self.classification_certainty_level,'rate_inferred':self.rate_inferred,
-              'rate_adjusted':self.rate_adjusted,'counter_parties':counter_parties}
+        js = {'txid':self.txid,'type': typestr, 'ct_id':self.custom_type_id, 'nft':nft,'hash':self.hash,'ts':ts,'classification_certainty':self.classification_certainty_level,'counter_parties':counter_parties}
 
         if self.custom_color_id is not None:
             js['custom_color_id'] = self.custom_color_id
@@ -816,46 +830,46 @@ class Transaction:
     #     # print(rows)
     #     return rows
 
-
-    def record(self,db):
-        # self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp, total_fee NUMERIC, '
-        #                                      'in_cnt INTEGER, out_cnt INTEGER, category INTEGER, certainty INTEGER, claim INTEGER, nft INTEGER, '
-        #                                      'rate_inferred, rate_adjusted, balanced INTEGER, interacted', drop=False)
-        # self.db.create_table('transaction_transfers',
-        #                      'id integer primary key autoincrement, transaction_id integer, type integer, from, to, amount, what, symbol, input, rate NUMERIC, rate_found, treatment',
-        #                      drop=False)
-        # self.db.create_table('transaction_amounts', 'transaction_id integer, contract, amount NUMERIC', drop=False
-        # self.db.create_table('transaction_counterparties', 'transaction_id integer, address, progenitor_address, progenitor_name, signature, decoded_signature', drop=False)
-        # self.db.create_table('transaction_local_rates', 'transaction_id integer, contract, timestamp, rate NUMERIC', drop=False)
-        type = self.type
-        category = None
-        claim = 0
-        nft = 0
-        certainty = 0
-
-        if isinstance(type, Category):
-            category = type.category
-            claim = type.claim
-            certainty = type.certainty
-            if type.nft:
-                nft = 1
-        elif isinstance(type, list):
-            category = 'NOT SURE:' + str(type)
-
-
-        db.insert_kw('transactions',chain=self.chain.name, hash=self.hash,timestamp=self.ts, total_fee=self.total_fee, in_cnt=self.in_cnt, out_cnt = self.out_cnt,
-                     category=category,certainty=certainty,claim=claim,nft=nft,
-                     rate_inferred = self.rate_inferred, rate_adjusted=self.rate_adjusted, balanced=self.balanced, interacted=self.interacted)
-
-        row = db.select("SELECT id FROM transactions WHERE hash = '"+self.hash+"'")
-        ts_id = row[0][0]
-
-        # self.db.create_table('transaction_transfers',
-        #                      'id integer primary key autoincrement, transaction_id integer, type integer, from, to, amount, what, symbol, input, rate NUMERIC, rate_found, treatment',
-        #                      drop=False)
-        for transfer in self.transfers:
-            db.insert_kw('transaction_transfers',transaction_id=ts_id, type=transfer.type, from_addr=transfer.fr, to_addr = transfer.to,
-                         amount=transfer.amount, what=transfer.what, symbol=transfer.symbol, input=transfer.input, rate=transfer.rate,
-                         rate_found=transfer.rate_found, treatment=transfer.treatment)
+    #
+    # def record(self,db):
+    #     # self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp, total_fee NUMERIC, '
+    #     #                                      'in_cnt INTEGER, out_cnt INTEGER, category INTEGER, certainty INTEGER, claim INTEGER, nft INTEGER, '
+    #     #                                      'rate_inferred, rate_adjusted, balanced INTEGER, interacted', drop=False)
+    #     # self.db.create_table('transaction_transfers',
+    #     #                      'id integer primary key autoincrement, transaction_id integer, type integer, from, to, amount, what, symbol, input, rate NUMERIC, rate_found, treatment',
+    #     #                      drop=False)
+    #     # self.db.create_table('transaction_amounts', 'transaction_id integer, contract, amount NUMERIC', drop=False
+    #     # self.db.create_table('transaction_counterparties', 'transaction_id integer, address, progenitor_address, progenitor_name, signature, decoded_signature', drop=False)
+    #     # self.db.create_table('transaction_local_rates', 'transaction_id integer, contract, timestamp, rate NUMERIC', drop=False)
+    #     type = self.type
+    #     category = None
+    #     claim = 0
+    #     nft = 0
+    #     certainty = 0
+    #
+    #     if isinstance(type, Category):
+    #         category = type.category
+    #         claim = type.claim
+    #         certainty = type.certainty
+    #         if type.nft:
+    #             nft = 1
+    #     elif isinstance(type, list):
+    #         category = 'NOT SURE:' + str(type)
+    #
+    #
+    #     db.insert_kw('transactions',chain=self.chain.name, hash=self.hash,timestamp=self.ts, total_fee=self.total_fee, in_cnt=self.in_cnt, out_cnt = self.out_cnt,
+    #                  category=category,certainty=certainty,claim=claim,nft=nft,
+    #                  rate_inferred = self.rate_inferred, rate_adjusted=self.rate_adjusted, balanced=self.balanced, interacted=self.interacted)
+    #
+    #     row = db.select("SELECT id FROM transactions WHERE hash = '"+self.hash+"'")
+    #     ts_id = row[0][0]
+    #
+    #     # self.db.create_table('transaction_transfers',
+    #     #                      'id integer primary key autoincrement, transaction_id integer, type integer, from, to, amount, what, symbol, input, rate NUMERIC, rate_found, treatment',
+    #     #                      drop=False)
+    #     for transfer in self.transfers:
+    #         db.insert_kw('transaction_transfers',transaction_id=ts_id, type=transfer.type, from_addr=transfer.fr, to_addr = transfer.to,
+    #                      amount=transfer.amount, what=transfer.what, symbol=transfer.symbol, input=transfer.input, rate=transfer.rate,
+    #                      rate_found=transfer.rate_found, treatment=transfer.treatment)
 
 

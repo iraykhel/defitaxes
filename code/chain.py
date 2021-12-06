@@ -39,7 +39,7 @@ class Chain:
         if wrapper is not None:
             self.wrapper = wrapper.lower()
 
-        self.hif = '0x56dce5031502acacc62ddf5ef2d27c3ac79318b8dcafe2223c50201840996929'
+        self.hif = '0xc7959b2ebad66c38087eb0dd748ae858e5b65069b1e431ed6d8e2b0df9c682e7'
 
         # address_db.create_table(name + '_ancestry', 'address PRIMARY KEY, progenitor', drop=False)
         # address_db.create_table(name + '_names', 'address PRIMARY KEY, name', drop=False)
@@ -275,6 +275,9 @@ class Chain:
         resp = requests.get(url)
         data = resp.json()['result']
         # pprint.pprint(resp.json())
+
+        base_vals = [] #sometimes internal transactions on Fantom duplicate base transactions
+
         transactions = SortedDict()
         for entry in data:
             if entry['isError'] != '0':
@@ -295,6 +298,9 @@ class Chain:
             else:
                 input_len = len(input)
             val = float(entry['value']) / div
+
+            if input_len > 0:
+                base_vals.append(val)
             fee = float(entry['gasUsed']) * float(entry['gasPrice']) / div
             row = [hash, ts, fr, to, val, self.main_asset, None, None, fee, input_len, input]
             # if fee + val > 0:
@@ -330,7 +336,10 @@ class Chain:
             val = float(entry['value']) / div
             row = [hash, ts, fr, to, val, self.main_asset, None, None, 0,input_len, input]
             # if val > 0:
-            transactions[uid].append(2, row)
+            if self.name == 'Fantom' and val in base_vals:
+                continue #skip Fantom duplicate
+            else:
+                transactions[uid].append(2, row)
 
         t2 = time.time()
         progress_bar_update(self.addr, 'Retrieving token transactions', 10)

@@ -351,7 +351,7 @@ class Loan:
 
 
 class CA_transaction:
-    def __init__(self,timestamp,what,symbol,amount,rate, txid, tridx, usd_fee=0):
+    def __init__(self,timestamp,what,symbol,amount,rate, txid, tridx, usd_fee=0,queue_only=False):
         if rate is None:
             rate = 0
         self.timestamp = timestamp
@@ -359,6 +359,7 @@ class CA_transaction:
         self.symbol = symbol
         self.amount = amount
         self.rate = rate
+        self.queue_only = queue_only
         # if fee_amount is None:
         #     fee_amount = 0
         # if fee_rate is None:
@@ -539,6 +540,9 @@ class Calculator:
                 to = transfer['to']
                 fr = transfer['fr']
 
+                if treatment in ['fee','loss']: #these need to be later taken out of the fifo queue but ignored in cap gains calc
+                    self.ca_transactions.append(CA_transaction(timestamp,what,symbol,-amount,rate,txid,tridx, queue_only=True))
+
                 if treatment in ['buy','sell']:
                     if treatment == 'sell':
                         amount = -amount
@@ -670,6 +674,7 @@ class Calculator:
         CA_all = []
         errors = {}
         for idx, ca_trans in enumerate(self.ca_transactions):
+            queue_only = ca_trans.queue_only
             what = ca_trans.what
             symbol = ca_trans.symbol
             if what not in queues:
@@ -718,72 +723,77 @@ class Calculator:
 
                         if mode == 1:
                             if CA_in.amount > amount:
-                                prop_in = amount / CA_in.amount
-                                basis_spent_in = CA_in.basis * prop_in
-                                fees_spent_in = CA_in.usd_fee * prop_in
-                                CA_in.amount -= amount
-                                CA_in.basis -= basis_spent_in
-                                CA_in.usd_fee -= fees_spent_in
-                                basis = basis_spent_in + fees + fees_spent_in
+                                if not queue_only:
+                                    prop_in = amount / CA_in.amount
+                                    basis_spent_in = CA_in.basis * prop_in
+                                    fees_spent_in = CA_in.usd_fee * prop_in
 
-                                CA_line = {'symbol':symbol,'what':what,'amount':amount,'in_ts':CA_in.timestamp,'out_ts':ca_trans.timestamp,
-                                           'basis':basis,'sale':amount*rate,'out_txid':txid,'out_tridx':tridx, 'in_txid':CA_in.txid, 'in_tridx':CA_in.tridx}
+                                    CA_in.basis -= basis_spent_in
+                                    CA_in.usd_fee -= fees_spent_in
+                                    basis = basis_spent_in + fees + fees_spent_in
 
-                                fees = 0
+                                    CA_line = {'symbol':symbol,'what':what,'amount':amount,'in_ts':CA_in.timestamp,'out_ts':ca_trans.timestamp,
+                                               'basis':basis,'sale':amount*rate,'out_txid':txid,'out_tridx':tridx, 'in_txid':CA_in.txid, 'in_tridx':CA_in.tridx}
+
+                                    fees = 0
                                 amount = 0
 
+                                CA_in.amount -= amount
                                 if CA_in.amount*CA_in.rate < 0.01 and CA_in.rate != 0:
                                     del q[0]
                             else:
-                                prop_out = CA_in.amount / amount
-                                fees_spent = fees * prop_out
-                                basis = CA_in.basis + fees_spent + CA_in.usd_fee
-                                fees -= fees_spent
+                                if not queue_only:
+                                    prop_out = CA_in.amount / amount
+                                    fees_spent = fees * prop_out
+                                    basis = CA_in.basis + fees_spent + CA_in.usd_fee
+                                    fees -= fees_spent
+                                    CA_line = {'symbol': symbol, 'what': what, 'amount': CA_in.amount, 'in_ts': CA_in.timestamp, 'out_ts': ca_trans.timestamp,
+                                               'basis': basis, 'sale': CA_in.amount * rate, 'out_txid': txid, 'out_tridx': tridx, 'in_txid':CA_in.txid, 'in_tridx':CA_in.tridx}
                                 del q[0]
                                 amount -= CA_in.amount
-                                CA_line = {'symbol': symbol, 'what': what, 'amount': CA_in.amount, 'in_ts': CA_in.timestamp, 'out_ts': ca_trans.timestamp,
-                                           'basis': basis, 'sale': CA_in.amount * rate, 'out_txid': txid, 'out_tridx': tridx, 'in_txid':CA_in.txid, 'in_tridx':CA_in.tridx}
 
                         else: #short, all amounts negative
                             if CA_in.amount < amount:
-                                prop_in = amount / CA_in.amount
+                                if not queue_only:
+                                    prop_in = amount / CA_in.amount
 
-                                sale = CA_in.sale * prop_in
-                                fees_spent_in = CA_in.usd_fee * prop_in
-                                basis = -amount * rate + fees + fees_spent_in
+                                    sale = CA_in.sale * prop_in
+                                    fees_spent_in = CA_in.usd_fee * prop_in
+                                    basis = -amount * rate + fees + fees_spent_in
+                                    CA_in.usd_fee -= fees_spent_in
+                                    CA_in.sale -= sale
+
+
+                                    CA_line = {'symbol': symbol, 'what': what, 'amount': -amount, 'out_ts': CA_in.timestamp, 'in_ts': ca_trans.timestamp,
+                                               'basis': basis, 'sale': sale, 'in_txid': txid, 'in_tridx': tridx, 'out_txid': CA_in.txid, 'out_tridx': CA_in.tridx}
+
                                 CA_in.amount -= amount
-                                CA_in.usd_fee -= fees_spent_in
-                                CA_in.sale -= sale
-
-
-                                CA_line = {'symbol': symbol, 'what': what, 'amount': -amount, 'out_ts': CA_in.timestamp, 'in_ts': ca_trans.timestamp,
-                                           'basis': basis, 'sale': sale, 'in_txid': txid, 'in_tridx': tridx, 'out_txid': CA_in.txid, 'out_tridx': CA_in.tridx}
-
                                 fees = 0
                                 amount = 0
 
                                 if -CA_in.amount * CA_in.rate < 0.01 and CA_in.rate != 0:
                                     del q[0]
                             else:
-                                prop_out = CA_in.amount / amount
-                                fees_spent = fees * prop_out
-                                sale = CA_in.sale
-                                basis = -CA_in.amount*rate + fees_spent + CA_in.usd_fee
-                                fees -= fees_spent
+                                if not queue_only:
+                                    prop_out = CA_in.amount / amount
+                                    fees_spent = fees * prop_out
+                                    sale = CA_in.sale
+                                    basis = -CA_in.amount*rate + fees_spent + CA_in.usd_fee
+                                    fees -= fees_spent
+                                    CA_line = {'symbol': symbol, 'what': what, 'amount': -CA_in.amount, 'out_ts': CA_in.timestamp, 'in_ts': ca_trans.timestamp,
+                                               'basis': basis, 'sale': sale, 'in_txid': txid, 'in_tridx': tridx, 'out_txid': CA_in.txid, 'out_tridx': CA_in.tridx}
                                 del q[0]
                                 amount -= CA_in.amount
-                                CA_line = {'symbol': symbol, 'what': what, 'amount': -CA_in.amount, 'out_ts': CA_in.timestamp, 'in_ts': ca_trans.timestamp,
-                                           'basis': basis, 'sale': sale, 'in_txid': txid, 'in_tridx': tridx, 'out_txid': CA_in.txid, 'out_tridx': CA_in.tridx}
 
                         pos_amount = amount * mode
-
-                        CA_line['gain'] = CA_line['sale'] - CA_line['basis']
-                        print('cl', pos_amount, amount, CA_line)
-                        CA_all.append(CA_line)
-                        if abs(CA_line['out_ts'] - CA_line['in_ts']) > 365 * 86400:
-                            CA_long.append(CA_line)
-                        else:
-                            CA_short.append(CA_line)
+                        if not queue_only:
+                            CA_line['gain'] = CA_line['sale'] - CA_line['basis']
+                            print('cl', pos_amount, amount, CA_line)
+                            CA_all.append(CA_line)
+                            if abs(CA_line['out_ts'] - CA_line['in_ts']) > 365 * 86400:
+                                CA_long.append(CA_line)
+                            else:
+                                CA_short.append(CA_line)
                     if not switch:
                         done = True
 
@@ -948,6 +958,17 @@ class Calculator:
                     total += amount
                 form_file.write("\nRow 8 total: " + str(round(total)))
                 form_file.close()
+
+        if len(self.interest_payments):
+            form_file = open(path + 'form_4952.txt', 'w')
+            file_list.append('form_4952.txt')
+            total = 0
+            form_file.write("\nWe strongly recommend consulting with a tax professional about deducting loan interest\n")
+            for entry in self.interest_payments:
+                total += entry['amount']
+            form_file.write("\nLine 1: " + str(round(total)))
+            form_file.write("\n\nYou will need to complete the rest of the form yourself")
+            form_file.close()
 
 
         compression = zipfile.ZIP_DEFLATED

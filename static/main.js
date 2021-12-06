@@ -441,7 +441,7 @@ function display_transfers(transaction, editable=false) {
             cust_treatment_class = " custom";
             treatment = treatment.substr(7);
         }
-        good_rate = row['rate_found'];
+
         rate = row['rate'];
         if (rate != null && rate.toString().includes('custom:')) {
             cust_rate_class = " custom";
@@ -556,23 +556,27 @@ function display_transfers(transaction, editable=false) {
 
 }
 
+function rate_note(rate_struct,symbol,level,text) {
+    if (!(symbol in rate_struct))
+        rate_struct[symbol] = {'level':level,'text': text}
+    else {
+        if (level < rate_struct[symbol]['level'])
+            rate_struct[symbol] = {'level':level,'text': text}
+    }
+}
+
 function make_transaction_html(transaction,idx=null,len=null) {
-
-    transaction_color = transaction['classification_certainty']
-    if (transaction['rate_adjusted'] != false && transaction['rate_adjusted'] > 0.05 && !transaction['nft']) {
-       transaction_color = 3;
-       bad_rate_adjustment = true;
-    } else bad_rate_adjustment = false;
+    let min_color = transaction['classification_certainty']
 
 
+    let rate_struct = {}
 
-
-    missing_rates = [];
     txid = transaction['txid'];
     transaction['num'] = parseInt(idx)+1;
     all_transactions[txid] = transaction;
 
     rows = transaction['rows'];
+
     for (let ridx in rows) {
         let row = rows[ridx];
         let symbol = row['symbol'];
@@ -584,31 +588,52 @@ function make_transaction_html(transaction,idx=null,len=null) {
 
         rate = row['rate'];
         if (rate == null) {
-            to = row['to'];
             treatment = row['treatment'];
-
-
             if (treatment != 'ignore' && treatment != null) {
                 if (transaction['type'] != 'transfer in') //airdrops don't have rates
-                    transaction_color = 0;
-                if (!missing_rates.includes(symbol))
-                    missing_rates.push(symbol);
+                    min_color = 0;
+                rate_note(rate_struct,symbol,0,"Could not find rate of "+symbol+", assuming 0")
             }
-//
-//            if (to != null && to.toUpperCase() == addr) {
-//                options = options_in;
-//            } else {
-//                options = options_out;
-//            }
-//            for (let option in options) {
-//                if ((option == treatment)) { // && ['buy','sell'].includes(option)) {
-//
-//                    if (transaction['type'] != 'transfer in') //airdrops don't have rates
-//                        transaction_color = 0;
-//                    if (!missing_rates.includes(row['symbol']))
-//                        missing_rates.push(row['symbol']);
-//                }
-//            }
+        } else {
+            let good_rate = row['rate_found'];
+            let rate_source = row['rate_source'];
+            if (rate_source.includes("inferred")) {
+                if (rate_source.includes("inferred from ")) {
+                    let source_trust = parseFloat(rate_source.substr(rate_source.indexOf('inferred from ')+14))
+                    let level = 10
+                    if (source_trust < 1)
+                        level = 5
+                    if (source_trust < 0.5)
+                        level = 3
+                    rate_note(rate_struct,symbol,level,"Rate for "+symbol+" is inferred from the other currencies and might be wrong")
+                    min_color = Math.min(min_color,level)
+                } else if (rate_source.includes("after")) {
+                    rate_note(rate_struct,symbol,5,"Rate for "+symbol+" is inferred from earlier transactions")
+                    min_color = Math.min(min_color,5)
+                } else if (rate_source.includes("before")) {
+                    rate_note(rate_struct,symbol,3,"Rate for "+symbol+" is inferred from subsequent transactions and is probably wrong!")
+                    min_color = Math.min(min_color,3)
+                } else
+                    rate_note(rate_struct,symbol,10,"Rate for "+symbol+" is inferred from the other currencies in this transaction")
+            }
+            else if (rate_source.includes("before")) {
+                rate_note(rate_struct,symbol,3,"We don't have rates data for "+symbol+" at the time of this transaction, we are using the earliest rate we have, and it's probably wrong")
+                min_color = Math.min(min_color,3)
+            } else if (rate_source.includes("after")) {
+                rate_note(rate_struct,symbol,5,"We don't have rates data for "+symbol+" at the time of this transaction, we are using the latest rate we have, and it may be wrong")
+                min_color = Math.min(min_color,5)
+            }
+
+            if (rate_source.includes("adjusted by")) {
+                let factor = Math.abs(parseFloat(rate_source.substr(rate_source.indexOf('adjusted by ')+12))-1)
+                if (factor > 0.05) {
+                    rate_note(rate_struct,symbol,5,"To balance this transaction, rate for "+symbol+" had to be adjusted by over 5% and might be wrong")
+                    min_color = Math.min(min_color,5)
+                } else if (factor > 0.5) {
+                    rate_note(rate_struct,symbol,0,"To balance this transaction, rate for "+symbol+" had to be adjusted by over 50% and is wrong AF.")
+                    min_color = Math.min(min_color,0)
+                }
+            }
         }
     }
 
@@ -623,8 +648,8 @@ function make_transaction_html(transaction,idx=null,len=null) {
         type_class = 't_class_unknown';
 
     ct_id = transaction['ct_id'];
-    transaction['original_color'] = transaction_color;
-    transaction_html = "<div id='t_"+txid+"' class='transaction t_class_"+transaction_color+" "+type_class;
+    transaction['original_color'] = min_color;
+    transaction_html = "<div id='t_"+txid+"' class='transaction t_class_"+min_color+" "+type_class;
     if ('custom_color_id' in transaction)
         transaction_html += " custom_recolor custom_recolor_"+transaction['custom_color_id'];
     if (ct_id != null)
@@ -661,15 +686,10 @@ function make_transaction_html(transaction,idx=null,len=null) {
 
     transaction_html += display_counterparty(transaction,false);
 
-    if (transaction['rate_inferred'] != false) {
-        transaction_html += "<div class='note'>Note: Exchange rate for "+transaction['rate_inferred']+" is inferred from the other currencies in this transaction</div>";
+    for (let symbol in rate_struct) {
+        transaction_html += "<div class='note node_"+rate_struct[symbol]['level']+"'>Note: "+rate_struct[symbol]['text']+"</div>";
     }
-    if (bad_rate_adjustment) {
-        transaction_html += "<div class='note note_5'>Note: Rates for currencies in this transaction might be wrong</div>";
-    }
-    if (missing_rates.length > 0) {
-        transaction_html += "<div class='note note_0'>Note: Could not find required rate ("+missing_rates.join(', ')+") for this transaction, assuming 0</div>";
-    }
+
     transaction_html += "</div>";
 
     rows_table = display_transfers(transaction,false);

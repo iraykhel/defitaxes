@@ -238,9 +238,12 @@ class Coingecko:
         # self.rates[contract][ts_bottom] = rate
         # self.rates[contract][ts_top] = rate
 
-    def add_rate(self, contract, ts, rate, certainty):
+    def add_rate(self, contract, ts, rate, certainty, rate_source):
+        if self.verbose:
+            log("coingecko add shortcut 0", "add_rate", contract, ts, rate, certainty, rate_source)
+            log("coingecko adding rate",contract,ts,rate, certainty, rate_source)
         ts = int(ts)
-        self.shortcut_rates[contract][ts] = certainty, rate
+        self.shortcut_rates[contract][ts] = certainty, rate, rate_source
         if contract not in self.inferred_rates:
             self.inferred_rates[contract] = sortedcontainers.SortedDict()
         self.inferred_rates[contract][ts] = rate
@@ -260,7 +263,7 @@ class Coingecko:
             self.shortcut_hits += 1
             if verbose:
                 log('shortcut hit', rv)
-            return rv + ['shortcut']
+            return rv
         except:
             pass
 
@@ -275,16 +278,29 @@ class Coingecko:
                 if verbose:
                     log("Contract present in inferred rates")
                 rates_table = self.inferred_rates[contract]
-                idx = rates_table.bisect_left(ts)
-                if idx == 0:
-                    ts_bottom = rates_table.keys()[0]
+
+                first = rates_table.keys()[0]
+                last = rates_table.keys()[-1]
+                source = "inferred"
+                if ts < first:
+                    good = 0.1
+                    rate = rates_table[first]
+                    source += ', before first'
+                elif ts > last:
+                    good = 0.5
+                    rate = rates_table[last]
+                    source += ', after last'
                 else:
-                    ts_bottom = rates_table.keys()[idx - 1]
-                rate = rates_table[ts_bottom]
-                good = 0.5
+                    idx = rates_table.bisect_left(ts)
+                    ts_lookup = rates_table.keys()[idx - 1]
+                    rate = rates_table[ts_lookup]
+                    good = 0.5
+
                 self.time_spent_looking_up += (time.time() - t)
-                self.shortcut_rates[contract][ts] = (good, rate)
-                return good, rate, 'inferred'
+                if self.verbose:
+                    log("coingecko add shortcut 1",contract,ts,good,rate,source)
+                self.shortcut_rates[contract][ts] = (good, rate, source)
+                return good, rate, source
             return 0, None, None
 
         coingecko_id = self.contracts_map[contract]['id']
@@ -309,25 +325,25 @@ class Coingecko:
             except:
                 log("failed rate lookup minmax",coingecko_id, contract)
                 self.time_spent_looking_up += (time.time() - t)
-                self.shortcut_rates[contract][ts] = (0,None)
+                self.shortcut_rates[contract][ts] = (0,None, "missing")
                 return 0, None, None
 
 
             if ts < first:
                 if verbose:
                     log("Bad rate for in lookup",contract,coingecko_id,ts,"is smaller than first timestamp",first)
-                good = 0.5
+                good = 0.3
                 found = 1
                 rate = rates_table[first]
-                source = 'cg before first'
+                source = 'before first'
 
             if ts > last:
                 if verbose:
                     log("Bad rate for in lookup", contract, coingecko_id, ts, "is larger than last timestamp", last)
-                good = 0.5
+                good = 0.3
                 found = 1
                 rate = rates_table[last]
-                source = 'cg after last'
+                source = 'after last'
 
 
 
@@ -342,7 +358,7 @@ class Coingecko:
                 try:
                     rate = rates_table[ts_bottom] * bot_fraction + rates_table[ts_top] * top_fraction
                     found = True
-                    source = 'cg'
+                    source = 'normal'
                 except:
                     log("EXCEPTION, EXITING IN lookup_rate",contract,coingecko_id,ts, traceback.format_exc())
                     log(first,last,ts_bottom,ts_top)
@@ -353,7 +369,9 @@ class Coingecko:
 
             # print("Looking up rate for ", contract, "at", ts,rate)
         self.time_spent_looking_up += (time.time() - t)
-        self.shortcut_rates[contract][ts] = (good, rate)
+        self.shortcut_rates[contract][ts] = (good, rate, source)
+        if self.verbose:
+            log("coingecko add shortcut 2", source, contract, ts, good, rate)
         return good, rate, source
 
 

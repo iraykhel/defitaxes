@@ -214,9 +214,10 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
 //    $('.matchup').remove();
 
     for (let txid in matchups_basis) {
-        let cur_num = all_transactions[txid]['num']
+
         if (txid == -10) //mtm eoy
             continue;
+        let cur_num = all_transactions[txid]['num']
         for (let tridx in matchups_basis[txid]) {
 //            console.log('matchup basis',txid,tridx)
 //            transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
@@ -257,9 +258,10 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
     }
 
     for (let txid in matchups_sales) {
-        let cur_num = all_transactions[txid]['num']
+
         if (txid == -10) //mtm eoy
             continue;
+        let cur_num = all_transactions[txid]['num']
         for (let tridx in matchups_sales[txid]) {
 //            console.log('matchup sale',txid,tridx)
             transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");

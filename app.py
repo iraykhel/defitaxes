@@ -123,7 +123,7 @@ def process():
 
         S.init_from_db(input_list)
         if import_new:
-            C = Coingecko()
+            C = Coingecko(verbose=False)
             C.init_from_db(chain.main_asset, contract_list, address)
         else:
             C = Coingecko.init_from_cache(chain)
