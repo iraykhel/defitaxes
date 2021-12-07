@@ -49,7 +49,8 @@ def main():
         address,chain_name = request.cookies.get('address').split("|")
         last = last_update_inner(address,chain_name)
 
-    log('cookie',address,chain_name)
+
+    # log('cookie',address,chain_name)
     return render_template('main.html', title='Blockchain transactions to US tax form', address=address, chain=chain_name, last=last)
 
 
@@ -77,19 +78,15 @@ def last_update_inner(address,chain_name):
 @app.route('/process')
 def process():
     os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
-    log('xi1')
     address = request.args.get('address').lower()
     chain_name = request.args.get('chain')
     import_new = int(request.args.get('import_new'))
 
-    log('xi2')
     progress_bar_update(address, 'Starting', 0)
-    log('xi3')
 
     try:
 
         S = Signatures()
-        log('xi4')
 
         address_db = SQLite('addresses')
         chain = Chain.from_name(chain_name,address_db,address)
@@ -124,7 +121,7 @@ def process():
         S.init_from_db(input_list)
         if import_new:
             C = Coingecko(verbose=False)
-            C.init_from_db(chain.main_asset, contract_list, address)
+            C.init_from_db(chain, contract_list, address)
         else:
             C = Coingecko.init_from_cache(chain)
         log('timing:coingecko init_from_db',time.time()-t)

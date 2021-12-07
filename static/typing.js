@@ -184,7 +184,7 @@ function create_edit_custom_type(id) {
 
 
     let html = "<div id='tc'><form id='tc_form'>";
-    html += "<div class='header'>Create new transaction type<div class='help help_createcustomtype'></div></div>";
+
     let name_val = "";
     let desc = "";
     let balanced = "checked";
@@ -200,8 +200,8 @@ function create_edit_custom_type(id) {
             balanced = "";
         if (custom_types_js[id]['chain_specific'])
             chain_specific = " checked";
-     }
-//    html += "<div class='explanation'>You will manually select transactions to apply this type to. We will check every transfer in these transactions against each rule below and apply the first rule that matches.</div>";
+     } else
+        html += "<div class='header'>Create new transaction type<div class='help help_createcustomtype'></div></div>";
 
     html += "<div class=top_section>";
     html += "<div class='tx_row_0'><span class='t_class'><label>Only used on "+window.sessionStorage.getItem('chain')+" chain?<input type=checkbox"+chain_specific+" name=tc_chain></label></span></div>";

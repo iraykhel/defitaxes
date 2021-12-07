@@ -1,6 +1,6 @@
 from sortedcontainers import *
 from .sqlite import SQLite
-from .util import log
+from .util import log, init_logger
 from .transaction import *
 from .coingecko import Coingecko
 from .signatures import Signatures
@@ -17,64 +17,62 @@ class User:
         address = address.lower()
         self.address = address
 
-        self.rate_sources = ['usd','shortcut','inferred','exact','cg before first','cg after last','cg','adjusted']
+        # self.rate_sources = ['usd','shortcut','inferred','exact','cg before first','cg after last','cg','adjusted']
 
         path = 'data/users/'+address
-        log("check",path)
+        first_run = False
         if not os.path.exists(path):
-            log("doesn't exist")
             os.makedirs(path)
+            first_run = True
+
+        init_logger(address)
 
         self.db = SQLite('users/' + address+'/db')
 
         drop = False
-        self.db.create_table('custom_names', 'chain, address, name', drop=drop)
-        self.db.create_index('custom_names_idx', 'custom_names', 'chain,address', unique=True)
+        if first_run:
+            self.db.create_table('custom_names', 'chain, address, name', drop=drop)
+            self.db.create_index('custom_names_idx', 'custom_names', 'chain,address', unique=True)
 
-        self.db.create_table('custom_types', 'chain, id integer primary key autoincrement, name, description, balanced integer', drop=drop)
-        self.db.create_index('custom_types_idx', 'custom_types', 'chain, name', unique=True)
-        self.db.create_table('custom_types_rules', 'id integer primary key autoincrement, type_id integer, '
-                                                   'from_addr, from_addr_custom, to_addr, to_addr_custom, token, token_custom, treatment, vault_id, vault_id_custom',
-                             drop=drop)
-        # self.db.create_table('custom_types_applied', 'type_id integer, transaction_id integer primary key', drop=drop)
-        # self.db.create_index('custom_types_applied_idx', 'custom_types_applied', 'type_id')
+            self.db.create_table('custom_types', 'chain, id integer primary key autoincrement, name, description, balanced integer', drop=drop)
+            self.db.create_index('custom_types_idx', 'custom_types', 'chain, name', unique=True)
+            self.db.create_table('custom_types_rules', 'id integer primary key autoincrement, type_id integer, '
+                                                       'from_addr, from_addr_custom, to_addr, to_addr_custom, token, token_custom, treatment, vault_id, vault_id_custom',
+                                 drop=drop)
 
-        # self.db.create_table('custom_colors', 'transaction_id integer primary key, color integer', drop=drop)
-        # self.db.create_index('custom_colors_idx', 'custom_colors', 'color')
+            self.db.create_table('addresses', 'id integer primary key, chain, address', drop=drop)
+            self.db.create_index('addresses_idx', 'addresses', 'address, chain', unique=True)
 
-
-        # drop=False
-        self.db.create_table('addresses', 'id integer primary key, chain, address', drop=drop)
-        self.db.create_index('addresses_idx', 'addresses', 'address, chain', unique=True)
-
-        self.db.create_table('tokens', 'id integer primary key, chain, contract, symbol', drop=drop)
-        self.db.create_index('tokens_idx', 'tokens', 'chain, contract, symbol', unique=True)
+            self.db.create_table('tokens', 'id integer primary key, chain, contract, symbol', drop=drop)
+            self.db.create_index('tokens_idx', 'tokens', 'chain, contract, symbol', unique=True)
 
 
-        self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp INTEGER, custom_type_id INTEGER, custom_color_id INTEGER, manual INTEGER',drop=drop)
-        self.db.create_index('transactions_idx', 'transactions', 'hash', unique=True)
+            self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp INTEGER, custom_type_id INTEGER, custom_color_id INTEGER, manual INTEGER',drop=drop)
+            self.db.create_index('transactions_idx', 'transactions', 'hash', unique=True)
 
-        self.db.create_table('transaction_transfers', 'id integer primary key autoincrement, type integer, idx INTEGER, transaction_id INTEGER, from_addr_id INTEGER, to_addr_id INTEGER, val REAL, token_id INTEGER, token_nft_id INTEGER, base_fee REAL, input_len INTEGER, input, '
-                                                      'custom_treatment, custom_rate REAL, custom_vaultid', drop=drop)
-        self.db.create_index('transaction_transfers_idx', 'transaction_transfers', 'idx, transaction_id', unique=True)
-
-        # self.db.create_table('transactions_json_cache', 'id integer primary key, chain, timestamp INTEGER, json TEXT',drop=drop)
+            self.db.create_table('transaction_transfers', 'id integer primary key autoincrement, type integer, idx INTEGER, transaction_id INTEGER, from_addr_id INTEGER, to_addr_id INTEGER, val REAL, token_id INTEGER, token_nft_id INTEGER, base_fee REAL, input_len INTEGER, input, '
+                                                          'custom_treatment, custom_rate REAL, custom_vaultid', drop=drop)
+            self.db.create_index('transaction_transfers_idx', 'transaction_transfers', 'idx, transaction_id', unique=True)
 
 
+            self.db.commit()
 
-        # self.db.create_table('rates', 'transaction_id INTEGER, transfer_idx INTEGER, rate REAL, source INTEGER, level INTEGER', drop=drop)
-        # self.db.create_index('rates_idx', 'rates', 'transaction_id, transfer_idx', unique=True)
-
-        # self.db.create_table('custom_treatment', 'transaction_id INTEGER, transfer_idx INTEGER, treatment', drop=drop)
-        # self.db.create_index('custom_treatment_idx', 'custom_treatment', 'transaction_id, transfer_idx', unique=True)
-        #
-        # self.db.create_table('custom_rates', 'transaction_id INTEGER, transfer_idx INTEGER, rate REAL', drop=drop)
-        # self.db.create_index('custom_rates_idx', 'custom_rates', 'transaction_id, transfer_idx', unique=True)
-        self.db.commit()
+            self.make_sample_types()
 
 
 
         self.custom_addresses = {}
+
+    def make_sample_types(self):
+        self.db.insert_kw('custom_types',chain='ALL',name='Swap',
+                          description='This is a generic swap of one token for another. It can also be used to just sell, or just buy a token.',balanced=1)
+        self.db.insert_kw('custom_types_rules',type_id=1,from_addr='my_address',to_addr='any',token='any',treatment='sell',vault_id='address')
+        self.db.insert_kw('custom_types_rules', type_id=1, from_addr='any', to_addr='my_address', token='any', treatment='buy', vault_id='address')
+        self.db.insert_kw('custom_types', chain='ALL', name='Claim reward',
+                          description='You can use this type when getting staking rewards, or just generally getting tokens out of thin air.', balanced=1)
+        self.db.insert_kw('custom_types_rules', type_id=2, from_addr='any', to_addr='my_address', token='any', treatment='income', vault_id='address')
+        self.db.commit()
+
 
 
     def locate_insert_transaction(self,chain_name,hash,timestamp):
@@ -183,11 +181,12 @@ class User:
         if not chain_specific:
             chain_name = 'ALL'
         if id is not None:
-            self.db.query("UPDATE custom_types SET name = '"+name+"', chain = '"+chain_name+"', description = '"+description+"', balanced = "+str(balanced)+" WHERE id="+str(id))
+            # self.db.query("UPDATE custom_types SET name = '"+name+"', chain = '"+chain_name+"', description = '"+description+"', balanced = "+str(balanced)+" WHERE id="+str(id))
+            self.db.update_kw('custom_types',"id="+str(id),chain=chain_name, name=name, description=description, balanced=balanced)
             self.db.query("DELETE FROM custom_types_rules WHERE type_id=" + id)
         else:
-
             self.db.insert_kw('custom_types', chain=chain_name, name=name, description=description, balanced=balanced)
+        self.db.commit()
 
 
         rows = self.db.select("SELECT id FROM custom_types WHERE name='"+name+"' and (chain='"+chain_name+"' or chain='ALL')")
@@ -339,7 +338,8 @@ class User:
             print("Applying custom type rules to",transaction.hash)
 
         def check_address_match(transfer_addr,rule_addr,rule_addr_custom):
-            rule_addr_custom = rule_addr_custom.lower()
+            if rule_addr_custom is not None:
+                rule_addr_custom = rule_addr_custom.lower()
             if rule_addr == 'my_address' and transfer_addr != self.address:
                 return 0
             if rule_addr == '0x0000000000000000000000000000000000000000' and transfer_addr != '0x0000000000000000000000000000000000000000':
@@ -352,7 +352,8 @@ class User:
 
         def check_token_match(transfer_contract, transfer_symbol, rule_token, rule_token_custom):
             # log('ctm',rule_token, transfer_symbol, rule_token_custom, transfer_contract, rule_token_custom)
-            rule_token_custom = rule_token_custom.lower()
+            if rule_token_custom is not None:
+                rule_token_custom = rule_token_custom.lower()
             transfer_symbol = transfer_symbol.lower()
             if rule_token == 'base' and transfer_symbol.lower() == chain.main_asset.lower():
                 return 1

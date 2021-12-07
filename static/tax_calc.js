@@ -265,13 +265,14 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
         for (let tridx in matchups_sales[txid]) {
 //            console.log('matchup sale',txid,tridx)
             transfer = $('#t_'+txid).find("tr[index='"+tridx+"']");
-            tr_tok = $(transfer).find('.r_token').html();
+            tr_tok = $(transfer).find('.r_token').text();
             text = "";
             let short = false;
             for (tok in matchups_sales[txid][tridx]) {
-                if (tok != tr_tok)
+                if (tok != tr_tok) {
+                    console.log('tok',tok,'tr_tok',tr_tok)
                     text += "The "+tr_tok+" was converted inside the vault from "+tok+" originally acquired ";
-                else
+                } else
                     text += "This "+tok+" was acquired ";
                 cnt = matchups_sales[txid][tridx][tok]['txids'].length;
                 if (cnt <= 5) {

@@ -22,9 +22,10 @@ def dec(num, places=None):
 
 logger = None
 class Logger:
-    def __init__(self, write_frequency=1):
+    def __init__(self, address=None, write_frequency=1):
         self.files = defaultdict(dict)
         self.write_frequency = write_frequency
+        self.address = address
 
 
     def log(self,*args, **kwargs):
@@ -98,7 +99,11 @@ class Logger:
     def buf_to_file(self,filename):
         buffer = self.files[filename]['buffer']
         if len(buffer) > 0:
-            myfile = open('logs/' + filename, "a", encoding="utf-8")
+            if self.address is None:
+                path = 'logs/' + filename
+            else:
+                path = 'data/users/'+self.address+"/" + filename
+            myfile = open(path, "a", encoding="utf-8")
             myfile.write(''.join(buffer))
             myfile.close()
         self.files[filename]['buffer'] = []
@@ -112,6 +117,11 @@ class Logger:
                 print(p)
         except Exception:
             pass
+
+
+def init_logger(address):
+    global logger
+    logger = Logger(address)
 
 
 def log(*args,**kwargs):

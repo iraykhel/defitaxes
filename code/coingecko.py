@@ -22,21 +22,48 @@ class Coingecko:
 
         self.time_spent_looking_up = 0
 
-        #symbol->coingecko id
-        self.base_assets = {
-            'MATIC':'matic-network',
-            'ETH':'ethereum',
-            'HT':'huobi-token',
-            'BNB':'binancecoin',
-
-            'FTM':'fantom',
-            'AVAX':'avalanche-2',
-            'SOL':'solana',
-            'BTC':'bitcoin',
-            'OKT':'okexchain',
-            'ONE':'harmony',
-            'XDAI':'xdai'
+        # < option
+        # value = 'ETH' > Ethereum < / option >
+        # < option
+        # value = 'Polygon' > Polygon < / option >
+        # < option
+        # value = 'Arbitrum' > Arbitrum < / option >
+        # < option
+        # value = 'Avalanche' > Avalanche < / option >
+        # < option
+        # value = 'Fantom' > Fantom < / option >
+        # < option
+        # value = 'BSC' > BSC < / option >
+        # < option
+        # value = 'HECO' > HECO < / option >
+        # < option
+        # value = 'Moonriver' > Moonriver < / option >
+        self.chain_mapping = {
+            'ETH':{'platform':'ethereum','id':'ethereum'},
+            'Polygon':{'platform':'matic-network','id':'matic-network'},
+            'Arbitrum':{'platform':'arbitrum-one','id':'ethereum'},
+            'Avalanche':{'platform':'avalanche','id':'avalanche-2'},
+            'Fantom':{'platform':'fantom','id':'fantom'},
+            'BSC':{'platform':'binance-smart-chain','id':'binancecoin'},
+            'HECO':{'platform':'huobi-token','id':'huobi-token'},
+            'Moonriver':{'platform':'moonriver','id':'moonriver'}
         }
+
+        #symbol->coingecko id
+        # self.base_assets = {
+        #     'MATIC':'matic-network',
+        #     'ETH':'ethereum',
+        #     'HT':'huobi-token',
+        #     'BNB':'binancecoin',
+        #
+        #     'FTM':'fantom',
+        #     'AVAX':'avalanche-2',
+        #     'SOL':'solana',
+        #     'BTC':'bitcoin',
+        #     'OKT':'okexchain',
+        #     'ONE':'harmony',
+        #     'XDAI':'xdai'
+        # }
 
 
         self.custom_platform_mapping = {
@@ -60,8 +87,9 @@ class Coingecko:
         return C
 
 
-    def init_from_db(self, base_asset, contracts, my_address, initial=True):
+    def init_from_db(self, chain, contracts, my_address, initial=True):
         t = time.time()
+        chain_name = chain.name
 
 
         db = SQLite('db')
@@ -83,8 +111,8 @@ class Coingecko:
         for contract in contracts:
             if contract in self.contracts_map:
                 ids.add(self.contracts_map[contract]['id'])
-        ids.add(self.base_assets[base_asset])
-        self.contracts_map[base_asset] = {'id':self.base_assets[base_asset],'symbol':base_asset}
+        ids.add(self.chain_mapping[chain_name]['id'])
+        self.contracts_map[chain.main_asset] = {'id':self.chain_mapping[chain_name]['id'],'symbol':chain.main_asset}
         if self.verbose:
             log("getting rates for",len(ids), ids)
 
@@ -148,7 +176,7 @@ class Coingecko:
 
 
     def download_symbols_to_db(self):
-        db = SQLite('db')
+        db = SQLite('db',do_logging=False)
         db.create_table('symbols','id PRIMARY KEY, symbol, name, rates_acquired INTEGER DEFAULT 0',drop=True)
         db.create_table('platforms', 'id, platform, address', drop=True)
         db.create_index('platforms_i1', 'platforms', 'id')
@@ -169,31 +197,81 @@ class Coingecko:
             print(id)
         db.disconnect()
 
-    def download_all_coingecko_rates(self):
-        db = SQLite('db')
+    def download_all_coingecko_rates(self,reset=False):
+        tstart = time.time()
+        db = SQLite('db',do_logging=False)
         db.create_table('rates', 'id, timestamp INTEGER, rate NUMERIC', drop=False)
         db.create_index('rates_i1', 'rates', 'id, timestamp', unique=True)
         db.create_index('rates_i2', 'rates', 'id')
-        bases = "','".join(list(self.base_assets.values()))
-        rows = db.select("SELECT id FROM symbols WHERE rates_acquired == 0 and (id in (SELECT id from platforms) or id in ('"+bases+"')) ORDER BY id ASC")
+        if reset:
+            db.query('UPDATE symbols SET rates_acquired = 0')
 
 
-        for idx,row in enumerate(rows):
+
+        print("Finding recent updates")
+        latest = db.select('select id, max(timestamp) from rates group by id order by id ASC')
+        print("Done finding recent updates",time.time()-tstart)
+        update_map = {}
+        for idx, row in enumerate(latest):
+            update_map[row[0]] = row[1]
+
+        bases = set()
+        for platform_info in list(self.chain_mapping.values()):
+            bases.add(platform_info['id'])
+        bases = "','".join(list(bases))
+        rows = db.select("SELECT id FROM symbols WHERE rates_acquired == 0 and (id in (SELECT id from platforms) or id in ('" + bases + "')) ORDER BY id ASC")
+        for idx, row in enumerate(rows):
             id = row[0]
-            print("Downloading rates for " + id,str(idx)+"/"+str(len(rows)))
-            rv= self.download_coingecko_rates(db, id)
+            if id in update_map:
+                ts = update_map[id]
+                print("Downloading recent rates for " + id,"starting from",ts,str(idx)+"/"+str(len(rows)))
+                rv = self.download_coingecko_rates(db, id, starting_from=ts)
+            else:
+                print("Downloading recent rates for " + id, str(idx) + "/" + str(len(rows)))
+                rv = self.download_coingecko_rates(db, id)
             if rv:
                 db.query('UPDATE symbols SET rates_acquired = 1 WHERE id == "'+id+'"')
                 db.commit()
             time.sleep(1)
-        db.disconnect()
 
-    def download_coingecko_rates(self, db, id):
+
+        # processed = set()
+        # for idx,row in enumerate(latest):
+        #     id, ts = row
+        #     print("Downloading recent rates for " + id,"starting from",ts,str(idx)+"/"+str(len(latest)))
+        #     rv = self.download_coingecko_rates(db, id, starting_from=ts)
+        #     if rv:
+        #         db.query('UPDATE symbols SET rates_acquired = 1 WHERE id == "'+id+'"')
+        #         db.commit()
+        #     time.sleep(1)
+        #     processed.add(id)
+        #
+        #
+        #
+        #
+        # rows = db.select("SELECT id FROM symbols ORDER BY id ASC")
+        # all = set()
+        # for idx,row in enumerate(rows):
+        #     id = row[0]
+        #     all.add(id)
+        #
+        # remaining = list(all - processed)
+        # for idx, id in enumerate(remaining):
+        #     print("Downloading rates for " + id,str(idx)+"/"+str(len(remaining)))
+        #     rv= self.download_coingecko_rates(db, id)
+        #     if rv:
+        #         db.query('UPDATE symbols SET rates_acquired = 1 WHERE id == "'+id+'"')
+        #         db.commit()
+        #     time.sleep(1)
+        db.disconnect()
+        print("Total time",time.time()-tstart)
+
+    def download_coingecko_rates(self, db, id, starting_from=1514764800):
 
         session = requests.session()
         end = int(time.time())
         offset = 86400 * 90
-        while end > 1514764800 + offset:
+        while end >= starting_from:
             start = end - offset
             print(start, end)
             url = "https://api.coingecko.com/api/v3/coins/" + id + "/market_chart/range?vs_currency=usd&from=" + str(start) + "&to=" + str(end)
@@ -224,19 +302,6 @@ class Coingecko:
             return contract
         return self.contracts_map[contract]['symbol']
 
-    # def add_rate(self,contract,symbol,ts,rate):
-    #     if self.verbose:
-    #         log("Adding rate for",contract,symbol,"at",ts,"rate",rate)
-    #     ts = int(ts)
-    #     if contract not in self.contracts_map:
-    #         self.contracts_map[contract] = {'id':contract,'symbol':symbol}
-    #     # ts_bottom = (ts // 86400) * 86400
-    #     # ts_top = (ts // 86400 + 1) * 86400
-    #     if contract not in self.rates:
-    #         self.rates[contract] = sortedcontainers.SortedDict()
-    #     self.rates[contract][ts] = rate
-        # self.rates[contract][ts_bottom] = rate
-        # self.rates[contract][ts_top] = rate
 
     def add_rate(self, contract, ts, rate, certainty, rate_source):
         if self.verbose:

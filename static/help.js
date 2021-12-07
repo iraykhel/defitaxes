@@ -140,6 +140,12 @@ $('body').on('click','#close_help_popup',function() {
     $('#overlay').remove();
 });
 
+$('body').on('click','#more_help',function() {
+    window.open("https://discord.gg/E7yuUZ3W4X","_blank");
+    $('#help_popup').remove();
+    $('#overlay').remove();
+});
+
 function help_popup(id) {
     console.log('help_popup',id);
     html ="<div id='overlay'></div><div id='help_popup' class='popup'>";
@@ -149,11 +155,13 @@ function help_popup(id) {
     html += "</div>"
     html += "<div class='sim_buttons'>";
     html += "<div id='close_help_popup'>OK</div>";
-    html += "<div id='more_help'>WUT?</div>";
+    html += "<div id='more_help' title='Ask in our discord'>WUT?</div>";
     html += "</div>";
     html += "</div>";
     $('#content').append(html);
 }
+
+
 
 
 $('body').on('click','#help_main',function() {

@@ -11,6 +11,7 @@ from collections import defaultdict
 from random import shuffle
 import time
 from queue import Queue
+from .util import log
 
 
 class SQLite:
@@ -21,6 +22,7 @@ class SQLite:
         self.read_only = read_only
         self.do_logging = do_logging
         self.log_file = 'logs/sqlite_log.txt'
+        self.db=db
 
 
         if db is not None:
@@ -39,12 +41,16 @@ class SQLite:
             error = traceback.format_exc()
         tend = time.time()
         if self.do_logging:
-            myfile = open(self.log_file, "a", encoding="utf-8")
-            myfile.write('\nQUERY '+query+'\n')
+            log('SQL QUERY',self.db,query,'VALUES',values,'TIMING',str(tend-tstart))
             if error is not None:
-                myfile.write('ERROR '+error+'\n')
-            myfile.write('TIMING '+str(tend-tstart)+'\n')
-            myfile.close()
+                log('SQL ERROR',self.db,error)
+
+            # myfile = open(self.log_file, "a", encoding="utf-8")
+            # myfile.write('\nQUERY '+query+'\n')
+            # if error is not None:
+            #     myfile.write('ERROR '+error+'\n')
+            # myfile.write('TIMING '+str(tend-tstart)+'\n')
+            # myfile.close()
         if error:
             exit(1)
         return rv
@@ -101,44 +107,27 @@ class SQLite:
             self.commit()
         return modified
 
-    # def get_column_type(self, table, column):
-    #     affinity_map = {
-    #         'INTEGER':0,
-    #         'INT':0,
-    #         'NUMERIC':0,
-    #         'REAL':0,
-    #         'BLOB':2
-    #     }
-    #     if table not in self.type_mapping:
-    #         c = self.conn.execute('PRAGMA table_info('+table+')')
-    #         columns = c.fetchall()
-    #         self.type_mapping[table] = {}
-    #         for entry in columns:
-    #             type = entry[2].upper()
-    #             if type in affinity_map:
-    #                 self.type_mapping[table][entry[1]] = affinity_map[type]
-    #             else:
-    #                 self.type_mapping[table][entry[1]] = 1 #text
-    #     return self.type_mapping[table][column]
+    def infer_meaning(self,value, keyworded=False):
+        if isinstance(value, str):
+            if keyworded:
+                return "'" + value + "'"
+            else:
+                return value
+        elif isinstance(value, bytes):
+            return sqlite3.Binary(value)
+        elif value in [True, False]:
+            return str(int(value))
+        elif value is None:
+            if keyworded:
+                return 'null'
+            else:
+                return None
+        else:
+            return str(value)
+
 
     def insert_kw(self, table, **kwargs):
-        def infer_meaning(value,keyworded):
-            if isinstance(value,str):
-                if keyworded:
-                    return "'"+value+"'"
-                else:
-                    return value
-            elif isinstance(value,bytes):
-                return sqlite3.Binary(value)
-            elif value in [True,False]:
-                return str(int(value))
-            elif value is None:
-                if keyworded:
-                    return 'null'
-                else:
-                    return None
-            else:
-                return str(value)
+        placeholder_list = []
 
         column_list = []
         value_list = []
@@ -148,26 +137,9 @@ class SQLite:
                 command_list[key] = value
                 continue
             column_list.append(key)
-            value_list.append(infer_meaning(value, True))
-            # if isinstance(value,str):
-            #     value_list.append("'" + value + "'")
-            # elif isinstance(value,bytes):
-            #     value_list.append(sqlite3.Binary(value))
-            # elif value in [True,False]:
-            #     value_list.append(str(int(value)))
-            # elif value is None:
-            #     value_list.append('null')
-            # else:
-            #     value_list.append(str(value))
+            value_list.append(self.infer_meaning(value))
+            placeholder_list.append("?")
 
-        # try:
-            #     check = float(value)
-            #     value_list.append(str(value))
-            # except Exception:
-            #     if type(value) == bytes:
-            #         value_list.append(sqlite3.Binary(value))
-            #     else:
-            #         value_list.append("'" + value + "'")
 
         error_mode = 'REPLACE'
         if command_list['ignore']:
@@ -179,30 +151,18 @@ class SQLite:
 
         if command_list['values'] is not None:
             value_list = []
-            placeholder_list = []
+
             for value in command_list['values']:
-                value_list.append(infer_meaning(value, False))
-                # if type(value) == bytes:
-                #     value_list.append(sqlite3.Binary(value))
-                # else:
-                #     value_list.append(str(value))
-                # try:
-                #     value_list.append(str(value))
-                # except Exception:
-                #     value_list.append(sqlite3.Binary(value))
+                value_list.append(self.infer_meaning(value))
+
                 placeholder_list.append("?")
             # query = "INSERT OR " + error_mode + " INTO " + table + " VALUES (" + ",".join(value_list) + ")"
             query = "INSERT OR " + error_mode + " INTO " + table + " VALUES (" + ",".join(placeholder_list) + ")"
-            c = self.execute_and_log(conn_to_use,query,value_list)
         else:
-            query = "INSERT OR "+error_mode+" INTO " + table + " (" + ",".join(column_list) + ") VALUES (" + ",".join(value_list) + ")"
-            # print("QUERY", query)
-            try:
-                c = self.execute_and_log(conn_to_use,query)
-            except:
-                print("Could not insert")
-                print(query)
-                exit(1)
+            # query = "INSERT OR "+error_mode+" INTO " + table + " (" + ",".join(column_list) + ") VALUES (" + ",".join(value_list) + ")"
+            query = "INSERT OR "+error_mode+" INTO " + table + " (" + ",".join(column_list) + ") VALUES (" + ",".join(placeholder_list) + ")"
+        c = self.execute_and_log(conn_to_use,query,value_list)
+
 
 
 
@@ -312,43 +272,27 @@ class SQLite:
 
 
     def update_kw(self, table, where, **kwargs):
-        # column_list = []
-        # value_list = []
 
-        def infer_meaning(value):
-            if isinstance(value,str):
-                return "'"+value+"'"
-            elif isinstance(value,bytes):
-                return sqlite3.Binary(value)
-            elif value in [True,False]:
-                return str(int(value))
-            elif value is None:
-                return "null"
-            else:
-                return str(value)
-        pair_list = []
+        pair_placeholder_list = []
+        value_list = []
         command_list = {'commit': False, 'connection': None, 'ignore': False}
         for key, value in kwargs.items():
             if key in command_list:
                 command_list[key] = value
                 continue
 
-            pair_list.append(key + " = " + infer_meaning(value))
+            # pair_list.append(key + " = " + infer_meaning(value))
+            pair_placeholder_list.append(key + " = ?")
+            value_list.append(self.infer_meaning(value))
 
-
-            #
-            # try:
-            #     check = float(value)
-            #     pair_list.append(key + " = " +str(value))
-            # except Exception:
-            #     pair_list.append(key + " = " + "'" + value + "'")
 
         error_mode = 'REPLACE'
         if command_list['ignore']:
             error_mode = 'IGNORE'
         # if 'IGNORE' in command_list:
         #     error_mode = 'IGNORE'
-        query = "UPDATE OR " + error_mode + " "+ table + " SET " + (",").join(pair_list)
+        # query = "UPDATE OR " + error_mode + " "+ table + " SET " + (",").join(pair_list)
+        query = "UPDATE OR " + error_mode + " "+ table + " SET " + (",").join(pair_placeholder_list)
         if where is not None:
             query += " WHERE "+ where
 
@@ -358,7 +302,7 @@ class SQLite:
 
         try:
             c = conn_to_use.cursor()
-            self.execute_and_log(c,query)
+            self.execute_and_log(c,query,value_list)
             # if command_list['commit']:
             if command_list['commit']:
                 conn_to_use.commit()
