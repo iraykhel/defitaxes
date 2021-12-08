@@ -74,17 +74,12 @@ function timeConverter(UNIX_timestamp){
   return time;
 }
 
-function copyToClipboard(element) {
-    var $temp = $("<input>");
-    $("body").append($temp);
-    $temp.val($(element).text()).select();
-    document.execCommand("copy");
-    $temp.remove();
-}
 
 
-function startend(hash) {
-    return hash.substring(0,5)+"..."+hash.substring(hash.length-3);
+function startend(hash,minlen=12) {
+    if (hash.length > minlen)
+        return hash.substring(0,5)+"..."+hash.substring(hash.length-3);
+    else return hash
 }
 
 function display_hash(zerox, my_addr=null, name='address') {
@@ -110,7 +105,7 @@ function display_token(token_name, token_address, nft_id) {
     else
         html = "<span class='token copiable' title='Copy token address' full='"+token_address+"'>"+token_name+"</span>";
     if (nft_id != null)
-        html += " ("+nft_id+")"
+        html += " <span class='copiable' title='Copy NFT ID to clipboard' full='"+nft_id+"'>"+startend(nft_id)+"</span>"
     return html;
 }
 
@@ -163,16 +158,16 @@ function show_ajax_transactions(data) {
 
 $( document ).ready(function() {
     $('body').on('click', '.copiable', function() {
-        var hash = $(this).attr('full');
-        el = $(this);
+        let hash = $(this).attr('full');
+        let el = $(this);
         el.css({'background-color':'#8065f7','color':'white'});
         console.log(hash);
-        var $temp = $("<input>");
-        $("body").append($temp);
-        $temp.val(hash).select();
+        let temp = $("<input>");
+        $("body").append(temp);
+        temp.val(hash).select();
         document.execCommand("copy");
-        $temp.remove();
-        setTimeout(function(){ el.css({'background-color':'','color':''}); }, 50);
+        temp.remove();
+        setTimeout(function(){ console.log('unselect'); el.css({'background-color':'','color':''}); }, 50);
     });
 
     //from cookie
@@ -324,7 +319,7 @@ function remove_from_mapping(mapping_type,value,txid) {
 
 
 function display_counterparty(transaction, editable=false) {
-    console.log('display_counterparty', transaction)
+//    console.log('display_counterparty', transaction)
     html = "<div class='tx_row_2'>"
     transaction_counterparties = transaction['counter_parties'];
     cp_len = Object.keys(transaction_counterparties).length

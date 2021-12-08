@@ -132,7 +132,7 @@ def log(*args,**kwargs):
     logger.log(*args,**kwargs)
 
 def progress_bar_update(filename, entry, percent):
-    pb_file = open('data/' + filename + "_pb", "wb")
+    pb_file = open('data/users/' + filename + "/pb", "wb")
     pickle.dump({'phase':entry,'pb':percent}, pb_file)
     pb_file.close()
 

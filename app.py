@@ -483,7 +483,7 @@ def progress_bar():
     for i in range(5):
         try:
             address = request.args.get('address').lower()
-            js = pickle.load(open('data/' + address + "_pb", "rb"))
+            js = pickle.load(open('data/users/' + address + "/pb", "rb"))
             good = 1
             break
         except:

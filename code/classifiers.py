@@ -118,7 +118,7 @@ class Classifier:
         burned = transaction.lookup({'fr': transaction.addr, 'to': Classifier.NULL,'amount_non_zero':True})
 
         nfts_in = transaction.lookup({'to': transaction.addr, 'type':4})
-        nfts_out = transaction.lookup({'fr': transaction.addr, 'type': 4})
+        nfts_out = transaction.lookup({'fr': transaction.addr, 'type':4})
 
         from_bridge = transaction.lookup({'to': transaction.addr, 'fr': self.chain.inbound_bridges})
         to_bridge = transaction.lookup({'fr': transaction.addr, 'to': self.chain.outbound_bridges})

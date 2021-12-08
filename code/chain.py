@@ -10,8 +10,10 @@ import csv
 from .util import log, progress_bar_update
 import bs4
 from .pool import Pools
-
-
+import random
+import re
+from datetime import datetime
+import calendar
 
 
 
@@ -256,11 +258,12 @@ class Chain:
 
 
 
-    def get_transactions(self):
+    def get_transactions(self,pb=True):
         hif = self.hif
 
         t = time.time()
-        progress_bar_update(self.addr, 'Retrieving '+self.main_asset+' transactions',1)
+        if pb:
+            progress_bar_update(self.addr, 'Retrieving '+self.main_asset+' transactions',1)
         div = 1000000000000000000.
         log('\n\ngetting transaction for',self.addr,self.name)
         # url = self.explorer_url + '?module=account&action=tokenmultitx&address=' + self.addr + '&apikey=' + self.api_key
@@ -286,7 +289,8 @@ class Chain:
             if hash == hif:
                 pprint.pprint(entry)
             ts = entry['timeStamp']
-            uid = str(ts) + "_" + str(hash)
+            # uid = str(ts) + "_" + str(hash)
+            uid = hash
             if uid not in transactions:
                 transactions[uid] = Transaction(self)
             fr = entry['from'].lower()
@@ -307,11 +311,10 @@ class Chain:
             transactions[uid].append(1, row)
         t1 = time.time()
 
-        progress_bar_update(self.addr, 'Retrieving internal transactions', 5)
+        if pb:
+            progress_bar_update(self.addr, 'Retrieving internal transactions', 5)
         url = self.explorer_url + '?module=account&action=txlistinternal&address=' + self.addr + '&apikey=' + self.api_key
-        print(url)
         resp = requests.get(url)
-        print(resp.content)
         data = resp.json()['result']
         # pprint.pprint(data['result'])
         for entry in data:
@@ -322,7 +325,8 @@ class Chain:
             if hash == hif:
                 pprint.pprint(entry)
             ts = entry['timeStamp']
-            uid = str(ts) + "_" + str(hash)
+            # uid = str(ts) + "_" + str(hash)
+            uid = hash
             if uid not in transactions:
                 transactions[uid] = Transaction(self)
             fr = entry['from'].lower()
@@ -342,7 +346,8 @@ class Chain:
                 transactions[uid].append(2, row)
 
         t2 = time.time()
-        progress_bar_update(self.addr, 'Retrieving token transactions', 10)
+        if pb:
+            progress_bar_update(self.addr, 'Retrieving token transactions', 10)
         url = self.explorer_url + '?module=account&action=tokentx&address=' + self.addr + '&apikey=' + self.api_key
         resp = requests.get(url)
         data = resp.json()['result']
@@ -352,7 +357,8 @@ class Chain:
             if hash == hif:
                 pprint.pprint(entry)
             ts = entry['timeStamp']
-            uid = str(ts) + "_" + str(hash)
+            # uid = str(ts) + "_" + str(hash)
+            uid = hash
             if uid not in transactions:
                 transactions[uid] = Transaction(self)
             fr = entry['from'].lower()
@@ -373,7 +379,8 @@ class Chain:
             transactions[uid].append(3, row)
 
         t3 = time.time()
-        progress_bar_update(self.addr, 'Retrieving NFT transactions', 15)
+        if pb:
+            progress_bar_update(self.addr, 'Retrieving NFT transactions', 15)
         url = self.explorer_url + '?module=account&action=tokennfttx&address=' + self.addr + '&apikey=' + self.api_key
         resp = requests.get(url)
         data = resp.json()['result']
@@ -383,7 +390,8 @@ class Chain:
             if hash == hif:
                 pprint.pprint(entry)
             ts = entry['timeStamp']
-            uid = str(ts) + "_" + str(hash)
+            # uid = str(ts) + "_" + str(hash)
+            uid = hash
             if uid not in transactions:
                 transactions[uid] = Transaction(self)
             fr = entry['from'].lower()
@@ -400,11 +408,16 @@ class Chain:
             # tokenID = entry['tokenID']
             val = 1
             fee = 0  # accounted in base transactions
-            row = [hash, ts, fr, to, val, token, token_contract, token_nft_id, 0, input_len, input]
+            row = [hash, ts, fr, to, val, token, token_contract, str(token_nft_id), 0, input_len, input]
             # if val > 0:
             transactions[uid].append(4, row)
 
         t4 = time.time()
+        if self.name == 'ETH':
+            if pb:
+                progress_bar_update(self.addr, 'Page-scraping ERC1155 transactions', 17)
+            self.scrape_erc1155(transactions)
+
         # pprint.pprint(transactions)
         # log("downloaded transactions",transactions)
         log('timing:get transactions',t1-t,t2-t1,t3-t2,t4-t3)
@@ -412,8 +425,99 @@ class Chain:
 
 
 
+    def scrape_erc1155(self,transactions):
+        page = 1
+        done = False
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36',
+                   'cache-control': 'max-age=0',
+                   'accept-language': 'en-US,en;q=0.9,ru;q=0.8',
+                   'upgrade-insecure-requests': '1',
+                   'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'}
+        session = requests.session()
+        session.proxies = {
+            'http': 'http://5uu5k:7sdcf2x2@94.103.178.46:5432',
+            'https': 'http://5uu5k:7sdcf2x2@94.103.178.46:5432'
+        }
 
 
+        while not done:
+            url = "https://etherscan.io/tokentxns-nft1155?a="+self.addr+"&ps=100&p="+str(page)
+            time.sleep(random.randint(100, 400) / 1000.)
+            resp = session.get(url, headers=headers)
+            if resp.status_code != 200:
+                log("Failed to scrape ERC1155, status code",resp.status_code,"content",resp.content)
+                return
+            # print('resp.content',resp.content)
+            html = resp.content.decode('utf-8')
+            soup = bs4.BeautifulSoup(html, features="lxml")
+            tb = soup.find('table', class_='table-hover')
+
+            rows = tb.find_all('tr')
+            for row in rows[1:]:
+                cells = row.find_all("td")
+                try:
+                    txhash_html = cells[1]
+                    txhash = txhash_html.find('a').contents[0]
+
+                    ts_html = cells[3]
+                    ts = ts_html.find('span')['title']
+                    dt = datetime.strptime(ts,"%Y-%m-%d %H:%M:%S") #2021-10-02 1:25:32
+                    ts = calendar.timegm(dt.utctimetuple())
+
+                    fr_html = cells[4]
+                    fr_a = fr_html.find('a')
+                    if fr_a:
+                        fr = fr_a['href'][9:51]
+                    else:
+                        fr = fr_html.find('span')['title']
+
+                    to_html = cells[6]
+                    to_a = to_html.find('a')
+                    if to_a:
+                        to = to_a['href'][9:51]
+                    else:
+                        to = to_html.find('span')['title']
+
+                    tokenid_html = cells[7]
+                    token_nft_id = tokenid_html.find('a').contents[0]
+                    amount = cells[8].contents[0]
+
+                    what_html = cells[9].find('a')
+                    what = what_html['href'][7:49]
+                    symbol = what_html.contents[-1]
+                    match = re.search('\((.*?)\)', symbol)
+                    if match is not None:
+                        symbol = match.group()[1:-1]
+                    else:
+                        symbol_spans = what_html.find_all('span')
+                        if len(symbol_spans) >= 1:
+                            symbol = symbol_spans[-1]['title']
+
+
+                    # row = [hash, ts, fr, to, val, token, token_contract, token_nft_id, 0, input_len, input]
+                    # if val > 0:
+                    # uid = txhash
+                    # ts_tr = None
+                    # if uid in transactions:
+                    #     ts_tr = transactions[uid].grouping[-1][1][1]
+                    # else:
+                    #     transactions[uid] = Transaction(self)
+                    uid = txhash
+                    if uid not in transactions:
+                        transactions[uid] = Transaction(self)
+                    # log(txhash, '|' ,ts, '|', fr, '|', to, '|', tokenid, '|', amount, '|', what, '|', symbol)
+                    row = [txhash, ts, fr, to, float(amount), symbol, what, str(token_nft_id), 0, 0, None]
+                    transactions[uid].append(4, row)
+                except:
+                    log('Failed to scrape ERC1155',traceback.format_exc(),cells)
+                    done = True
+                    break
+
+
+            if len(rows) != 101:
+                done = True
+
+            page += 1
 
 
     # def get_ancestor(self,address):

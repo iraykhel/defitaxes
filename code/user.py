@@ -50,7 +50,7 @@ class User:
             self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp INTEGER, custom_type_id INTEGER, custom_color_id INTEGER, manual INTEGER',drop=drop)
             self.db.create_index('transactions_idx', 'transactions', 'hash', unique=True)
 
-            self.db.create_table('transaction_transfers', 'id integer primary key autoincrement, type integer, idx INTEGER, transaction_id INTEGER, from_addr_id INTEGER, to_addr_id INTEGER, val REAL, token_id INTEGER, token_nft_id INTEGER, base_fee REAL, input_len INTEGER, input, '
+            self.db.create_table('transaction_transfers', 'id integer primary key autoincrement, type INTEGER, idx INTEGER, transaction_id INTEGER, from_addr_id INTEGER, to_addr_id INTEGER, val REAL, token_id INTEGER, token_nft_id TEXT, base_fee REAL, input_len INTEGER, input, '
                                                           'custom_treatment, custom_rate REAL, custom_vaultid', drop=drop)
             self.db.create_index('transaction_transfers_idx', 'transaction_transfers', 'idx, transaction_id', unique=True)
 

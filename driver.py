@@ -17,9 +17,10 @@ from code.tax_calc import Calculator
 def update_rates_db():
     C = Coingecko()
     # C.download_symbols_to_db()
-    C.download_all_coingecko_rates()
+    C.download_all_coingecko_rates(reset=False) #reset true on first run, false on runs to correct errors
 
 if __name__ == "__main__":
+    # os.chdir('/home/ubuntu/hyperboloid')
     # update_rates_db()
     # exit(0)
     # S = Signatures()
@@ -46,8 +47,9 @@ if __name__ == "__main__":
 
     # address = '0x6867115787080d4e95cbcb6471fa85a9458a5e43' #subvert
     # address = '0x3401ea5a8d91c5e3944962c0148b08ac4a77f153' #so many nfts
+    # address = '0x641c2fef13fb417db01ef955a54904a6400f8b07' #delso
     name = 'ETH'
-    address_db = SQLite('addresses')
+    address_db = SQLite('addresses',do_logging=False)
     chain = Chain.from_name(name,address_db,address)
 
     # rs = chain.scrape_address_info('0xd603a49886c9b500f96c0d798aed10068d73bf7c')
@@ -65,8 +67,13 @@ if __name__ == "__main__":
     # print(progenitor)
     # exit(0)
     user = User(address)
-    # transactions = chain.get_transactions()
-    # user.store_transactions(chain,transactions)
+    # chain.scrape_erc1155(None)
+    # exit(0)
+
+
+    transactions = chain.get_transactions(pb=False)
+    exit(0)
+    user.store_transactions(chain,transactions)
 
 
     transactions = user.load_transactions(chain)
@@ -84,7 +91,7 @@ if __name__ == "__main__":
     C = Coingecko()
 
     t = time.time()
-    C.init_from_db(chain.main_asset, contract_list, address)
+    C.init_from_db(chain, contract_list, address)
     C.dump(chain)
     log('timing:coingecko init_from_db', time.time() - t)
 

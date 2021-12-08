@@ -120,9 +120,7 @@ function make_help_strings() {
             'to get the other version of them.</p>'+
             '<h4>Mint an NFT</h4><p>If you paid the mint price and got the NFT(s) in the same transaction, it\'s an exchange of one for the other. We should be able to infer '+
             'the mint price from the amount you spent. If you paid first, and received the NFT(s) later, you will need to set the payment transfer to "sell" and '+
-            'manually provide the mint price in the minting transaction.</p>'+
-            '<h4>Anything dealing with ERC-1155</h4><p>There is a small subset of NFT-related Ethereum transfers that Etherscan API currently does not support. You will need to '+
-            'manually create transactions for them. Your list is <a target=_blank href="https://etherscan.io/address/'+addr+'#tokentxnsErc1155">here</a>.</p>'
+            'manually provide the mint price in the minting transaction.</p>'
         }
     }
 }
