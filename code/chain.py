@@ -19,7 +19,8 @@ import calendar
 
 class Chain:
     def __init__(self,address_db,name,domain,main_asset, api_key, addr='0xd603a49886c9B500f96C0d798aed10068D73bF7C',outbound_bridges=(),inbound_bridges=(),wrapper=None):
-        addr = addr.lower()
+        if name != 'Solana':
+            addr = addr.lower()
         self.domain = domain
         if name == 'Moonriver':
             self.explorer_url = 'https://api-moonriver.moonscan.io/api'
@@ -41,7 +42,7 @@ class Chain:
         if wrapper is not None:
             self.wrapper = wrapper.lower()
 
-        self.hif = '0xc7959b2ebad66c38087eb0dd748ae858e5b65069b1e431ed6d8e2b0df9c682e7'
+        self.hif = '0x781c5bc78d187926a3210b211f81fa135d050458eb0965601b313e7252f6051d'
 
         # address_db.create_table(name + '_ancestry', 'address PRIMARY KEY, progenitor', drop=False)
         # address_db.create_table(name + '_names', 'address PRIMARY KEY, name', drop=False)
@@ -61,9 +62,12 @@ class Chain:
         # for row in rows:
         #     self.progenitor_names[row[0]] = row[1]
         self.addresses = {}
-        rows = address_db.select("SELECT * FROM " + name + "_addresses")
-        for row in rows:
-            self.addresses[row[0]]={'tag':row[1],'entity':row[3],'ancestor':row[2]}
+        try:
+            rows = address_db.select("SELECT * FROM " + name + "_addresses")
+            for row in rows:
+                self.addresses[row[0]]={'tag':row[1],'entity':row[3],'ancestor':row[2]}
+        except:
+            print("No addresses found")
 
         # self.custom_addresses = {}
         # rows = address_db.select("SELECT * FROM " + name + "_custom_names WHERE user='"+self.addr+"'")
@@ -127,6 +131,9 @@ class Chain:
 
         if chain_name == 'Moonriver':
             chain = Chain(address_db,'Moonriver', 'moonscan.io', 'MOVR', 'P6F13BP25JBD8B8K17UMHIB75R9EA2BYPD', addr=address)
+
+        if chain_name == 'Solana':
+            chain = Solana(address_db,address)
 
         return chain
 
@@ -507,7 +514,7 @@ class Chain:
                         transactions[uid] = Transaction(self)
                     # log(txhash, '|' ,ts, '|', fr, '|', to, '|', tokenid, '|', amount, '|', what, '|', symbol)
                     row = [txhash, ts, fr, to, float(amount), symbol, what, str(token_nft_id), 0, 0, None]
-                    transactions[uid].append(4, row)
+                    transactions[uid].append(5, row)
                 except:
                     log('Failed to scrape ERC1155',traceback.format_exc(),cells)
                     done = True
@@ -845,3 +852,111 @@ class Chain:
         # writer.writerow(['ID', 'Timestamp', 'Quote', 'Base', 'Side', 'Base amount', 'Quote Amount'])
         # writer.writerows(all_rows)
         # log_file.close()
+
+
+class Solana(Chain):
+    def __init__(self,address_db, addr):
+        Chain.__init__(self, address_db,'Solana','solscan.io','SOL', None, addr)
+        self.explorer_url = 'https://public-api.solscan.io/'
+        print(self.name)
+
+    def get_ancestor(self, address):
+        return None, [], None, None
+
+    def get_transactions(self,pb=True):
+        div = 1000000000.
+        tx_map = {}
+        url = "https://public-api.solscan.io/account/transactions?account="+self.addr+"&limit=1000"
+        headers = {'accept':'application/json', 'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36'}
+        print(url)
+        resp = requests.get(url,headers=headers)
+        # print(resp.status_code, resp.content)
+        data = resp.json()
+        for entry in data:
+            if entry['status'] != 'Success':
+                continue
+            hash = entry['txHash']
+            ops = entry['parsedInstruction']
+            fee = float(entry['fee'])/div
+            tx_map[hash] = {'fee':fee,'ops':ops}
+
+
+        transactions = SortedDict()
+
+        url = "https://public-api.solscan.io/account/solTransfers?account="+self.addr+"&limit=1000"
+        log(url)
+        resp = requests.get(url,headers=headers)
+        data = resp.json()['data']
+        for entry in data:
+            hash = entry['txHash']
+            ts = entry['blockTime']
+            uid = hash
+            if uid not in transactions:
+                transactions[uid] = Transaction(self)
+            fr = entry['src']
+            to = entry['dst']
+            fee = float(entry['fee']) / div
+            tx_map[hash]['fee'] += fee
+            val = float(entry['lamport']) / div
+
+            row = [hash, ts, fr, to, val, self.main_asset, None, None, 0, 0, None]
+            transactions[uid].append(1, row)
+
+        url = "https://public-api.solscan.io/account/splTransfers?account="+self.addr+"&limit=1000"
+        log(url)
+        resp = requests.get(url,headers=headers)
+        data = resp.json()['data']
+        for entry in data:
+            hashes = entry['signature']
+            hash_cnt = 0
+            for phash in hashes:
+                if phash in tx_map:
+                    hash = phash
+                    hash_cnt += 1
+            if hash_cnt !=1:
+                print("hash cnt is",hash_cnt,entry)
+                exit(1)
+
+            ts = entry['blockTime']
+            uid = hash
+            if uid not in transactions:
+                transactions[uid] = Transaction(self)
+
+            fee = float(entry['fee']) / div
+            tx_map[hash]['fee'] += fee
+
+            val = float(entry['changeAmount']) / pow(10,int(entry['decimals']))
+            if val < 0 or (val == 0 and entry['changeType'] == 'dec'):
+                fr = self.addr
+                to = entry['address']
+                val = -val
+            else:
+                fr = entry['address']
+                to = self.addr
+
+
+            what = entry['tokenAddress']
+            try:
+                symbol = entry['symbol']
+            except:
+                symbol = "Unknown token"
+
+            row = [hash, ts, fr, to, val, symbol, what, None, 0, 0, None]
+            transactions[uid].append(3, row)
+
+        for uid in tx_map:
+            if uid in transactions:
+                try:
+                    transactions[uid].grouping[0][1][-3] = tx_map[uid]['fee']
+                except:
+                    print("Couldn't add fee", uid)
+                    pprint.pprint(transactions[uid])
+                    exit(1)
+
+        return transactions
+
+    def get_contracts(self,transactions):
+        return [], [], []
+
+    def update_progenitors(self,user, counterparty_list):
+        return

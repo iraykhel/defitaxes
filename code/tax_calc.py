@@ -18,8 +18,9 @@ def timestamp_to_year(ts):
 
 def rate_pick(what, timestamp, running_rates, coingecko_rates):
     running_rate, running_ts = running_rates[what]
-    if running_rate != 0 and timestamp - running_ts < 3600:
+    if (running_rate != 0 and timestamp - running_ts < 3600) or ('_' in what):
         return running_rate
+
     good, coingecko_rate, source = coingecko_rates.lookup_rate(what,timestamp)
     if good >= 1:
         return coingecko_rate
@@ -351,7 +352,7 @@ class Loan:
 
 
 class CA_transaction:
-    def __init__(self,timestamp,what,symbol,amount,rate, txid, tridx, usd_fee=0,queue_only=False):
+    def __init__(self,timestamp,what,symbol,amount,rate, txid, tridx,  usd_fee=0,queue_only=False):
         if rate is None:
             rate = 0
         self.timestamp = timestamp
@@ -360,6 +361,10 @@ class CA_transaction:
         self.amount = amount
         self.rate = rate
         self.queue_only = queue_only
+        self.contract, self.nft_id = what, None
+        if '_' in what:
+            self.contract, self.nft_id = what.split("_")
+
         # if fee_amount is None:
         #     fee_amount = 0
         # if fee_rate is None:
@@ -408,6 +413,7 @@ class Calculator:
         self.eoy_mtm = None
 
     def buysell_everything(self,timestamp,totals, running_rates,sell=True,eoy=True):
+        log("mtm totals",timestamp,totals)
         transactions = []
         if sell and eoy:
             self.eoy_mtm = copy.deepcopy(totals)
@@ -490,8 +496,13 @@ class Calculator:
                     log('bad transfer',transfer)
                     exit(1)
                 symbol = transfer['symbol']
-                # if symbol == 'W' + self.chain.main_asset:
-                #     what = self.chain.main_asset
+
+                nft_id = transfer['token_nft_id']
+                if nft_id is not None:
+                    nft_id = str(nft_id)
+                    what += '_'+nft_id
+                    symbol += ' '+nft_id
+
 
                 rate = transfer['rate']
                 if rate is None:
@@ -504,26 +515,18 @@ class Calculator:
                 running_rates[what] = (rate,timestamp)
 
 
+                amount = transfer['amount']
+
 
                 if what not in totals:
-                    totals[what] = {'symbol':transfer['symbol'],'amount':0,'nft_ids':set()}
-                amount = transfer['amount']
-                nft_id = transfer['token_nft_id']
+                    totals[what] = {'symbol':symbol,'amount':0}
+
                 if transfer['outbound']:
                     outbound = True
                     totals[what]['amount'] -= amount
-                    if nft_id is not None and nft_id in totals[what]['nft_ids']:
-                        try:
-                            totals[what]['nft_ids'].remove(nft_id)
-                        except:
-                            log("erroring transfer",transfer)
-                            log(traceback.format_exc())
-                            exit(1)
-
                 else:
                     totals[what]['amount'] += amount
-                    if nft_id is not None:
-                        totals[what]['nft_ids'].add(nft_id)
+
                 if abs(totals[what]['amount']) < 1e-4:
                     del totals[what]
 
@@ -555,7 +558,7 @@ class Calculator:
 
                 if treatment == 'income':
                     self.incomes.append({'timestamp':timestamp,'text':'Yield farming or similar income', 'amount':amount*rate, 'txid':txid,'tridx':tridx})
-                    self.ca_transactions.append(CA_transaction(timestamp, what, symbol, amount, rate, txid,tridx, usd_fee=fee_amount_per_transaction))
+                    self.ca_transactions.append(CA_transaction(timestamp, what, symbol, amount, rate, txid,tridx,usd_fee=fee_amount_per_transaction))
 
 
 
@@ -665,8 +668,6 @@ class Calculator:
         pprint.pprint(self.interest_payments)
 
     def matchup(self):
-        print("YOYO", len(self.ca_transactions))
-        pprint.pprint(self.ca_transactions)
         queues = {}
         modes = {}
         CA_short = []
@@ -677,10 +678,13 @@ class Calculator:
             queue_only = ca_trans.queue_only
             what = ca_trans.what
             symbol = ca_trans.symbol
+
+
             if what not in queues:
                 queues[what] = []
                 modes[what] = 1
             q = queues[what]
+            log("trans",ca_trans,"q","current q",q)
             mode = modes[what]
 
             amount = ca_trans.amount
@@ -736,11 +740,12 @@ class Calculator:
                                                'basis':basis,'sale':amount*rate,'out_txid':txid,'out_tridx':tridx, 'in_txid':CA_in.txid, 'in_tridx':CA_in.tridx}
 
                                     fees = 0
-                                amount = 0
+
 
                                 CA_in.amount -= amount
                                 if CA_in.amount*CA_in.rate < 0.01 and CA_in.rate != 0:
                                     del q[0]
+                                amount = 0
                             else:
                                 if not queue_only:
                                     prop_out = CA_in.amount / amount
@@ -897,17 +902,17 @@ class Calculator:
                 form_file.close()
 
                 if self.eoy_mtm is not None:
-                    form_file = open(path + 'mark_to_market_eoy_holdings.txt', 'w')
-                    file_list.append('mark_to_market_eoy_holdings.txt')
+                    form_file = open(path + 'mark_to_market_eoy_'+str(year-1)+'_holdings.txt', 'w')
+                    file_list.append('mark_to_market_eoy_'+str(year-1)+'_holdings.txt')
 
                     writer = csv.writer(form_file)
                     writer.writerow(['Description of property'])
-                    #totals[what] = {'symbol':transfer['symbol'],'amount':0,'nft_ids':set()}
                     rows = []
                     for what,entry in self.eoy_mtm.items():
-                        desc = str(entry['amount'])+' units of '+entry['symbol']+' ('+what+')'
-                        if len(entry['nft_ids']) != 0:
-                            desc += ', NFT IDs:'+str(list(entry['nft_ids']))
+                        contract = what
+                        if "_" in what:
+                            contract, nft_id = what.split("_")
+                        desc = str(entry['amount'])+' units of '+entry['symbol']+' ('+contract+')'
                         rows.append([desc])
                     writer.writerows(rows)
                     form_file.close()

@@ -173,12 +173,16 @@ class Transaction:
 
             if token_contract is None:
                 token_contract = self.main_asset
+            lookup_rate_contract = token_contract
+            if type == 5:
+                lookup_rate_contract = token_contract + "_"+str(token_nft_id)
+
             if loaded_index is not None:
                 index = loaded_index
 
             # rate_found, rate, rate_source = coingecko_rates.lookup_rate(token_contract, ts)
             # coingecko_rates.verbose=True
-            rate_found, rate, rate_source = self.lookup_rate(user,coingecko_rates,token_contract,ts,index)
+            rate_found, rate, rate_source = self.lookup_rate(user,coingecko_rates,lookup_rate_contract,ts,index)
             # log("RATE LOOKUP",self.hash,token_contract,ts,rate_found,rate)
             # transfer = [index, type, fr, to, val, token_contract, input_len, rate_found, rate,base_fee == 0]
             # transfer = {'type':type, 'from':fr, 'to':to, 'amount':val, 'what':token_contract,'input_len':input_len, 'rate_found':rate_found, 'rate':rate}
@@ -426,15 +430,19 @@ class Transaction:
         symbols = {}
         for transfer in self.transfers:
             val = transfer.amount
+            lookup_contract = transfer.what
+            if transfer.type == 5: #multi-tokens are too different from each other to assume all same
+                lookup_contract = transfer.what + "_"+str(transfer.token_nft_id)
+
             if val > 0:
                 if transfer.treatment == 'buy':
                     in_cnt += 1
-                    amounts[transfer.what] += val
-                    symbols[transfer.what] = {'symbol': transfer.symbol, 'rate': transfer.rate, 'rate_found': transfer.rate_found, 'rate_source':transfer.rate_source}
+                    amounts[lookup_contract] += val
+                    symbols[lookup_contract] = {'symbol': transfer.symbol, 'rate': transfer.rate, 'rate_found': transfer.rate_found, 'rate_source':transfer.rate_source}
                 elif transfer.treatment == 'sell':
                     out_cnt += 1
-                    amounts[transfer.what] -= val
-                    symbols[transfer.what] = {'symbol': transfer.symbol, 'rate': transfer.rate, 'rate_found': transfer.rate_found, 'rate_source':transfer.rate_source}
+                    amounts[lookup_contract] -= val
+                    symbols[lookup_contract] = {'symbol': transfer.symbol, 'rate': transfer.rate, 'rate_found': transfer.rate_found, 'rate_source':transfer.rate_source}
         if self.hash == self.chain.hif:
             log('infer_and_adjust_rates symbols',symbols)
         combo = (out_cnt, in_cnt)
@@ -536,13 +544,20 @@ class Transaction:
                         rate_source = "inferred"
                     else:
                         rate_source = "inferred from " + str(worst_inferrer)
-                    for transfer in self.lookup({'what':add_rate_for}):
+
+                    lookup_what = add_rate_for
+                    if '_' in add_rate_for:
+                        lookup_what = add_rate_for[:add_rate_for.index('_')]
+
+                    if do_print:
+                        print("lookup_what",lookup_what)
+                    for transfer in self.lookup({'what':lookup_what}):
                         transfer.rate = inferred_rate
                         transfer.rate_found = worst_inferrer
                         transfer.rate_source = rate_source
-                        log("changing rate ",self.hash,transfer.index)
-                        # user.add_rate(self.txid, transfer.index, inferred_rate, 'inferred', 1)
-                    # coingecko_rates.add_rate(add_rate_for, symbols[add_rate_for]['symbol'], self.ts, inferred_rate)
+                        if do_print:
+                            print("changing rate ",self.hash,transfer)
+
 
 
                     # if self.type not in ['remove liquidity', 'add liquidity']:

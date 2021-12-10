@@ -748,6 +748,7 @@ $(function() {
                 scanner = chain_info['scanner'];
                 base_token = chain_info['base_token'];
                 scanner_name = chain_info['scanner_name'];
+                prev_selection = null;
                 if (addr[0] !=0 || addr[1] != 'x' || addr.length != 42) {
                     $('#content').html('Not a valid address');
                     return

@@ -368,6 +368,7 @@ function process_errors(CA_errors, txid=null) {
 //        if (!('additional_notes' in all_transactions[txid]))
 //            all_transactions[txid]['additional_notes'] = []
         el.removeClass('t_class_ca t_class_ca_0 t_class_ca_3 t_class_ca_5')
+        console.log("orig color",txid)
         if (level < all_transactions[txid]['original_color'])
             el.addClass('t_class_ca t_class_ca_'+level)
 
@@ -448,10 +449,16 @@ $('body').on('change','#matchups_visible',function() {
 //}
 
 
+function compare_ts(tx1,tx2) {
+    if (tx1.ts < tx2.ts) return -1;
+    return 1;
+}
+
 function calc_tax() {
     $(document.body).css({'cursor' : 'wait'});
 
     data = $.map(all_transactions, function(value, key) { return value });
+    data.sort(compare_ts);
     data = JSON.stringify(data);
 
     address = window.sessionStorage.getItem('address');

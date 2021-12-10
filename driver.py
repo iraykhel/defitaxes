@@ -33,6 +33,7 @@ if __name__ == "__main__":
     # # C.download_symbols_to_db()
     # C.download_all_coingecko_rates()
     address = '0xd603a49886c9b500f96c0d798aed10068d73bf7c'
+    # address = '95iZStZPdxWoKUfinEtxq8X7SfTn496D1tKDiUuyNeqC' #solana
 
     # chain = Chain('ETH', 'https://api.etherscan.io/api', 'ETH', 'ABGDZF9A4GIPCHYZZS4FVUBFXUPXRDZAKQ',
     #               outbound_bridges=['0XA0C68C638235EE32657E8F720A23CEC1BFC77C77',  # polygon
@@ -48,9 +49,14 @@ if __name__ == "__main__":
     # address = '0x6867115787080d4e95cbcb6471fa85a9458a5e43' #subvert
     # address = '0x3401ea5a8d91c5e3944962c0148b08ac4a77f153' #so many nfts
     # address = '0x641c2fef13fb417db01ef955a54904a6400f8b07' #delso
-    name = 'ETH'
+
+
+    name = 'Solana'
     address_db = SQLite('addresses',do_logging=False)
     chain = Chain.from_name(name,address_db,address)
+
+
+
 
     # rs = chain.scrape_address_info('0xd603a49886c9b500f96c0d798aed10068d73bf7c')
     # print(rs)
@@ -66,17 +72,17 @@ if __name__ == "__main__":
     # progenitor = chain.get_progenitor('0x97efe8470727fee250d7158e6f8f63bb4327c8a2', address_db)
     # print(progenitor)
     # exit(0)
-    user = User(address)
+    user = User(address,do_logging=False)
     # chain.scrape_erc1155(None)
     # exit(0)
 
 
     transactions = chain.get_transactions(pb=False)
-    exit(0)
-    user.store_transactions(chain,transactions)
+    # user.store_transactions(chain,transactions)
 
 
     transactions = user.load_transactions(chain)
+
 
     contract_list, counterparty_list, input_list = chain.get_contracts(transactions)
 
@@ -106,9 +112,9 @@ if __name__ == "__main__":
     # print('all transactions')
     # print(transactions)
 
-    C = Coingecko.init_from_cache(chain)
-    calculator = Calculator(user,chain,C,mtm=True)
-    tax_info = calculator.process_transactions(transactions)
-    calculator.matchup()
+    # C = Coingecko.init_from_cache(chain)
+    # calculator = Calculator(user,chain,C,mtm=True)
+    # tax_info = calculator.process_transactions(transactions)
+    # calculator.matchup()
 
     # calculator.summary(CA_short)

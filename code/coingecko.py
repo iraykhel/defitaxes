@@ -46,7 +46,8 @@ class Coingecko:
             'Fantom':{'platform':'fantom','id':'fantom'},
             'BSC':{'platform':'binance-smart-chain','id':'binancecoin'},
             'HECO':{'platform':'huobi-token','id':'huobi-token'},
-            'Moonriver':{'platform':'moonriver','id':'moonriver'}
+            'Moonriver':{'platform':'moonriver','id':'moonriver'},
+            'Solana':{'platform':'solana','id':'solana'}
         }
 
         #symbol->coingecko id

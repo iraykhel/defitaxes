@@ -13,7 +13,7 @@ import json, csv
 
 class User:
 
-    def __init__(self,address):
+    def __init__(self,address, do_logging=True):
         address = address.lower()
         self.address = address
 
@@ -27,7 +27,7 @@ class User:
 
         init_logger(address)
 
-        self.db = SQLite('users/' + address+'/db')
+        self.db = SQLite('users/' + address+'/db',do_logging=do_logging)
 
         drop = False
         if first_run:
@@ -599,7 +599,7 @@ class User:
         js = json.load(f)
         f.close()
         color_map = {0:'red',3:'orange',5:'yellow',10:'green'}
-        type_map = {1:'base token transfer',2:'internal transfer',3:'ERC20 transfer',4:'ERC721 (NFT) transfer'}
+        type_map = {1:'base token transfer',2:'internal transfer',3:'ERC20 transfer',4:'ERC721 (NFT) transfer',5:'ERC1155 (multi-token) transfer'}
         csv_rows = []
         for T in js:
             if 'custom_color_id' in T:
@@ -628,7 +628,10 @@ class User:
                 vault_id = ''
                 if treatment in ['deposit','withdraw','exit','borrow','repay','full_repay']:
                     vault_id = t['vault_id']
-                transfer = [t['fr'],t['to'],t['amount'],t['what'],t['symbol'],t['token_nft_id'],type_map[t['type']],treatment,vault_id,rate]
+                nft_id = t['token_nft_id']
+                if nft_id is not None:
+                    nft_id = str(nft_id)
+                transfer = [t['fr'],t['to'],t['amount'],t['what'],t['symbol'],nft_id,type_map[t['type']],treatment,vault_id,rate]
 
                 csv_row = common + cp + transfer
                 csv_rows.append(csv_row)
@@ -636,7 +639,7 @@ class User:
         fields = ['timestamp','UTC datetime','transaction hash','color','classification',
                   'counterparty address','counterparty name',
                   'function hex signature','operation (decoded hex signature)',
-                  'source address','destination address','amount transfered','token contract address','token symbol','NFT ID','transfer type','tax treatment','vault id','USD rate']
+                  'source address','destination address','amount transfered','token contract address','token symbol','token unique ID','transfer type','tax treatment','vault id','USD rate']
 
         path = 'data/users/' + self.address + '/transactions_' + chain_name + '.csv'
         f = open(path, 'w')
