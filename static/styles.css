@@ -855,20 +855,20 @@ div.item_header:hover {
 }
 
 div.item_header {
-    height:18px;
+    position:relative;
     cursor:pointer;
     padding:3px;
 }
 
 div.item_id {
-    float:left;
-    max-width:160px;
     text-align:left;
     overflow:hidden;
 }
 
 div.inspect_item_ic {
-    float:right;
+    position:absolute;
+    top:0px;
+    right:0px;
     width:16px;
     height:16px;
     background-image: url(icons.png);

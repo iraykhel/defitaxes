@@ -142,7 +142,7 @@ class Vault:
                     if other_usd_amt > usd_amt:
                         other_sold = usd_amt / other_rate
                         if amount * rate > 0.01:
-                            print("WITHDRAW:CONVERSION: bought", amount,'of',symbol,', sold',other_sold,'of',other_symbol)
+                            log(self.id,"WITHDRAW:CONVERSION: bought", amount,'of',symbol,', sold',other_sold,'of',other_symbol)
                             self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'conversion',
                                                  'from': {'what':other_tok, 'amount': other_sold}, 'to':{'what':what, 'amount': amount}})
                             trades.append(CA_transaction(timestamp, what, symbol, amount, rate, txid, tridx))
@@ -156,11 +156,11 @@ class Vault:
                         try:
                             amount_bought = other_usd_amt / rate
                         except:
-                            log("EXCEPTION",traceback.format_exc(),what,symbol,running_rates[what])
+                            log(self.id,"EXCEPTION",traceback.format_exc(),what,symbol,running_rates[what])
                             log(transaction)
                             amount_bought = other_usd_amt
                             # exit(1)
-                        print("WITHDRAW:CONVERSION: bought", amount_bought, 'of', symbol, ', sold', other_available, 'of', other_symbol)
+                        log(self.id,"WITHDRAW:CONVERSION: bought", amount_bought, 'of', symbol, ', sold', other_available, 'of', other_symbol)
                         self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'conversion',
                                              'from': {'what': other_tok, 'amount': other_available}, 'to': {'what': what, 'amount': amount_bought}})
                         trades.append(CA_transaction(timestamp, what, symbol, amount_bought, rate, txid, tridx))
@@ -182,9 +182,9 @@ class Vault:
         #if we're out of money, the rest is profit
         self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'withdraw', 'what': orig_what, 'amount': orig_amount})
         if amount > 0:
-            print("WITHDRAW:NOT ENOUGH HOLDINGS")
+            log(self.id,"WITHDRAW:NOT ENOUGH HOLDINGS")
             incomes.append({'timestamp':timestamp,'text':'Income upon closing a vault', 'amount':amount*rate, 'txid':txid,'tridx':tridx})
-            print("WITHDRAW:profit ", amount, 'of', symbol)
+            log(self.id,"WITHDRAW:profit ", amount, 'of', symbol)
             self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'income on exit', 'what': what, 'amount': amount})
             trades.append(CA_transaction(timestamp, what, symbol, amount, rate, txid, tridx, usd_fee))
             close = 1
@@ -192,6 +192,7 @@ class Vault:
             #     self.warnings.append({'txid': transaction['txid'], 'tridx': tridx, 'text': 'Withdrawing from an empty vault', 'level':0})
 
             if amount * rate > self.usd_max * 0.3:
+                log(self.id,"Issuing withdrawal warning",amount*rate,self.usd_max)
                 self.warnings.append({'txid': transaction['txid'], 'tridx': tridx, 'text':'Vault income on exit is over 30% of maximum investment', 'level':3})
         else:
             close = 0
@@ -201,26 +202,35 @@ class Vault:
             log('withdrawal', self.id,remaining_usd,vault_empty,vault_bad_rate,exit)
             if (remaining_usd < 0.001 * self.usd_max and not vault_bad_rate) or vault_empty or exit:
                 close = 1
-                for transfer in transaction['rows']: #make sure it's the last transfer in transaction mentionining this vault
-                    other_vault_id,_ = decustom(transfer['vault_id'])
-                    other_treatment,_ = decustom(transfer['treatment'])
 
-                    if transfer['index'] > tridx and other_vault_id == self.id and other_treatment in ['withdraw','deposit','exit']:
-                        close = 0
-                        break
 
-                if close:
-                    for loss_tok,loss_amt in self.holdings.items():
-                        if loss_amt > 0:
-                            print("WITHDRAW:fee loss on exit ", loss_amt, 'of', self.symbols[loss_tok])
-                            self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'loss on exit', 'what': loss_tok, 'amount': loss_amt})
-                            trades.append(CA_transaction(timestamp, loss_tok, self.symbols[loss_tok], -loss_amt, 0, txid, tridx))
+
+
 
         if close:
-            self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'vault closed'})
-            self.holdings = {}
-            self.usd_total = 0
-            self.usd_max = 0
+            log(self.id, "closing vault,checking transfers in same transaction", transaction['hash'])
+            for transfer in transaction['rows']:  # make sure it's the last transfer in transaction mentionining this vault
+                other_vault_id, _ = decustom(transfer['vault_id'])
+                other_treatment, _ = decustom(transfer['treatment'])
+                log(self.id, "closing vault,checking transfers in same transaction", transfer['index'], tridx, other_vault_id, other_treatment)
+
+                if transfer['index'] > tridx and other_vault_id == self.id and other_treatment in ['withdraw', 'deposit', 'exit']:
+                    log(self.id, "preventing close")
+                    close = 0
+                    break
+
+            if close:
+                for loss_tok, loss_amt in self.holdings.items():
+                    if loss_amt > 0:
+                        log(self.id, "WITHDRAW:fee loss on exit ", loss_amt, 'of', self.symbols[loss_tok])
+                        self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'loss on exit', 'what': loss_tok, 'amount': loss_amt})
+                        trades.append(CA_transaction(timestamp, loss_tok, self.symbols[loss_tok], -loss_amt, 0, txid, tridx))
+
+                log(self.id,"vault closed in tx ",transaction['hash'])
+                self.history.append({'txid': transaction['txid'], 'tridx': tridx, 'action': 'vault closed'})
+                self.holdings = {}
+                self.usd_total = 0
+                self.usd_max = 0
 
         return trades, incomes, close
 
@@ -281,6 +291,7 @@ class Loan:
 
     def repay(self, transaction,tridx, what,symbol,amount, running_rates, coingecko_rates, usd_fee, exit=False):
         txid = transaction['txid']
+        trades = []
 
         if what not in self.loaned:
             self.symbols[what] = symbol
@@ -306,18 +317,20 @@ class Loan:
         if amount > 0:
             print("REPAY LOAN:REPAYING MORE THAN LOANED")
             interest_payments.append({'timestamp': timestamp, 'text': 'Interest on a loan', 'amount': amount * rate, 'txid': transaction['txid'],'tridx':tridx})
+            rate = rate_pick(what, timestamp, running_rates, coingecko_rates)
+            trades.append(CA_transaction(timestamp, what, symbol, -amount, rate, txid, tridx, queue_only=True)) #loss of assets
             self.history.append({'txid': txid, 'tridx': tridx, 'action': 'pay interest', 'what': what, 'amount': amount})
 
             print("REPAY:interest ", amount, 'of', symbol)
 
 
-        trades = []
-        if exit:  #assuming we were liquidated, acquire the rest of the loan at market prices
+
+        if exit:  #assuming we were liquidated, acquire the rest of the loan for free
             for what, amt in self.loaned.items():
                 if amt != 0:
                     rate = rate_pick(what, timestamp, running_rates, coingecko_rates)
-                    self.history.append({'txid': txid, 'tridx': tridx, 'action': 'buy loaned', 'what': what, 'amount': amt, 'rate': rate})
-                    trades.append(CA_transaction(timestamp, what, self.symbols[what], amt, rate, txid, tridx))
+                    self.history.append({'txid': txid, 'tridx': tridx, 'action': 'buy loaned', 'what': what, 'amount': amt, 'rate': 0})
+                    trades.append(CA_transaction(timestamp, what, self.symbols[what], amt, 0, txid, tridx))
             self.loaned = {}
 
         for what, amt in self.loaned.items():

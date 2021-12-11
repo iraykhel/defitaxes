@@ -55,7 +55,7 @@ class Category:
     }
 
 
-    def __init__(self,category=0, claim_reward=False, nft=False, certainty=10, custom_type=None):
+    def __init__(self,category=0, claim_reward=False, nft=False, certainty=10, custom_type=None,protocol=None):
         self.category = category
         self.claim = claim_reward
         self.certainty = certainty
@@ -63,6 +63,7 @@ class Category:
             self.claim = True
         self.nft = nft
         self.custom_type = custom_type
+        self.protocol = protocol
 
 
     def __str__(self):
@@ -79,6 +80,8 @@ class Category:
 
         if self.nft:
             rv += " (NFT-related)"
+        if self.protocol:
+            rv += " ON "+self.protocol
         return rv
 
     def __repr__(self):

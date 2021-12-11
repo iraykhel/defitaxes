@@ -632,6 +632,10 @@ function make_transaction_html(transaction,idx=null,len=null) {
         }
     }
 
+    let other_notes = []
+    if ('protocol_note' in transaction)
+        other_notes.push(transaction['protocol_note'])
+
     type_class = "";
     type = transaction['type'];
     if (type == null) {
@@ -683,6 +687,10 @@ function make_transaction_html(transaction,idx=null,len=null) {
 
     for (let symbol in rate_struct) {
         transaction_html += "<div class='note node_"+rate_struct[symbol]['level']+"'>Note: "+rate_struct[symbol]['text']+"</div>";
+    }
+
+    for (let note of other_notes) {
+        transaction_html += "<div class='note'>Note: "+note+"</div>";
     }
 
     transaction_html += "</div>";

@@ -93,7 +93,7 @@ class Coingecko:
         chain_name = chain.name
 
 
-        db = SQLite('db')
+        db = SQLite('db',do_logging=False)
         rows = db.select("select symbols.id, symbol, name, platform, address from symbols, platforms where symbols.id = platforms.id")
 
         for row in rows:

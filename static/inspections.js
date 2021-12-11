@@ -93,6 +93,7 @@ $('body').on('click','#vaults_inspect,#loans_inspect', function() {
     for (mwr in mwr_mapping) {
         if (mwr in ids_by_mwr) {
             vault_ids = ids_by_mwr[mwr];
+            vault_ids.sort();
             for (let vault_id of vault_ids) {
                 html += "<li class='"+which+"'><div class='item_header t_class_"+mwr+"'><div class='item_id'>"+vault_id+"</div><div class='inspect_item_ic'></div></div></li>";
             }
@@ -110,8 +111,13 @@ $('body').on('click','#vaults_inspect_all,#loans_inspect_all', function() {
         lst = vault_data;
         which = 'vault';
     }
-    let html = "<ul class='item_list'>";
+    vault_list = [];
     for (let vault_id in lst) {
+        vault_list.push(vault_id)
+    }
+    vault_list.sort()
+    let html = "<ul class='item_list'>";
+    for (let vault_id of vault_list) {
         mwr = lst[vault_id]['mwr'];
         html += "<li class='"+which+"'><div class='item_header t_class_"+mwr+"'><div class='item_id'>"+vault_id+"</div><div class='inspect_item_ic'></div></div></li>";
     }

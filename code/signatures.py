@@ -11,7 +11,7 @@ class Signatures:
         self.signatures = {}
 
     def download_signatures_to_db(self, endid=197245):
-        db = SQLite('db')
+        db = SQLite('db',do_logging=False)
         db.create_table('signatures', 'id INTEGER PRIMARY KEY, created_at, text_signature, hex_signature', drop=False)
         db.create_index('signatures_i1', 'signatures', 'hex_signature')
 
@@ -45,7 +45,7 @@ class Signatures:
         return hex_sig
 
     def init_from_db(self, input_list):
-        db = SQLite('db')
+        db = SQLite('db',do_logging=False)
         mapping = {}
         for input in input_list:
             hex_sig = self.input_to_sig(input)

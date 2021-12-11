@@ -231,16 +231,16 @@ class Transaction:
             if len(counter_parties) == 0:
                 counter_parties = potentates
         self.counter_parties = counter_parties
-
-        if len(self.counter_parties):
-            cp_name = list(self.counter_parties.values())[0][0]
-        else:
-            cp_name = "UNKNOWN "
-        for transfer in self.transfers:
-            if transfer.outbound:
-                transfer.vault_id = cp_name[:6] + " " + transfer.to[2:8]  # to
-            else:
-                transfer.vault_id = cp_name[:6] + " " + transfer.fr[2:8]  # fr
+        #
+        # if len(self.counter_parties):
+        #     cp_name = list(self.counter_parties.values())[0][0]
+        # else:
+        #     cp_name = "UNKNOWN "
+        # for transfer in self.transfers:
+        #     if transfer.outbound:
+        #         transfer.vault_id = cp_name[:6] + " " + transfer.to[2:8]  # to
+        #     else:
+        #         transfer.vault_id = cp_name[:6] + " " + transfer.fr[2:8]  # fr
 
 
         # _, self.main_asset_rate, rate_source = coingecko_rates.lookup_rate(self.main_asset, self.ts)
@@ -688,6 +688,9 @@ class Transaction:
 
         if self.manual:
             js['manual'] = self.manual
+
+        if hasattr(self,'protocol_note'):
+            js['protocol_note'] = self.protocol_note
 
         rows = []
         for t in self.transfers:
