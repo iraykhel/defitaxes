@@ -259,6 +259,7 @@ div#progressbar {
 div.transfers {
     padding:10px;
     display:inline-block;
+    /*display:none;*/
     background-color:rgba(0,0,0,0.03);
     border-radius:10px;
 }
@@ -331,6 +332,12 @@ div.secondary_selected {
 
 div.select_similar {
     margin-top: 10px;
+    max-width:1000px;
+}
+
+div.select_similar label {
+    display:inline-block;
+    margin-right:10px;
 }
 
 div.select_similar label {

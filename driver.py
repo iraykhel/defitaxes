@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # C = Coingecko()
     # # C.download_symbols_to_db()
     # C.download_all_coingecko_rates()
-    address = '0xd603a49886c9b500f96c0d798aed10068d73bf7c'
+    # address = '0xd603a49886c9b500f96c0d798aed10068d73bf7c'
     # address = '95iZStZPdxWoKUfinEtxq8X7SfTn496D1tKDiUuyNeqC' #solana
 
     # chain = Chain('ETH', 'https://api.etherscan.io/api', 'ETH', 'ABGDZF9A4GIPCHYZZS4FVUBFXUPXRDZAKQ',
@@ -49,9 +49,10 @@ if __name__ == "__main__":
     # address = '0x6867115787080d4e95cbcb6471fa85a9458a5e43' #subvert
     # address = '0x3401ea5a8d91c5e3944962c0148b08ac4a77f153' #so many nfts
     # address = '0x641c2fef13fb417db01ef955a54904a6400f8b07' #delso
+    address = '0x6f69f79cea418024b9e0acfd18bd8de26f9bbe39'  #cap
 
 
-    name = 'Solana'
+    name = 'ETH'
     address_db = SQLite('addresses',do_logging=False)
     chain = Chain.from_name(name,address_db,address)
 
@@ -77,7 +78,7 @@ if __name__ == "__main__":
     # exit(0)
 
 
-    transactions = chain.get_transactions(pb=False)
+    # transactions = chain.get_transactions(pb=False)
     # user.store_transactions(chain,transactions)
 
 

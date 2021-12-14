@@ -1,5 +1,5 @@
 scroll_position = null;
-
+fast_mode = false;
 all_transactions = {}
 
 all_symbols = {}
@@ -20,12 +20,12 @@ lookup_info = {
     outbound_count_mapping: {
 
     },
-    inbound_token_mapping: {
-
-    },
-    outbound_token_mapping: {
-
-    },
+//    inbound_token_mapping: {
+//
+//    },
+//    outbound_token_mapping: {
+//
+//    },
     address_mapping: {
 
     },
@@ -98,14 +98,21 @@ function display_hash(zerox, my_addr=null, name='address') {
     return html;
 }
 
-function display_token(token_name, token_address, nft_id) {
+function display_token(token_name, token_address, nft_id, copiable=true) {
     let html = "";
     if (token_name == token_address || token_address == null)
         html = token_name;
-    else
-        html = "<span class='token copiable' title='Copy token address' full='"+token_address+"'>"+token_name+"</span>";
-    if (nft_id != null)
-        html += " <span class='copiable' title='Copy NFT ID to clipboard' full='"+nft_id+"'>"+startend(nft_id)+"</span>"
+    else {
+        if (copiable)
+            html += "<span class='token copiable' title='Copy token address' full='"+token_address+"'>"
+        html += token_name
+        if (copiable) html += "</span>";
+    }
+    if (nft_id != null) {
+        if (copiable) html += " <span class='copiable' title='Copy NFT ID to clipboard' full='"+nft_id+"'>"; else html += " ";
+        html += startend(nft_id);
+        if (copiable) html += "</span>"
+    }
     return html;
 }
 
@@ -267,15 +274,17 @@ function map_lookups(transaction, unmap_instead=false) {
         if (row['to'] != null) { //network fee
             token_contract = row['what'];
             if (row['outbound']) {
-                func('outbound_token',token_contract,txid);
+//                func('outbound_token',token_contract,txid);
                 outbound_count += 1;
                 other_address = row['to'];
             } else {
-                func('inbound_token',token_contract,txid);
+//                func('inbound_token',token_contract,txid);
                 inbound_count += 1;
                 other_address = row['fr'];
             }
             func('token',token_contract,txid);
+            if (row['token_nft_id'] != null)
+                func('token_nft',token_contract+"_"+row['token_nft_id'],txid)
             if (other_address != '0x0000000000000000000000000000000000000000')
                 func('address',other_address,txid);
         }
@@ -299,7 +308,7 @@ function add_to_mapping(mapping_type, value, txid) {
     mapping[value].add(txid);
 
     transaction_list = lookup_info['transactions'];
-    lookups = ['counterparty','counterparty_name','signature','outbound_count','token','inbound_count','outbound_token','inbound_token','address'];
+    lookups = ['counterparty','counterparty_name','signature','outbound_count','token','inbound_count','address','token_nft']; //'outbound_token','inbound_token'
     if (!(txid in transaction_list)) {
         transaction_list[txid] = {}
         for (i = 0; i < lookups.length; i++)
@@ -312,7 +321,9 @@ function add_to_mapping(mapping_type, value, txid) {
 
 function remove_from_mapping(mapping_type,value,txid) {
     if (value == null) return;
+    console.log('rfm',value)
     mapping = lookup_info[mapping_type+"_mapping"];
+    console.log('rfm 2',mapping[value])
     mapping[value].delete(txid);
     transaction_list[txid][mapping_type].delete(value);
 }
@@ -361,33 +372,32 @@ function display_counterparty(transaction, editable=false) {
 
 }
 
-function del_transfer_val(transaction_id, transfer_idx, val_to_delete) {
+function find_transfer(transaction_id, transfer_idx) {
     transfers = all_transactions[transaction_id]['rows'];
     for (let transfer of transfers) {
         if (transfer['index']  == transfer_idx) {
-            delete transfer[val_to_delete];
+            return transfer;
             break;
         }
     }
+    return null
 }
 
 function set_transfer_val(transaction_id, transfer_idx, what, val, append=false) {
-    transfers = all_transactions[transaction_id]['rows'];
-    for (let transfer of transfers) {
-        if (transfer['index']  == transfer_idx) {
-            if (append) {
-                if (!(what in transfer))
-                    transfer[what] = [];
-                transfer[what].push(val);
-            } else
-                transfer[what] = val;
-            break;
-        }
+    let transfer = find_transfer(transaction_id,transfer_idx)
+    if (transfer != null) {
+        if (append) {
+            if (!(what in transfer))
+                transfer[what] = [];
+            transfer[what].push(val);
+        } else
+            transfer[what] = val;
     }
-
 }
 
 function display_transfers(transaction, editable=false) {
+    if (editable == false && fast_mode)
+        return "<div class=transfers style='display:none;'></div>";
 
     rows = transaction['rows'];
     rows_table = "<div class='transfers'><table class='rows'>";
@@ -589,7 +599,7 @@ function make_transaction_html(transaction,idx=null,len=null) {
                     min_color = 0;
                 rate_note(rate_struct,symbol,0,"Could not find rate of "+symbol+", assuming 0")
             }
-        } else {
+        } else if (!rate.toString().includes('custom:')) {
             let good_rate = row['rate_found'];
             let rate_source = row['rate_source'];
             if (rate_source.includes("inferred")) {
@@ -798,7 +808,11 @@ $(function() {
                             window.sessionStorage.setItem('address',addr);
                             window.sessionStorage.setItem('chain',chain);
 
-                            var all_html = "<div id='top_text'>Make sure to check red, orange, and yellow transactions.</div>";
+                            var all_html = "<div id='top_text'>Make sure to check red, orange, and yellow transactions."
+                            if (Object.keys(data['transactions']).length > 4000)
+                                all_html += "<p>You have a shitton of transactions. Everything's gonna be slow, sorry. "
+                                //"We can make it a bit faster by hiding information, try it? <label>Enable fast mode<input type=checkbox name=fast_mode></label></p>"
+                            all_html+="</div>";
 
                             for (let idx in data['transactions']) {
                                 let transaction = data['transactions'][idx];
@@ -902,13 +916,25 @@ function select_transaction(txel,keep_secondary=false) {
         }
 
         let local_tokens = {}
+        let local_nfts = {}
+        let local_nft_list = []
         for (let transfer of all_transactions[txid]['rows']) {
             if (transfer['to'] != null)
                 local_tokens[transfer['symbol']] = transfer['what'];
+            if (transfer['token_nft_id'] != null) {
+                let nft_html = display_token(transfer['symbol'],transfer['what'],transfer['token_nft_id'],copiable=false);
+                local_nft_list.push(nft_html)
+                local_nfts[nft_html] = transfer['what']+"_"+transfer['token_nft_id'];
+            }
         }
 
         for (let token_symbol in local_tokens)
             html += "<label><input type=checkbox class='sim_token' token_address='"+local_tokens[token_symbol]+"'>token:"+token_symbol+"</label>";
+
+        local_nft_list.sort()
+        for (let token_nft_symbol of local_nft_list) {
+            html += "<label><input type=checkbox class='sim_token_nft' token_nft_address='"+local_nfts[token_nft_symbol]+"'>NFT:"+token_nft_symbol+"</label>";
+        }
 
         html += "<div class='sim_buttons'><div class='select_similar_button'></div>";
         html += "<div class='undo_changes'>Undo custom changes</div>"
@@ -978,14 +1004,17 @@ function activate_clickables() {
     $('body').on('click','.cp',function() {
         if ($(this).find('input').length == 0) {
             console.log('yo');
-            progenitor = $(this).attr('progenitor');
+            let progenitor = $(this).attr('progenitor');
+            let cp_name_el = $(this)
+            let current_name = cp_name_el.text()
+
+
             txid = $(this).closest('.transaction').attr('id').substr(2);
             matches = lookup_info["counterparty_mapping"][progenitor];
 //            count = progenitor_counts[progenitor];
             count = matches.size;
             ac_html = "<form class='ac_wrapper'><input type=text class='cp_enter'><input type=submit class='apply_ac' value='Apply to "+count+" transactions'/><button class='cancel'>Cancel</button><form>";
-            cp_name_el = $(this)
-            current_name = cp_name_el.text()
+
             cp_name_el.empty()
             cp_name_el.append(ac_html);
 //            cp_name_el.find('.autocomplete_list').autocomplete({source: counterparty_list});
@@ -1028,6 +1057,8 @@ function activate_clickables() {
                                         transaction_counterparties[progenitor][0] = cp;
                                 }
                                 console.log("remove_from_mapping",current_name,o_txid);
+                                if (current_name == 'unknown')
+                                    current_name = progenitor
                                 remove_from_mapping('counterparty_name',current_name,o_txid);
                                 console.log("add_to_mapping",cp,o_txid);
                                 add_to_mapping('counterparty_name',cp,o_txid);
@@ -1046,10 +1077,12 @@ function activate_clickables() {
         }
     });
 
+
+
     $('body').on('change','.treatment, .row_rate, .row_vaultid',function() {
         el = $(this);
-        td = $(this).closest('td')
-        td.addClass('custom');
+//        td = $(this).closest('td')
+//        td.addClass('custom');
         txel = $(this).closest('.transaction');
         t_id = txel.attr('id');
         txid = t_id.substr(2);
@@ -1059,29 +1092,34 @@ function activate_clickables() {
 
         if ($(this).hasClass('treatment')) {
             console.log("update treatment, transaction",txid,'transfer index',tr_idx,'val',val);
-            data = 'transaction='+txid+"&transfer_idx="+tr_idx+"&custom_treatment="+val;
+//            data = 'transaction='+txid+"&transfer_idx="+tr_idx+"&custom_treatment="+val;
             prop = 'treatment'
         } else if ($(this).hasClass('row_rate')) {
             console.log("update rate, transaction",txid,'transfer index',tr_idx,'val',val);
-            data = 'transaction='+txid+"&transfer_idx="+tr_idx+"&custom_rate="+val;
+//            data = 'transaction='+txid+"&transfer_idx="+tr_idx+"&custom_rate="+val;
             prop = 'rate'
         } else if ($(this).hasClass('row_vaultid')) {
             console.log("update vault id, transaction",txid,'transfer index',tr_idx,'val',val);
-            data = 'transaction='+txid+"&transfer_idx="+tr_idx+"&custom_vaultid="+val;
+//            data = 'transaction='+txid+"&transfer_idx="+tr_idx+"&custom_vaultid="+val;
             prop = 'vault_id'
         }
 
-         $.post("save_custom_val?chain="+chain+"&address="+addr, data, function(resp) {
-            console.log(resp);
-            var data = JSON.parse(resp);
-            if (data.hasOwnProperty('error')) {
-                td.append("<div class='err_mes'>"+data['error']+"</div>");
-            } else {
-                set_transfer_val(txid, tr_idx, prop, "custom:"+val);
-                need_recalc();
-                showib(txel.find('.undo_changes'));
-            }
-        });
+        multiple = change_multiple(txid, tr_idx, prop, val)
+
+//        $.post("save_custom_val?chain="+chain+"&address="+addr, data, function(resp) {
+//            console.log(resp);
+//            var data = JSON.parse(resp);
+//            if (data.hasOwnProperty('error')) {
+//                td.append("<div class='err_mes'>"+data['error']+"</div>");
+//            } else {
+//                set_transfer_val(txid, tr_idx, prop, "custom:"+val);
+//                need_recalc();
+//                showib(txel.find('.undo_changes'));
+//            }
+//        });
+        if (!multiple)
+            save_custom_val(txid,tr_idx,prop,val)
+
 
 
     });
@@ -1107,6 +1145,95 @@ function activate_clickables() {
 
 }
 
+function change_multiple(txid, tr_idx, prop, new_val) {
+    let transfer = find_transfer(txid,tr_idx)
+    let token = transfer['what'];
+    let symbol = transfer['symbol'];
+    let fr = transfer['fr'];
+    let to = transfer['to'];
+    let similar_transfers = [];
+    for (let other_transfer of all_transactions[txid]['rows']) {
+        if (other_transfer['index'] != tr_idx) {
+            let other_token = other_transfer['what'];
+            let other_fr = other_transfer['fr'];
+            let other_to = other_transfer['to'];
+//            console.log("sim check",tr_idx,other_transfer['index'],prop,token,other_token,fr,other_fr,to,other_to)
+            if (prop == 'rate' && token == other_token && other_to != null) {
+                similar_transfers.push(other_transfer['index'])
+            }
+
+            else if (token == other_token && other_fr == fr && other_to == to) {
+                similar_transfers.push(other_transfer['index'])
+            }
+        }
+    }
+    console.log("sim len",similar_transfers.length);
+
+    if (similar_transfers.length > 0) {
+        let prop_map = {'rate':'rate','treatment':'tax treatment','vault_id':'Vault/loan ID'}
+        let html ="<div id='overlay'></div><div id='popup' class='popup'><form id='change_val_multi'>"
+        let plural = "";
+        if (similar_transfers.length > 1)
+            plural = "s";
+        html += "<input type=hidden id=cm_txid value="+txid+"> ";
+        html += "<input type=hidden id=cm_tr_idx value="+tr_idx+"> ";
+        html += "<input type=hidden id=cm_tr_idx_str value='"+similar_transfers.join(',')+','+tr_idx+"'> ";
+        html += "<input type=hidden id=cm_prop value="+prop+"> ";
+        html += "<input type=hidden id=cm_val value='"+new_val+"'> ";
+        if (prop == 'rate')
+            html += "Also change rate for "+similar_transfers.length+" other "+symbol+" transfer"+plural+" in this transaction?";
+        else
+            html += "Also change "+prop_map[prop]+" for "+similar_transfers.length+" similar other transfer"+plural+" in this transaction?";
+        html += "<div class='sim_buttons'>";
+        html += "<div id='change_val_multi_confirm'>Yes</div>";
+        html += "<div id='change_val_multi_deny'>No, just this one</div></div>";
+        html += "</form></div>";
+        $('#content').append(html);
+        return true;
+    }
+    return false;
+}
+
+$('body').on('click','#change_val_multi_confirm', function() {
+    save_custom_val($('#cm_txid').val(),$('#cm_tr_idx_str').val(),$('#cm_prop').val(),$('#cm_val').val())
+    $('#overlay').remove();
+    $('#popup').remove();
+});
+
+$('body').on('click','#change_val_multi_deny', function () {
+    save_custom_val($('#cm_txid').val(),$('#cm_tr_idx').val(),$('#cm_prop').val(),$('#cm_val').val())
+    $('#overlay').remove();
+    $('#popup').remove();
+});
+
+
+function save_custom_val(txid,tr_idx_str,prop,value) {
+    let data = 'transaction='+txid+"&transfer_idx="+tr_idx_str+"&prop="+prop+"&val="+value;
+    let prop_map = {'rate':'row_rate','treatment':'treatment','vault_id':'row_vaultid'}
+
+
+    $.post("save_custom_val?chain="+chain+"&address="+addr, data, function(resp) {
+        console.log(resp);
+        var data = JSON.parse(resp);
+        if (data.hasOwnProperty('error')) {
+            $('#t_'+txid).append("<div class='err_mes'>"+data['error']+"</div>");
+        } else {
+            let tr_idx_list = tr_idx_str.split(",")
+            for (let tr_idx of tr_idx_list) {
+                set_transfer_val(txid, tr_idx, prop, "custom:"+value);
+            }
+            let transfers_html = display_transfers(all_transactions[txid],true);
+            console.log('transfers_html',transfers_html);
+            $('#t_'+txid).find('.transfers').replaceWith(transfers_html);
+            need_recalc();
+            showib(txel.find('.undo_changes'));
+        }
+    });
+}
+
+
+
+
 function set_intersect(set1,set2) {
     if (set1 == null)
         return set2;
@@ -1131,7 +1258,11 @@ function find_similar_transactions(txid) {
     $(jqid).find('input:checked').each(function() {
         tin1 = performance.now();
         lookup = $(this).attr('class').substr(4);
-        if (lookup != 'token') {
+        if (lookup == 'token')
+            lookup_vals = [$(this).attr('token_address')];
+        else if (lookup == 'token_nft')
+            lookup_vals = [$(this).attr('token_nft_address')];
+        else {
             lookup_vals = lookup_info['transactions'][txid][lookup];
 
             if (lookup_vals.size == 0) {
@@ -1139,8 +1270,8 @@ function find_similar_transactions(txid) {
                 $(jqid).find('.current_sims').val('');
                 return;
             }
-        } else
-            lookup_vals = [$(this).attr('token_address')];
+        }
+
         console.log('lookup',lookup,'vals',lookup_vals);
 
         single_lookup_set = new Set();
@@ -1299,25 +1430,35 @@ function selection_operations(builtin_types,custom_types) {
     });
 
     $('#sel_opt_all').on('click',function() {
+        t1 = performance.now();
         if ($('#sel_opt_all').hasClass('sel_opt_chosen'))
             return;
 //        $(document.body).css({'cursor' : 'wait'});
         $('.sel_opt_chosen').removeClass('sel_opt_chosen');
         $(this).addClass('sel_opt_chosen');
+        t2 = performance.now();
         showib($('.transaction'));
+        t3 = performance.now();
         if (scroll_position != null)
             window.scrollTo(0,scroll_position);
+        t4 = performance.now();
+        console.log("Timing sel_opt_all",t2-t1,t3-t2,t4-t3)
 //        $(document.body).css({'cursor' : 'default'});
     });
 
     $('#sel_opt_sel').on('click',function() {
+        t1 = performance.now();
         if ($('#sel_opt_all').hasClass('sel_opt_chosen'))
             scroll_position = window.scrollY;
 //        $(document.body).css({'cursor' : 'wait'});
         $('.sel_opt_chosen').removeClass('sel_opt_chosen');
         $(this).addClass('sel_opt_chosen');
+        t2 = performance.now();
         showib($('.secondary_selected'));
+        t3 = performance.now();
         hide($('.transaction:not(.secondary_selected)'));
+        t4 = performance.now();
+        console.log("Timing sel_opt_sel",t2-t1,t3-t2,t4-t3)
 
 //        $(document.body).css({'cursor' : 'default'});
     });
@@ -1362,14 +1503,17 @@ function scroll_to(el) {
 
 function show(el) {
     el.css({'display':'block'});
+//    el.style.display = 'block';
 }
 
 function showib(el) {
     el.css({'display':'inline-block'});
+//    el.style.display = 'inline-block';
 }
 
 function hide(el) {
     el.css({'display':'none'});
+//    el.style.display = 'none';
 }
 
 

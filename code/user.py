@@ -429,16 +429,27 @@ class User:
     #     self.db.query('DELETE FROM rates')
     #     self.db.commit()
 
-    def save_custom_val(self,chain_name,address,transaction_id, transfer_idx, treatment=None, rate=None, vaultid = None):
-        where = 'transaction_id='+str(transaction_id)+' and idx='+str(transfer_idx)
-        if treatment is not None:
-            self.db.update_kw('transaction_transfers', where, custom_treatment=treatment)
-        if rate is not None:
-            self.db.update_kw('transaction_transfers', where, custom_rate=rate)
-        if vaultid is not None:
-            self.db.update_kw('transaction_transfers', where, custom_vaultid=vaultid)
-        self.db.commit()
+    # def save_custom_val(self,chain_name,address,transaction_id, transfer_idx, treatment=None, rate=None, vaultid = None):
+    #     where = 'transaction_id='+str(transaction_id)+' and idx='+str(transfer_idx)
+    #     if treatment is not None:
+    #         self.db.update_kw('transaction_transfers', where, custom_treatment=treatment)
+    #     if rate is not None:
+    #         self.db.update_kw('transaction_transfers', where, custom_rate=rate)
+    #     if vaultid is not None:
+    #         self.db.update_kw('transaction_transfers', where, custom_vaultid=vaultid)
+    #     self.db.commit()
 
+
+
+    def save_custom_val(self, chain_name, address, transaction_id, transfer_idx_str, prop, new_value):
+        where = 'transaction_id=' + str(transaction_id) + ' and idx IN (' + str(transfer_idx_str)+')'
+        if prop == 'treatment':
+            self.db.update_kw('transaction_transfers', where, custom_treatment=new_value)
+        if prop == 'rate':
+            self.db.update_kw('transaction_transfers', where, custom_rate=new_value)
+        if prop == 'vault_id':
+            self.db.update_kw('transaction_transfers', where, custom_vaultid=new_value)
+        self.db.commit()
 
     def undo_custom_changes(self,chain_name,address,transaction_id):
         # self.db.query("DELETE FROM custom_treatment WHERE transaction_id="+str(transaction_id))

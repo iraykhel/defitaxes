@@ -170,7 +170,7 @@ def process():
         log("EXCEPTION in process", address, chain_name, traceback.format_exc())
         data = {'error':'An error has occurred while processing transactions'}
     data = json.dumps(data)
-    progress_bar_update(address, 'Finished', 100)
+    progress_bar_update(address, 'Uploading to your browser', 100)
     # data.set_cookie('address', address + "|" + chain_name)
     return data
 
@@ -346,20 +346,23 @@ def save_custom_val():
         form = request.form
         address = request.args.get('address').lower()
         chain_name = request.args.get('chain')
-        transfer_idx = form['transfer_idx']
+        transfer_idx_str = form['transfer_idx']
         transaction = form['transaction']
+        prop = form['prop']
+        val = form['val']
 
-        custom_treatment = custom_rate = custom_vaultid = None
-        if 'custom_treatment' in form:
-            custom_treatment = form['custom_treatment']
-        if 'custom_rate' in form:
-            custom_rate = form['custom_rate']
-        if 'custom_vaultid' in form:
-            custom_vaultid = form['custom_vaultid']
+        # custom_treatment = custom_rate = custom_vaultid = None
+        # if 'custom_treatment' in form:
+        #     custom_treatment = form['custom_treatment']
+        # if 'custom_rate' in form:
+        #     custom_rate = form['custom_rate']
+        # if 'custom_vaultid' in form:
+        #     custom_vaultid = form['custom_vaultid']
 
-        log('apply_custom_val', address, transaction, transfer_idx,custom_treatment,custom_rate,custom_vaultid)
+        log('apply_custom_val', address, transaction, transfer_idx_str,prop,val,)
         user = User(address)
-        user.save_custom_val(chain_name,address,transaction, transfer_idx, treatment=custom_treatment, rate=custom_rate, vaultid=custom_vaultid)
+        user.save_custom_val(chain_name,address,transaction, transfer_idx_str, prop, val)
+        # user.save_custom_val(chain_name,address,transaction, transfer_idx, treatment=custom_treatment, rate=custom_rate, vaultid=custom_vaultid)
         js = {'success':1}
     except:
         log("EXCEPTION in save_custom_val", traceback.format_exc())

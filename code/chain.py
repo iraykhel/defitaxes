@@ -42,7 +42,7 @@ class Chain:
         if wrapper is not None:
             self.wrapper = wrapper.lower()
 
-        self.hif = '0x60b747cf1f9a5ce3d61aa278bd801ca0e99c2aec307a6ec7762c2612c45e54ca'
+        self.hif = '0xdc223b35ebb2a28537d3a29d0b2b7072dcde997f8af0466b224049120e31d441'
 
         # address_db.create_table(name + '_ancestry', 'address PRIMARY KEY, progenitor', drop=False)
         # address_db.create_table(name + '_names', 'address PRIMARY KEY, name', drop=False)
@@ -263,6 +263,30 @@ class Chain:
         return None, [], None, None
 
 
+    def get_all_transaction_from_api(self,action):
+        sb = '0'
+        done = False
+        all_data = []
+        tr_uids = set()
+        while not done:
+            url = self.explorer_url + '?module=account&action='+action+'&address=' + self.addr + '&apikey=' + self.api_key + '&sort=asc&startBlock='+sb
+            log("URL",url)
+            resp = requests.get(url)
+            data = resp.json()['result']
+            for entry in data:
+                uid = str(entry)
+                if uid not in tr_uids or entry['blockNumber'] != sb: #possible duplicates on rollover of a block
+                    all_data.append(entry)
+                if uid not in tr_uids:
+                    tr_uids.add(uid)
+
+            if len(data) < 10000:
+                done = True
+            else:
+                time.sleep(1)
+                sb = data[-1]['blockNumber']
+        return all_data
+
 
 
     def get_transactions(self,pb=True):
@@ -280,10 +304,21 @@ class Chain:
         # pprint.pprint(data)
         # exit(0)
 
-        url = self.explorer_url + '?module=account&action=txlist&address=' + self.addr + '&apikey=' + self.api_key + '&sort=asc'
-        log(url)
-        resp = requests.get(url)
-        data = resp.json()['result']
+        # url = self.explorer_url + '?module=account&action=txlist&address=' + self.addr + '&apikey=' + self.api_key + '&sort=asc&startBlock=12745041'
+        # log(url)
+        # resp = requests.get(url)
+        # data = resp.json()['result']
+        # print(len(data))
+        # print(data[0])
+        # print(data[-1])
+        # exit(0)
+
+        data = self.get_all_transaction_from_api('txlist')
+        # print(len(data))
+        # print(data)
+        # exit(0)
+        # pprint.pprint(data)
+
         # pprint.pprint(resp.json())
 
         base_vals = [] #sometimes internal transactions on Fantom duplicate base transactions
@@ -320,10 +355,11 @@ class Chain:
 
         if pb:
             progress_bar_update(self.addr, 'Retrieving internal transactions', 5)
-        url = self.explorer_url + '?module=account&action=txlistinternal&address=' + self.addr + '&apikey=' + self.api_key
-        resp = requests.get(url)
-        data = resp.json()['result']
+        # url = self.explorer_url + '?module=account&action=txlistinternal&address=' + self.addr + '&apikey=' + self.api_key
+        # resp = requests.get(url)
+        # data = resp.json()['result']
         # pprint.pprint(data['result'])
+        data = self.get_all_transaction_from_api('txlistinternal')
         for entry in data:
             # print(entry)
             if entry['isError'] != '0':
@@ -355,10 +391,11 @@ class Chain:
         t2 = time.time()
         if pb:
             progress_bar_update(self.addr, 'Retrieving token transactions', 10)
-        url = self.explorer_url + '?module=account&action=tokentx&address=' + self.addr + '&apikey=' + self.api_key
-        resp = requests.get(url)
-        data = resp.json()['result']
+        # url = self.explorer_url + '?module=account&action=tokentx&address=' + self.addr + '&apikey=' + self.api_key
+        # resp = requests.get(url)
+        # data = resp.json()['result']
         # pprint.pprint(resp.json())
+        data = self.get_all_transaction_from_api('tokentx')
         for entry in data:
             hash = entry['hash']
             if hash == hif:
@@ -388,9 +425,10 @@ class Chain:
         t3 = time.time()
         if pb:
             progress_bar_update(self.addr, 'Retrieving NFT transactions', 15)
-        url = self.explorer_url + '?module=account&action=tokennfttx&address=' + self.addr + '&apikey=' + self.api_key
-        resp = requests.get(url)
-        data = resp.json()['result']
+        # url = self.explorer_url + '?module=account&action=tokennfttx&address=' + self.addr + '&apikey=' + self.api_key
+        # resp = requests.get(url)
+        # data = resp.json()['result']
+        data = self.get_all_transaction_from_api('tokennfttx')
         # pprint.pprint(resp.json())
         for entry in data:
             hash = entry['hash']
@@ -514,6 +552,8 @@ class Chain:
                         transactions[uid] = Transaction(self)
                     # log(txhash, '|' ,ts, '|', fr, '|', to, '|', tokenid, '|', amount, '|', what, '|', symbol)
                     row = [txhash, ts, fr, to, float(amount), symbol, what, str(token_nft_id), 0, 0, None]
+                    if txhash == self.hif:
+                        pprint.pprint({'hash':txhash,'type':'ERC1155','ts':ts,'fr':fr,'to':to,'amount':amount,'symbol':symbol,'what':what,'nft id':token_nft_id})
                     transactions[uid].append(5, row)
                 except:
                     log('Failed to scrape ERC1155',traceback.format_exc(),cells)
@@ -783,7 +823,7 @@ class Chain:
             self.update_address_from_scan(user,contract.lower())
             pb += pb_per_contract
             if idx % 10 == 0:
-                progress_bar_update(self.addr, 'Looking up counterparties: '+str(idx)+'/'+str(len(counterparty_list)),pb)
+                progress_bar_update(self.addr, 'Looking up counterparties (runs slowly once): '+str(idx)+'/'+str(len(counterparty_list)),pb)
             # if progenitor is None:
             #     print("No progenitor for",contract.lower())
 
@@ -807,6 +847,7 @@ class Chain:
         for idx,transaction in enumerate(transactions.values()):
             # transaction.calc_totals()
             # transaction.calc_usd_totals(coingecko_rates)
+
             transaction.finalize(user,coingecko_rates,signatures)
             # txid = transaction.txid
             if transaction.custom_type_id is not None:

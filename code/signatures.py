@@ -47,8 +47,10 @@ class Signatures:
     def init_from_db(self, input_list):
         db = SQLite('db',do_logging=False)
         mapping = {}
+        # log("input list",input_list)
         for input in input_list:
             hex_sig = self.input_to_sig(input)
+            # log("hex_sig",hex_sig)
             if hex_sig is not None:
                 rows = db.select("SELECT text_signature FROM signatures WHERE hex_signature='"+hex_sig+"' order by id ASC")
                 if len(rows) >= 1:
@@ -56,6 +58,7 @@ class Signatures:
                     try:
                         obr_idx = text_sig.index('(')
                         text_sig = text_sig[:obr_idx]
+                        # log("text_sig", text_sig)
                     except:
                         pass
                     mapping[hex_sig] = text_sig

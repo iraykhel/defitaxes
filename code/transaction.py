@@ -129,7 +129,7 @@ class Transaction:
         self.grouping.append([cl,row, transfer_idx,custom_treatment,custom_rate,custom_vaultid])
 
 
-    def lookup_rate(self,user,coingecko, token_contract, ts, tr_index):
+    def lookup_rate(self,user,coingecko, token_contract, ts):
 
         # if self.txid is not None:
         #     q = "SELECT rate, source, level FROM rates WHERE transaction_id="+str(self.txid)+" AND transfer_idx="+str(tr_index)+" ORDER BY level DESC"
@@ -182,7 +182,7 @@ class Transaction:
 
             # rate_found, rate, rate_source = coingecko_rates.lookup_rate(token_contract, ts)
             # coingecko_rates.verbose=True
-            rate_found, rate, rate_source = self.lookup_rate(user,coingecko_rates,lookup_rate_contract,ts,index)
+            rate_found, rate, rate_source = self.lookup_rate(user,coingecko_rates,lookup_rate_contract,ts)
             # log("RATE LOOKUP",self.hash,token_contract,ts,rate_found,rate)
             # transfer = [index, type, fr, to, val, token_contract, input_len, rate_found, rate,base_fee == 0]
             # transfer = {'type':type, 'from':fr, 'to':to, 'amount':val, 'what':token_contract,'input_len':input_len, 'rate_found':rate_found, 'rate':rate}
@@ -244,7 +244,7 @@ class Transaction:
 
 
         # _, self.main_asset_rate, rate_source = coingecko_rates.lookup_rate(self.main_asset, self.ts)
-        _, self.main_asset_rate, self.main_asset_rate_source = self.lookup_rate(user, coingecko_rates, self.main_asset, self.ts, -1)
+        _, self.main_asset_rate, self.main_asset_rate_source = self.lookup_rate(user, coingecko_rates, self.main_asset, self.ts)
 
         self.amounts = dict(amounts)
 
@@ -433,6 +433,7 @@ class Transaction:
             lookup_contract = transfer.what
             if transfer.type == 5: #multi-tokens are too different from each other to assume all same
                 lookup_contract = transfer.what + "_"+str(transfer.token_nft_id)
+            # log('lookup_contract',lookup_contract,transfer.token_nft_id)
 
             if val > 0:
                 if transfer.treatment == 'buy':
@@ -574,7 +575,7 @@ class Transaction:
             # if self.type in ['remove liquidity','add liquidity']:
             #     return
 
-            if bad_in + bad_out == 0 and add_rate_for is None and not skip_adjustment:
+            if bad_in + bad_out == 0 and add_rate_for is None and not skip_adjustment and total_out > 0 and total_in > 0:
 
             # if good_count == len(self.amounts):
                 total_avg = (total_in + total_out) / 2.
@@ -593,22 +594,15 @@ class Transaction:
                     rate_fluxes = []
                     for contract, amt in amounts.items():
                         good = symbols[contract]['rate_found']
-                        if contract == self.main_asset:
-                            sid1 = -2
-                            sid2 = -3
-                        else:
-                            sid1 = -int(contract[-4:],16)
-                            sid2 = -int(contract[-8:-4],16)
-
 
                         # _, rate_pre, _ = coingecko_rates.lookup_rate(contract, int(self.ts) - 3600)
-                        _, rate_pre, _ = self.lookup_rate(user,coingecko_rates,contract,int(self.ts) - 3600,sid1)
+                        _, rate_pre, _ = self.lookup_rate(user,coingecko_rates,contract,int(self.ts) - 3600)
 
                         rate = symbols[contract]['rate']
                         # _, rate_aft, _ = coingecko_rates.lookup_rate(contract, int(self.ts) + 3600)
-                        _, rate_aft, _ = self.lookup_rate(user, coingecko_rates, contract, int(self.ts) + 3600, sid2)
+                        _, rate_aft, _ = self.lookup_rate(user, coingecko_rates, contract, int(self.ts) + 3600)
                         if rate_pre is None or rate_aft is None:
-                            log("Couldn't find nearby rates, txid",self.txid,"hash",self.hash,"sid1",sid1,"sid2",sid2)
+                            log("Couldn't find nearby rates, txid",self.txid,"hash",self.hash)
                             return
                         rate_flux = abs(rate_aft / rate_pre - 1)
                         if good == 0.5: #if rate is inferred, assume it's much more likely to be the wrong one

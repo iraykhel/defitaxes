@@ -349,7 +349,7 @@ class Coingecko:
                 last = rates_table.keys()[-1]
                 source = "inferred"
                 if ts < first:
-                    good = 0.1
+                    good = 0
                     rate = rates_table[first]
                     source += ', before first'
                 elif ts > last:
