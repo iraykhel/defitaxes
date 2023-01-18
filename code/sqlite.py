@@ -11,22 +11,24 @@ from collections import defaultdict
 from random import shuffle
 import time
 from queue import Queue
-from .util import log
+from .util import log, log_error
 
 
 class SQLite:
-    def __init__(self, db=None,check_same_thread=True, isolation_level='DEFERRED', read_only=False, do_logging=True):
+    def __init__(self, db=None,check_same_thread=True, isolation_level='DEFERRED', read_only=False, do_logging=False):
         self.deferred_buffers = defaultdict(Queue)
         self.currently_processing = False
         self.conn = None
         self.read_only = read_only
         self.do_logging = do_logging
+        self.do_error_logging = True
         self.log_file = 'logs/sqlite_log.txt'
         self.db=db
 
 
         if db is not None:
             self.connect(db,check_same_thread=check_same_thread,isolation_level=isolation_level)
+
 
 
     def execute_and_log(self,cursor,query,values=None):
@@ -40,10 +42,15 @@ class SQLite:
         except:
             error = traceback.format_exc()
         tend = time.time()
+        if error is not None and self.do_error_logging:
+            log_error('SQL ERROR', self.db, query, 'VALUES', values, 'ERROR',error)
+
         if self.do_logging:
             log('SQL QUERY',self.db,query,'VALUES',values,'TIMING',str(tend-tstart))
-            if error is not None:
+
+            if error is not None and self.do_error_logging:
                 log('SQL ERROR',self.db,error)
+
 
             # myfile = open(self.log_file, "a", encoding="utf-8")
             # myfile.write('\nQUERY '+query+'\n')
@@ -55,9 +62,10 @@ class SQLite:
             exit(1)
         return rv
 
-    def connect(self,db, check_same_thread=True, isolation_level='DEFERRED'):
+    def connect(self,db=None, check_same_thread=True, isolation_level='DEFERRED'):
         # print("CONNECT TO "+db)
-        self.db = db
+        if db is not None:
+            self.db = db
         if self.read_only:
             self.conn = sqlite3.connect('file:data/' + db + '.db?mode=ro', timeout=5, check_same_thread=check_same_thread,
                                         isolation_level=isolation_level, uri=True)

@@ -258,11 +258,16 @@ class Pools:
                 log("FOUND POOL",pool)
             # log("POOL FOUND",pool)
         elif len(selected) > 1:
-            log("DEPOSIT: FOUND MULTIPLE POOLS, BAILING",transaction.hash)
-            log(deposits)
-            log(receipts)
-            log(candidates)
-            exit(1)
+            if transaction.hash == self.chain.hif:
+                log("CREATING POOL BECAUSE THERE ARE MULTIPLE MATCHES, selected",selected)
+            pool = Pool(self, transaction)
+            new_pool = True
+            self.pools.add(pool)
+            # log("DEPOSIT: FOUND MULTIPLE POOLS, BAILING",transaction.hash)
+            # log(deposits)
+            # log(receipts)
+            # log(candidates)
+            # exit(1)
 
         depositing_receipt_token = False
         for deposit in deposits:
@@ -340,8 +345,7 @@ class Pools:
             else:
                 C = matches_adr.intersection(matches_what)
             candidates = candidates.union(C)
-            if transaction.hash == self.chain.hif:
-                print("withdraw xi1", candidates)
+
             # candidates = candidates.intersection(self.map['A'][withdrawal.fr])
             # candidates = candidates.intersection(self.map['I'][withdrawal.what])
 
@@ -361,8 +365,7 @@ class Pools:
             if set(candidate.in_symbols.keys()).issubset(withdrawing_tokens) or candidate.stable:
                 selected.append(candidate)
 
-        if transaction.hash == self.chain.hif:
-            print("withdraw xi2", selected)
+
 
         #liquidity>staking>vault for removals
         if len(selected) > 1:
@@ -373,8 +376,7 @@ class Pools:
                 priority_map[pool.type].append(pool)
             selected = priority_map[min(list(priority_map.keys()))]
 
-            if transaction.hash == self.chain.hif:
-                print("withdraw xi3", selected)
+
 
         if len(selected) == 1:
             pool = list(selected)[0]
@@ -437,15 +439,17 @@ class Pools:
     def add_liquidity(self, transaction, ignore_tokens=()):
         deposits = []
         receipts = []
-        for transfer in transaction.transfers:
-            if transfer.what in ignore_tokens:
+        for transfer in transaction.transfers.values():
+            if transfer.what in ignore_tokens or transfer.synthetic == 1:
                 continue
             if transfer.amount > 0:
-                if transfer.fr == transaction.addr:
+                # if transfer.fr in transaction.user.relevant_addresses:
+                if transfer.from_me:
                     deposits.append(transfer)
                 else:
                     receipts.append(transfer)
-        self.deposit(transaction,deposits,receipts)
+        if len(deposits):
+            self.deposit(transaction,deposits,receipts)
 
         # print("added liquidity",deposits)
         # print(self.map['A'])
@@ -453,11 +457,12 @@ class Pools:
     def remove_liquidity(self,transaction, ignore_tokens=(),pool_type=None):
         withdrawals = []
         receipts = []
-        for transfer in transaction.transfers:
-            if transfer.what in ignore_tokens:
+        for transfer in transaction.transfers.values():
+            if transfer.what in ignore_tokens or transfer.synthetic == 1:
                 continue
             if transfer.amount > 0:
-                if transfer.to == transaction.addr:
+                # if transfer.to in transaction.user.relevant_addresses:
+                if transfer.to_me:
                     withdrawals.append(transfer)
                 else:
                     receipts.append(transfer)

@@ -10,6 +10,16 @@
         <script src="//cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.3/additional-methods.min.js"></script>
         <script src="//cdnjs.cloudflare.com/ajax/libs/jquery-validation-unobtrusive/3.2.12/jquery.validate.unobtrusive.min.js"></script>
 
+        <!-- Global site tag (gtag.js) - Google Analytics -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-5CVKBBZ0F6"></script>
+        <script>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+
+          gtag('config', 'G-5CVKBBZ0F6');
+        </script>
+
 
 
 
@@ -18,27 +28,20 @@
     </head>
 
     <body>
-        <div id='address_form'><form id='main_form'>Your blockchain address:
-            <input type=text placeholder='0x...' id='your_address'/>
-            Chain:<select id='chain'>
-                <option value='ETH'>Ethereum</option>
-                <option value='Polygon'>Polygon</option>
-                <option value='Arbitrum'>Arbitrum</option>
-                <option value='Avalanche'>Avalanche</option>
-                <option value='Fantom'>Fantom</option>
-                <option value='BSC'>BSC</option>
-                <option value='HECO'>HECO</option>
-                <option value='Moonriver'>Moonriver</option>
-            </select>
+        <div id='address_form'><form id='main_form'>Your main blockchain address:
+            <input type=text placeholder='Ethereum or Solana address. No ENS.' id='your_address'/>
+            <div id='supported_chain_list'>Supports <a id='chain_support_link' href='chains.html' target=_blank>{{ blockchain_count }} blockchains</a> including Ethereum, Solana, BSC, Polygon, Arbitrum, Optimism, Avalanche, Fantom.</div>
             <div id='initial_options'></div>
-            <input type='submit' id='submit_address' value='Process transactions' /></form></div>
+            <input type='submit' id='submit_address' value='Process transactions' /><a id='demo_link'>Try a demo</a></form></div>
         <div id='content'></div>
     </body>
+    <script src="{{url_for('static', filename='pagination.js')}}"></script>
+
     <script src="{{url_for('static', filename='main.js')}}"></script>
     <script src="{{url_for('static', filename='typing.js')}}"></script>
     <script src="{{url_for('static', filename='inspections.js')}}"></script>
     <script src="{{url_for('static', filename='tax_calc.js')}}"></script>
     <script src="{{url_for('static', filename='manual_transaction.js')}}"></script>
     <script src="{{url_for('static', filename='help.js')}}"></script>
-    <script>address = "{{ address }}"; chain = "{{ chain }}"; last_transaction_timestamp = {{ last }};</script>
+    <script>address = "{{ address }}"; </script>
 </html>

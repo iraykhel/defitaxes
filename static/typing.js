@@ -1,9 +1,33 @@
 $.validator.addMethod('atleastonerule', function(val,el) {
-        console.log('custom val method called',$('#tc_form').find('.rule').length);
+//        console.log('custom val method called',$('#tc_form').find('.rule').length);
         if ($('#tc_form').find('.rule').length == 0)
             return false
         return true
     },'You need at least one rule')
+
+function my_address_rule_options(direction,addr_custom) {
+    let cls = 'index_to_addr'
+    if (direction == 'out') {
+        cls = 'index_from_addr'
+    }
+
+    let html = "<input type=hidden value='my_address' class='"+cls+"'>"
+    if (dict_len(all_address_info) == 1)
+        html += "<input type=hidden class='"+cls+"_custom'>My address"
+    else {
+        let selected = ''
+        html += "<select class='"+cls+"_custom tc_rule_sel'>";
+        if (addr_custom == null || addr_custom == '')
+            selected = ' selected'
+        html += "<option value=''"+selected+">Any of my addresses</option>";
+        for (let address in all_address_info) {
+            if (address == addr_custom) selected = ' selected'; else selected = '';
+            html += "<option value='"+address+"'"+selected+">"+startend(address)+"</option>";
+        }
+        html += "</select>";
+    }
+    return html
+}
 
 function address_rule_options(direction,addr,addr_custom) {
 //    console.log('aro',direction,addr,addr_custom)
@@ -49,8 +73,8 @@ function token_rule_options(tok,tok_custom) {
 
     html = "<div class='selspec_wrap"+hidden+"'><select class='tc_rule_tok tc_rule_sel index_rule_tok'>";
 
-    opt_list = [['any','any token','any'], ['base',base_token,'base'], ['BTC','BTC','BTC'], ['USDT','USDT','USDT'], ['USDC','USDC','USDC'],
-    ['specific','other token','specific'],['specific_excl','any token except','specific_excl']];
+
+    opt_list = [['any','any token','any'], ['specific','specific token','specific'],['specific_excl','any token except','specific_excl']];
 
     for (pair of opt_list) {
         html += "<option ";
@@ -66,13 +90,13 @@ function token_rule_options(tok,tok_custom) {
 }
 
 function treatment_rule_options(direction,def,vault_id=null,vault_id_custom=null) {
-    console.log('treatment rule',direction,def,vault_id,vault_id_custom);
+//    console.log('treatment rule',direction,def,vault_id,vault_id_custom);
 
     vault_id_hidden = '';
 
 
     if (direction == 'out') {
-        opt_list = [['ignore','Ignore'], ['sell','Sell at market price'], ['burn','Dispose for free'],['fee','Transaction cost'],['loss','Loss'],['repay','Repay loan'],['full_repay','Fully repay loan'],['deposit','Deposit to vault']];
+        opt_list = [['ignore','Ignore'], ['sell','Sell at market price'], ['burn','Dispose for free'],['fee','Transaction cost'],['repay','Repay loan'],['full_repay','Fully repay loan'],['deposit','Deposit to vault']];
         vault_id_opt_list = [['address','Destination address'],['type_name','Name of this custom type'],['other','Other']];
     } else {
         opt_list = [['ignore','Ignore'], ['buy','Buy at market price'], ['gift','Acquire for free'], ['income','Income'], ['borrow','Borrow'], ['withdraw','Withdraw from vault'], ['exit','Exit vault']];
@@ -131,14 +155,14 @@ function make_rule_html(direction,rule=null) {
     html = "<div class=rule><span class='r_mov' title='Hold to move rule'><div></div></span>";
     html += "<div class='rule_conditions'>";
     if (direction == 'out') {
-        html += "<span class='r_from_addr'><input type=hidden value='my_address' class='index_from_addr'><input type=hidden class='index_from_addr_custom'>My address</span>";
+        html += "<span class='r_from_addr'>"+my_address_rule_options(direction,from_addr_custom)+"</span>";
     } else {
         html += "<span class='r_from_addr'>"+address_rule_options(direction,from_addr,from_addr_custom)+"</span>";
     }
 
     html += "<span class='r_arrow'><div></div></span>";
     if (direction == 'in')
-        html += "<span class='r_to_addr'><input type=hidden value='my_address' class='index_to_addr'><input type=hidden class='index_to_addr_custom'>My address</span>";
+        html += "<span class='r_to_addr'>"+my_address_rule_options(direction,to_addr_custom)+"</span>";
     else
         html += "<span class='r_to_addr'>"+address_rule_options(direction,to_addr,to_addr_custom)+"</span>";
 
@@ -156,7 +180,7 @@ $('body').on('click','#types_create',function() {
 
 $('body').on('click','div.ct_edit',function() {
     id = $(this).closest('li').attr('id').substr(3);
-    console.log('type edit id',id);
+//    console.log('type edit id',id);
     create_edit_custom_type(id);
 });
 
@@ -169,11 +193,18 @@ $('body').on('click','div.ct_select',function(event) {
     id = $(this).closest('li').attr('id').substr(3);
     if (!event.ctrlKey) {
         deselect_primary();
-        $('.secondary_selected').removeClass('secondary_selected');
+        mark_all_deselected();
     }
-    $('.custom_type_'+id).addClass('secondary_selected');
+//    $('.custom_type_'+id).addClass('secondary_selected');
+    for (let txid in all_transactions) {
+        let transaction = all_transactions[txid];
+        if (transaction['ct_id'] == id)
+            selected_transactions.add(parseInt(txid))
+//            transaction['selected']=true;
+    }
     $('#sel_opt_sel').click();
     update_selections_block();
+    window.scrollTo(0,0);
 //    update_selections_block();
 });
 
@@ -188,7 +219,7 @@ function create_edit_custom_type(id) {
     let name_val = "";
     let desc = "";
     let balanced = "checked";
-    let chain_specific="";
+//    let chain_specific="";
      if (id != null) {
         html += "<input type=hidden name=type_id id=del_type_id value="+id+"><div class='header'>Edit transaction type<div class='help help_createcustomtype'></div></div>";
         name_val = " value='"+custom_types_js[id]['name']+"'";
@@ -198,17 +229,18 @@ function create_edit_custom_type(id) {
             balanced = "checked";
         else
             balanced = "";
-        if (custom_types_js[id]['chain_specific'])
-            chain_specific = " checked";
+//        if (custom_types_js[id]['chain_specific'])
+//            chain_specific = " checked";
      } else
         html += "<div class='header'>Create new transaction type<div class='help help_createcustomtype'></div></div>";
 
     html += "<div class=top_section>";
-    html += "<div class='tx_row_0'><span class='t_class'><label>Only used on "+window.sessionStorage.getItem('chain')+" chain?<input type=checkbox"+chain_specific+" name=tc_chain></label></span></div>";
+//    html += "<div class='tx_row_0'><span class='t_class'><label>Only used on "+window.sessionStorage.getItem('chain')+" chain?<input type=checkbox"+chain_specific+" name=tc_chain></label></span></div>";
     html += "<div class='tx_row_1'><span class='t_class'><label for=tc_name class='tc_expl'>Your classification:</label><input type=text required placeholder='Name your type' id='tc_name' name=tc_name"+name_val+"></span></div>";
     html += "<div class='tx_row_2'><span class='t_class'><label for=tc_desc class='tc_expl'>Description (optional):</label><textarea id='tc_desc' name=tc_desc>"+desc+"</textarea></span></div>";
     html += "</div>";
-    html += "<div id='tc_rules_expl'>Rules below are applied to every transfer in your selected transactions. If a transfer satisfies all the conditions on the left, tax treatment on the right is applied to it.</div>";
+    html += "<div id='tc_rules_expl'>Rules below are applied to every transfer in your selected transactions. If a transfer satisfies all the conditions on the left, tax treatment on the right is applied to it. "+
+    "Default treatment is \"ignore\".</div>";
     html += "<div class='transfers'>";
 
 //    html += "<table id='tc_rules_out' class='rows tc_rules'>";
@@ -310,7 +342,7 @@ $('body').on('click','#tc_create',function() {
     let need_names = ['from_addr','to_addr','from_addr_custom','to_addr_custom','rule_tok','rule_tok_custom','rule_treatment','vault_id','vault_id_custom'];
     for (let to_index of need_names) {
         let idx = 0;
-        console.log('.index_'+to_index, $('index_'+to_index).length);
+//        console.log('.index_'+to_index, $('index_'+to_index).length);
         $('.index_'+to_index).each(function() {
             $(this).attr('name',to_index+idx);
             idx += 1;
@@ -333,12 +365,13 @@ $('body').on('click','#tc_create',function() {
 
     if (is_valid) {
         data = $('#tc_form').serialize();
-        console.log(addr,data);
-        $.post("save_type?address="+addr+"&chain="+chain, data, function(resp) {
-            console.log(resp);
+//        console.log(addr,data);
+//        let address = window.sessionStorage.getItem('address');
+        $.post("save_type?address="+primary, data, function(resp) {
+//            console.log(resp);
             var data = JSON.parse(resp);
             if (data.hasOwnProperty('error')) {
-                console.log("ERROR",data['error']);
+//                console.log("ERROR",data['error']);
                 $("#tc .sim_buttons").before("<div class='err_mes'>"+data['error']+"</div>");
             } else {
                 $('#tc').remove();
@@ -354,12 +387,12 @@ $('body').on('click','#tc_create',function() {
 
 $('body').on('click','#tc_delete',function() {
     data = $('#tc_delete_form').serialize();
-    console.log(addr,data);
+//    console.log(addr,data);
 
 
-
-    $.post("delete_type?address="+addr+"&chain="+chain, data, function(resp) {
-        console.log(resp);
+//    let address = window.sessionStorage.getItem('address');
+    $.post("delete_type?address="+primary, data, function(resp) {
+//        console.log(resp);
         var data = JSON.parse(resp);
         if (data.hasOwnProperty('error')) {
             $("#tc_delete_form").after("<div class='err_mes'>"+data['error']+"</div>");
@@ -444,7 +477,7 @@ function show_custom_types(custom_types) {
             html += "<div title='Edit this custom type' class='ct_icon ct_edit'></div>";
             html += "<div title='Delete this custom type' class='ct_icon ct_delete'></div>";
             html += "</li>";
-            custom_types_js[id] = {'name':name,'rules':ct['rules'], 'chain_specific':ct['chain_specific'], 'description':ct['description'], 'balanced':ct['balanced']};
+            custom_types_js[id] = {'name':name,'rules':ct['rules'], 'description':ct['description'], 'balanced':ct['balanced']};
         }
         html += "</ul>";
 
@@ -462,15 +495,18 @@ $('body').on('click','#custom_types_list .applicable', function() {
    type_clicked = $(this).parent();
    ct_id = type_clicked.attr('id').substr(3);
    txids = [];
-   transactions = $('div.secondary_selected');
-   transactions.each(function() {
-        txid = $(this).attr('id').substr(2);
-        txids.push(txid)
-   });
-   console.log("apply type",ct_id,"to transactions",txids);
-   data = 'type_id='+ct_id+'&transactions='+txids.join(',');
-   $.post("apply_type?chain="+chain+"&address="+addr, data, function(resp) {
-        console.log(resp);
+   if (selected_transactions.size == 0)
+        return;
+//   transactions = $('div.secondary_selected');
+//   transactions.each(function() {
+//        txid = parseInt($(this).attr('id').substr(2));
+//        txids.push(txid)
+//   });
+//   console.log("apply type",ct_id,"to transactions",selected_transactions);
+   data = 'type_id='+ct_id+'&transactions='+Array.from(selected_transactions).join(',');
+//   let address = window.sessionStorage.getItem('address');
+   $.post("apply_type?address="+primary, data, function(resp) {
+//        console.log(resp);
         var data = JSON.parse(resp);
         if (data.hasOwnProperty('error')) {
             type_clicked.append("<div class='err_mes'>"+data['error']+"</div>");
@@ -488,17 +524,20 @@ $('body').on('click','.ct_unapply', function() {
    type_clicked = $(this).parent();
    ct_id = type_clicked.attr('id').substr(3);
    txids = [];
-   transactions = $('div.secondary_selected');
-   if (transactions.length == 0)
+   if (selected_transactions.size == 0)
         return;
-   transactions.each(function() {
-        txid = $(this).attr('id').substr(2);
-        txids.push(txid)
-   });
-   console.log("unapply type",ct_id,"to transactions",txids);
-   data = 'type_id='+ct_id+'&transactions='+txids.join(',');
-   $.post("unapply_type?chain="+chain+"&address="+addr, data, function(resp) {
-        console.log(resp);
+//   transactions = $('div.secondary_selected');
+//   if (transactions.length == 0)
+//        return;
+//   transactions.each(function() {
+//        txid = parseInt($(this).attr('id').substr(2));
+//        txids.push(txid)
+//   });
+//   console.log("unapply type",ct_id,"to transactions",selected_transactions);
+   data = 'type_id='+ct_id+'&transactions='+Array.from(selected_transactions).join(',');
+//   let address = window.sessionStorage.getItem('address');
+   $.post("unapply_type?address="+primary, data, function(resp) {
+//        console.log(resp);
         var data = JSON.parse(resp);
         if (data.hasOwnProperty('error')) {
             type_clicked.append("<div class='err_mes'>"+data['error']+"</div>");

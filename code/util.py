@@ -1,9 +1,14 @@
 import decimal
 import time
+import traceback
 from collections import defaultdict
 import datetime
 import pprint
 import pickle
+from flask import g
+import secrets
+from os.path import exists
+import os
 
 Q = [decimal.Decimal(10) ** 0, decimal.Decimal(10) ** -1, decimal.Decimal(10) ** -2, decimal.Decimal(10) ** -3,
      decimal.Decimal(10) ** -4, decimal.Decimal(10) ** -5, decimal.Decimal(10) ** -6, decimal.Decimal(10) ** -7,
@@ -20,16 +25,20 @@ def dec(num, places=None):
         return decimal.Decimal(num).quantize(Q[places], rounding=decimal.ROUND_HALF_EVEN)
 
 
-logger = None
+# logger = None
 class Logger:
-    def __init__(self, address=None, write_frequency=1):
+    def __init__(self, address=None, chain=None, write_frequency=1, do_print=True, do_write=True):
         self.files = defaultdict(dict)
         self.write_frequency = write_frequency
         self.address = address
+        self.chain=chain
+        self.do_write=do_write
+        self.do_print = do_print
 
 
     def log(self,*args, **kwargs):
         t = time.time()
+        glob = False
         if 'WRITE ALL' in args:
             for filename in self.files:
                 self.buf_to_file(filename)
@@ -50,8 +59,9 @@ class Logger:
                 strings.append(str(s))
             buffer.append(" ".join(strings))
         else:
-            if 'file' in kwargs:
-                filename = kwargs['file']
+            if 'filename' in kwargs:
+                filename = kwargs['filename']
+                glob = True
             else:
                 filename = "log.txt"
             if filename not in self.files:
@@ -86,7 +96,7 @@ class Logger:
             if 'log_only' not in kwargs:
                 self.lprint("", same_line=False)
 
-            self.buf_to_file(filename)
+            self.buf_to_file(filename,glob=glob)
             # if 'force_write' in kwargs:
             # # if 1:
             #     self.buf_to_file(filename)
@@ -96,20 +106,28 @@ class Logger:
 
             # myfile.close()
 
-    def buf_to_file(self,filename):
+    def buf_to_file(self,filename, glob=False):
         buffer = self.files[filename]['buffer']
+        do_write = False
+        path = 'logs/' + filename
         if len(buffer) > 0:
-            if self.address is None:
-                path = 'logs/' + filename
-            else:
-                path = 'data/users/'+self.address+"/" + filename
-            myfile = open(path, "a", encoding="utf-8")
-            myfile.write(''.join(buffer))
-            myfile.close()
+            if self.address is not None and not glob:
+                if exists('data/users/'+self.address):
+                    path = 'data/users/'+self.address+"/" + filename
+            if glob and self.address is not None:
+                buffer.insert(0,self.address+" ")
+            if self.do_write or glob:
+                do_write = True
+            if do_write:
+                myfile = open(path, "a", encoding="utf-8")
+                myfile.write(''.join(buffer))
+                myfile.close()
         self.files[filename]['buffer'] = []
         self.files[filename]['last_write'] = time.time()
 
     def lprint(self,p, same_line=True):
+        if not self.do_print:
+            return
         try:
             if same_line:
                 print(p, end=' ')
@@ -119,22 +137,72 @@ class Logger:
             pass
 
 
-def init_logger(address):
-    global logger
-    logger = Logger(address)
 
 
 def log(*args,**kwargs):
-    global logger
-    if logger is None:
-        logger = Logger()
+    # try:
+    #     debug = g.debug
+    # except:
+    #     debug = True
+    debug = os.environ.get('debug') == '1'
+    # if debug:
+    #     logger = Logger(address='glob')
+    # else:
+    #     logger = Logger(address=g.address, chain=g.chain_name, do_print=False, do_write=False)
+    #
+    # logger.log(*args,**kwargs)
 
-    logger.log(*args,**kwargs)
+    if debug:
+        logger = Logger(address='glob')
+        logger.log(*args, **kwargs)
 
-def progress_bar_update(filename, entry, percent):
-    pb_file = open('data/users/' + filename + "/pb", "wb")
-    pickle.dump({'phase':entry,'pb':percent}, pb_file)
-    pb_file.close()
+def log_error(*args,**kwargs):
+    logger = Logger(address='glob')
+    try:
+        trace = traceback.format_exc()
+        if trace is not None:
+            args = list(args)
+            args.append(trace)
+    except:
+        pass
+    kwargs['filename'] = 'global_error_log.txt'
+    logger.log(*args, **kwargs)
+
+def clog(transaction, *args, **kwargs):
+    if transaction.hash == transaction.chain.hif:
+        log(args,kwargs)
+
+# progress_bar = None
+class ProgressBar:
+    def __init__(self, redis,max_pb=None):
+        self.redis = redis
+        self.max_pb = max_pb
+        if max_pb is not None:
+            self.redis.set('max_pb', max_pb)
+
+    def update(self, entry=None, percent_add=None):
+        if entry is not None:
+            self.redis.set('progress_entry', entry)
+        if percent_add is not None:
+            current = self.redis.get('progress')
+            if current is None:
+                current = 0
+            else:
+                current = float(current)
+            self.redis.set('progress', current+percent_add)
+        self.redis.set('last_update', int(time.time()))
+
+    def set(self, entry=None, percent=None):
+        if entry is not None:
+            self.redis.set('progress_entry', entry)
+        if percent is not None:
+            self.redis.set('progress', percent)
+        self.redis.set('last_update', int(time.time()))
+
+
+    def retrieve(self):
+        return self.redis.get('progress_entry'),self.redis.get('progress')
+
 
 def decustom(val):
     custom = False
@@ -146,3 +214,27 @@ def decustom(val):
     except:
         return val, custom
 
+def persist(address,chain_name=None):
+    g.address=address
+    g.chain_name=chain_name
+
+def sql_in(lst):
+    if isinstance(lst,set):
+        lst = list(lst)
+    try:
+        return "('"+"','".join(lst)+"')"
+    except:
+        strlst = []
+        for e in lst:
+            strlst.append(str(e))
+        return "(" + ",".join(strlst) + ")"
+
+def normalize_address(address):
+    if is_ethereum(address):
+        address = address.lower()
+    return address
+
+def is_ethereum(address):
+    if len(address) == 42 and address[0] == '0' and address[1] == 'x':
+        return True
+    return False

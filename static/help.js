@@ -20,7 +20,7 @@ function make_help_strings() {
         },
         'vaultid':{'header':'Vault and loan ID','explanation':
             '<p>Vaults and loans are concepts we use to improve your tax filing. A vault is anywhere you send your money for temporary storage without receiving anything in return. '+
-            'Uniswap, for example, is not a vault, because you get a pool token in return. On the other hand, when you stake that pool token, you do not get anything back, so '+
+            'Uniswap V2, for example, is not a vault, because you get a pool token in return. On the other hand, when you stake that pool token, you do not get anything back, so '+
             'the staking farm is a vault. A loan is when you borrow tokens from somewhere. </p>'+
             '<p>These are necessary because depositing money into a vault (or borrowing) is NOT a taxable event, but we must keep track of this money, because you might get back more money '+
             'from the vault than you put in (which is a taxable event), or you may pay loan interest (which may also be reported to the IRS).</p>'+
@@ -28,16 +28,32 @@ function make_help_strings() {
             'tokens from the same vault. Same for loan IDs.</p>'+
             '<p>Claiming rewards from a staking farm is not "withdraw from vault", it\'s just "income".</p>'
         },
+        'issues':{'header':'Known issues and bugs','explanation':
+            '<h4>Some scanners work intermittently</h4><p>We do not get our data straight from the blockchain, we get it from the third parties like Etherscan or Blockscout. '+
+            '(full list of data providers is <a href="https://defitaxes.us/chains.html" target=_blank>here</a>). Some of these third parties work better than others. '+
+            'When one of those does not work, you\'ll get an error message on top of the screen for that specific blockchain. '+
+            'You can try importing transactions again, it might work. This problem should only happen with smaller chains like Kava or HECO.</p>'+
+            '<h4>ERC-1155 support</h4><p>ERC-1155 is a type of token on some blockchains that combines the features of a regular coin and an NFT. Some NFTs will be this kind '+
+            'of token, especially in gaming. We support it fully on Ethereum, and support it partially on Polygon, Avalanche, Arbitrum, and Fantom. Some transactions with these '+
+            'tokens might be missing.</p>'+
+            '<h4>Missing transactions</h4><p>On smaller chains with blockscout-type scanners, deposit transactions seem to often be missing. '+
+            'Balance inspection should detect the discrepancy on most of them and provide an approximate fix. But not on Oasis, Velas, or SXnetwork.</p>'+
+            '<h4>Optimism</h4><p>Transaction fees we display on Optimism are significantly lower than the real deal. This is what the scanner\'s API gives us. It\'s because '+
+            'Optimism is an L2 chain and its fees consist of L1 part and L2 part, and we only see the L2 part. Balance inspection should detect the discrepancy and provide an '+
+            'approximate fix.</p>'+
+            '<h4>Other issues</h4><p>We can promise you that there are plenty. Please report whatever bugs you find on <a href="https://discord.gg/E7yuUZ3W4X" target="_blank">Discord</a>.<p>'
+        },
         'mt':{'header':'Manual transactions','explanation':
             '<p>This lets you manually add a transaction to your list. It may be helpful, for example, if you want to preserve the long-term capital gain status when transferring tokens '+
             'from one place to another. By default we treat inbound transfers as purchases and outbound transfers as sales, which may break your long-term status. For instance, '+
             'if you want to keep the long term status when transferring tokens into your blockchain address, switch tax treatment for that transfer to "ignore", and add a manual '+
             'transaction acquiring these tokens at the correct date and price.</p>'+
-            '<p>Another usage would be to add transfers and transactions that etherscan missed. Right now we do not support ERC-1155 transfers; if you have any you might want to add them.</p>'
+            '<p>Another usage would be to add transfers and transactions that the scanner has missed. For example, Blockscout-based scanners (Kava, Canto, many other smaller chains) '+
+            'often miss bridging deposits.</p>'
         },
         'cpop':{'header':'Counterparty and operation','explanation':
-            '<p>We try to infer the counterparty you transacted with and what function you called from third-party sources. Counterparty is coming from '+scanner_name+', and may '+
-            'sometimes be very wrong. You can rename it; it will fix it in every transaction with the same counterparty. Operation is coming from www.4byte.directory and is '+
+            '<p>We try to infer the counterparty you transacted with and what function you called from third-party sources. Counterparty is coming from Etherscan (or another scanner), and may '+
+            'sometimes be very wrong. You can rename it; it will fix it in every transaction with the same counterparty. Operation is '+
             'typically correct, this is the function you are calling when interacting with the smart contract.</p>'
         },
 
@@ -48,7 +64,7 @@ function make_help_strings() {
             'popular DeFi protocols, it is a hopeless task for us to try to keep up with the innovations in the field. Your participation will be necessary if you '+
             'want your filing to be remotely close to correct. We aim to provide you with tools to do it in a reasonable amount of time (measured in hours), even if you have '+
             'a very large number of transactions.</p>'+
-            '<p>The main, ahem, game loop is as follows:</p><p>Scroll down your transactions, looking for any that isn\'t green. Found one? Check if we processed it correctly. Don\'t know '+
+            '<p>The main, ahem, game loop is as follows:</p><p>Scroll down your transactions, looking for any that aren\'t green. Found one? Check if we processed it correctly. Don\'t know '+
             'if we did? Read "Kinds of transactions you might have" and find this kind of transaction. If we processed it correctly, recolor it green so you don\'t notice it anymore '+
             '(you don\'t actually have to recolor it, it doesn\'t do anything besides change colors). If we got it wrong, adjust the tax treatments. '+
             'If you performed this kind of transaction many times, create a custom type for it so you can get them all corrected at once.</p>'+
@@ -61,7 +77,8 @@ function make_help_strings() {
             'that action will open a short position. If you ignore one transfer of a token, we recommend ignoring all transfers involving that token.</p>' +
             '<h4>Buy</h4><p>Buy some tokens, spend USD. Default price is USD market price as provided by Coingecko (which may occasionally be wrong). You can adjust the price yourself. '+
             'This is typically not a taxable event and by itself has no effect on your tax forms (except when closing a short position).</p>'+
-            '<h4>Sell</h4><p>Sell some tokens, receive USD. Opposite of "Buy" treatment. Selling tokens is a taxable event and will add one or several lines to 8949 form.</p>'+
+            '<h4>Sell</h4><p>Sell some tokens, receive USD. Opposite of "Buy" treatment. Selling tokens is a taxable event and will add one or several lines to 8949 form. '+
+            '<p>Anytime you spend your crypto on some service or product is also a "Sell".</p>'+
             '<h4>Acquire for free</h4><p>Same as "buy", but for price of 0. Do not use it for airdrops, rewards, mining, or anything else that gets you free money, use "Income" instead.'+
             ' Use sparingly for special situations.</p>'+
             '<h4>Dispose for free</h4><p>Same as "sell", but for price of 0. This makes it a tax-deductible capital loss. Use sparingly, '+
@@ -69,8 +86,8 @@ function make_help_strings() {
             '<h4>Income</h4><p>Use this whenever you get free money, such as claiming staking rewards or receiving airdrops. The value is added to "ordinary income", and the asset is '+
             'considered purchased at the market price.</p>'+
             '<h4>Transaction cost</h4><p>This is typically the fee you pay to the network. It is added to the cost basis of assets acquired or disposed in the same transaction.</p>'+
-            '<h4>Non-deductible loss</h4><p>This transfer is not reflected in tax forms in any way, but is accounted for in your total asset calculation. '+
-            'Use this when you are spending your tokens on something other than buying other tokens. It is also a network fee for transactions that don\'t involve trading tokens.</p>'+
+//            '<h4>Non-deductible loss</h4><p>This is identical to "Sell".</p> '+
+//            'Use this when you are spending your tokens on something other than buying other tokens. It is also a network fee for transactions that don\'t involve trading tokens.</p>'+
             '<h4>Borrow</h4><p>Use this when borrowing money from somewhere. See vaults and loans section for more info.</p>'+
             '<h4>Repay loan</h4><p>Use this when repaying your loan. Make sure the loan ID is the same as in the corresponding "Borrow" transfers. '+
             'See vaults and loans section for more info.</p>' +
@@ -86,20 +103,25 @@ function make_help_strings() {
         },
 
         'examples':{'header':'Kinds of transactions you might have','explanation':
-            '<h4>You transferring money to/from your blockchain address</h4><p>Normally, this is not a taxable event and shouldn\'t show up on the tax forms. However, that is not how we treat '+
+            '<h4>Transferring money to/from your blockchain address</h4><p>Normally, this is not a taxable event and shouldn\'t show up on the tax forms. However, that is not how we treat '+
             'it. We treat transfers into your address as purchases at market price, and transfers out as sales at market price. This is because otherwise we have no idea when you bought '+
             'your token and for how much. If the counterparty (wherever your source/destination address is) treats it the same way, it should not present a problem. There are two '+
             'potential issues with this approach. First, you may have some realized gains or losses when you should not have any. Second, this may break your long-term status for your '+
-            'capital gains.</p>If you want to improve the filing for this kind of transactions: for transfers into your account you can set the treatment on the inbound transfer to "ignore", '+
-            'and manually create a transaction where you are buying this token at the time and price you specified. For outbound transfers, you can set the treatment to "non-deductible loss".</p>' +
+            'capital gains.</p>If you want to improve the filing for this kind of transactions: set the treatment on the transfer to "ignore", '+
+            'and manually create a transaction where you are buying/selling this token at the time and price you specified.</p>' +
+            '<h4>Spending crypto on a service or a product</h4><p>For tax purposes, this is a sale of that crypto for USD and should be assigned a "sell" treatment.</p>' +
+            '<h4>Bridging tokens between the same address on different blockchains</h4><p>We have some built-in handling for this, if both blockchains are supported. If sent amount is '+
+            'exactly the same as received amount, and sent token and received token are the same as per Coingecko, we set both transfers to "ignore". If there is any '+
+            'difference between the sent transfer and the received transfer, we set the sent transfer to "deposit to vault" and received transfer to "exit vault".</p>'+
+            '<p>If you bridged to/from a different wallet address, or to/from a blockchain we don\'t support, we treat it as a usual external transfer described above.</p>'+
             '<h4>Exchange token A for token B</h4><p>This is a sale of token A, and a simultaneous purchase of token B. It is a balanced transaction, meaning total amount of USD going out and '+
             'coming in is the same.</p>'+
             '<h4>Provide liquidity into a liquidity pool</h4><p>Typically you would deposit some amount of token A and some amount of token B into a pool, in return getting receipt token LP. '+
             'We treat this as exchange of tokens A and B for LP: this is a sale of token A, a sale of token B, and a purchase of token LP. The transaction is balanced, allowing us to infer the '+
             'USD rate for LP even though it is typically not available on Coingecko.</p><p>An alternate way to treat this is depositing tokens A and B into a common vault, and ignoring '+
             'transfers of token LP. This may help decrease your number of taxable events, but is more error-prone.</p>'+
-            '<h4>Provide liquidity elsewhere</h4><p>If you get something back, it\'s better treat it as an exchange of one thing for the other (create a custom type to get '+
-            'it treated as a balanced transaction and infer the rate for the receipt token). If you didn\'t get anything back, treat it as "deposit to vault".</p>'+
+            '<h4>Provide liquidity elsewhere</h4><p>If you get something back, it\'s better treat it as an exchange of one thing for the other (apply '+
+            'provided "Swap" custom type). If you didn\'t get anything back, treat it as "deposit to vault".</p>'+
             '<h4>Stake a token</h4><p>If you\'re staking a token in a farm without getting a receipt, this should be a deposit to a vault.</p><p>An alternate way to treat it is ignoring '+
             'this transfer altogether, but you can only do this if you get exactly the same amount of tokens when unstaking.</p>'+
             '<h4>Claim farming reward</h4><p>A farming reward is "income".</p>'+
@@ -107,7 +129,7 @@ function make_help_strings() {
             '"exit vault" instead.</p>'+
             '<h4>Provide collateral</h4><p>Typically you would provide collateral of token A and receive back token cA. We treat is as a simple exchange of A for cA. An alternate way is to '+
             'deposit A into a vault and ignore transfers involving cA. You do not need to specify loan ID when providing collateral, we don\'t connect collateral to the loan.'+
-            '<h4>Take out a loan</h4><p>Taking out a loan is "borrow". Default loan ID is tied to the address you received the loan from.</p>'+
+            '<h4>Take out a loan</h4><p>Taking out a loan is "borrow". Default loan ID is the counterparty you received the loan from + the address you borrowed from.</p>'+
             '<h4>Repay loan</h4><p>This is "Repay loan" tax treatment. Make sure to use the same loan ID as when borrowing. If you end up repaying less than what you borrowed '+
             '(for example with auto-repaying loan), use "Fully repay loan" in your last repaying transfer.</p>'+
             '<h4>Liquidation</h4><p>We do not have built-in support for liquidations. This is how you can manually process it: usually there will be a forcible transfer of '+
@@ -118,15 +140,38 @@ function make_help_strings() {
             '<h4>Wrap/unwrap</h4><p>Those are surprisingly annoying because they don\'t look like your normal exchange on the blockchain. We treat it as exchange of wrapped version '+
             'for unwrapped, or vice-versa. However, if we failed to automatically classify a wrap, you may need to create a manual transaction making sure you spend the tokens '+
             'to get the other version of them.</p>'+
+            '<h4>Rebase</h4><p>Rebases are very hard because they do not generate a transaction on the blockchain. Our Balance Inspection functionality will '+
+            'detect your rebasing assets and the total amount of rebase by comparing your current token holdings provided by a third-party to what we '+
+            'calculated by going through all your transactions, but we will not know when the rebases occurred. If you are selling a rebasing '+
+            'asset, you may need to manually create a transaction just before the sale. If a rebase was positive (number of tokens grew in your wallet), you will need to '+
+            'create a transfer acquiring the difference for free. If negative, a transfer disposing the difference for free.</p>'+
             '<h4>Mint an NFT</h4><p>If you paid the mint price and got the NFT(s) in the same transaction, it\'s an exchange of one for the other. We should be able to infer '+
             'the mint price from the amount you spent. If you paid first, and received the NFT(s) later, you will need to set the payment transfer to "sell" and '+
             'manually provide the mint price in the minting transaction.</p>'
+        },
+
+        'dataimport':{'header':'Balance inspection','explanation':'<p>We check if we imported the data correctly from the scanners by comparing your current token balances '+
+        '(provided by debank.com or Solana RPC) and NFTs (provided by simplehash.com or Solana RPC) '+
+            'to what we calculated by going through every one of your transactions (including the ones you created manually). ' +
+            'Tokens with positive balances not supported by debank.com are ignored. Tokens for which no exchange rate can be found are ignored. '+
+            'NFTs not supported by simplehash.com are ignored. ERC-1155 NFTs are only supported on Ethereum. </p>'+
+            '<p>A mismatch would indicate a rebasing token (most likely), missing data in the scanner (possible), an error in our code, or in debank/simplehash (unlikely). Tax treatment '+
+            'has no effect. This means that even if you set tax treatment to "ignore", the transfer would still be counted.</p>'+
+             '<p>This automatically detects rebasing tokens and other tokens that adjust your balance without a blockchain transaction. '+
+             'Blockscout-based scanners for smaller chains (Kava, Canto, Aurora, some others) seem to often miss bridging transactions. '+
+            'If it detects a sizable discrepancy for some other reason, please report the issue on discord.</p>'
+        },
+
+        'dc_fix':{'header':'Sorta kinda fix the discrepancy','explanation':'<p>There is no way for us to detect when rebases happen, or when your token balance changes without '+
+            'a blockchain transaction for some other reason. However, we can try to approximate it. Using this will create manual transactions (as if you created them yourself) by '+
+            'following these rules:</p><p>1) Whenever we detect your token balance going negative, we will create a transaction just before that moment to make sure your token balance goes '+
+            'to zero instead.</p><p>2) After your very last transaction with the token, we will create another one to make sure your final balance matches the one we retrieved from debank.com.</p>'
         }
     }
 }
 
 $('body').on('click','.help',function() {
-    console.log('help click');
+//    console.log('help click');
     for (let help_id in help_strings) {
         if ($(this).hasClass('help_'+help_id))
             help_popup(help_id);
@@ -145,7 +190,7 @@ $('body').on('click','#more_help',function() {
 });
 
 function help_popup(id) {
-    console.log('help_popup',id);
+//    console.log('help_popup',id);
     html ="<div id='overlay'></div><div id='help_popup' class='popup'>";
     html += "<div class='help_content'>"
     html += "<div class='help_header'>"+help_strings[id]['header']+"</div>";
@@ -163,7 +208,7 @@ function help_popup(id) {
 
 
 $('body').on('click','#help_main',function() {
-    console.log("main help");
+//    console.log("main help");
     html ="<div id='overlay'></div><div id='help_main_popup' class='popup'>";
     html += "<div class='help_main_content'>"
     html += "<div id='close_help_main'></div>"
@@ -176,6 +221,7 @@ $('body').on('click','#help_main',function() {
     html += "<li id='help_topic_treatments' class='help_topic'>Tax treatment options</li>"
     html += "<li id='help_topic_examples' class='help_topic'>Kinds of transactions you might have</li>"
     html += "<li id='help_topic_vaultid' class='help_topic'>Vaults and loans</li>"
+    html += "<li id='help_topic_issues' class='help_topic'>Known issues</li>"
     html += "</ul></div>";
 
     let header = help_strings['start']['header'];
