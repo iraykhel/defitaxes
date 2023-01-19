@@ -1712,7 +1712,7 @@ class Chain:
 
             page += 1
 
-    def covalent_download(self, chain_data, pb_alloc):
+    def covalent_download(self, chain_data, pb_alloc=None):
         tstart = time.time()
         key = "ckey_d1ffe43c2215490db9cbb90fd28"
         addresses = chain_data['import_addresses']
@@ -1732,7 +1732,8 @@ class Chain:
 
         for address in addresses:
             ps = 1000
-            self.update_pb('Retrieving additional information from CovalentHQ for ' + address+' (this might take up to 5 minutes)', pb_alloc)
+            if pb_alloc is not None:
+                self.update_pb('Retrieving additional information from CovalentHQ for ' + address+' (this might take up to 5 minutes)', pb_alloc)
             done = False
             page_num = 0
             failure = False
@@ -1740,7 +1741,8 @@ class Chain:
             covalent_dump[address] = []
             while not done:
                 idx += 1
-                self.update_pb('Retrieving additional information from CovalentHQ for ' + address + ', batch '+str(idx)+' (this might take up to 5 minutes)')
+                if pb_alloc is not None:
+                    self.update_pb('Retrieving additional information from CovalentHQ for ' + address + ', batch '+str(idx)+' (this might take up to 5 minutes)')
                 # url = "https://api.covalenthq.com/v1/"+chain_id+"/address/"+address+"/transactions_v2/?quote-currency=USD&format=JSON&block-signed-at-asc=true&no-logs=true&page-number="+str(page_num)+"&key=ckey_53ec69f026ab4220a1e0347f330"
                 url = "https://api.covalenthq.com/v1/" + chain_id + "/address/" + address + "/transactions_v2/?no-logs=true&page-size="+str(ps)# + "&key=ckey_d1ffe43c2215490db9cbb90fd28"
                 if page_num != 0:
