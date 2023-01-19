@@ -2,6 +2,9 @@
 
 ## Running app locally
 
+driver.py should run locally without much fussing, it has main loop implemented. For everything else you'll need Flask set up.
+Main databases (db.db and addresses.db) are mostly empty here. They will be populated by the software automatically. Production db sizes are over 6 gig/0.5 gig.
+
 ### Mac OS version
 
 ```
