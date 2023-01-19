@@ -138,7 +138,7 @@ def process(address, chain_name, do_import=True):
 if __name__ == "__main__":
     os.environ['debug'] = '1'
     address = '0x032b7d93aeed91127baa55ad570d88fd2f15d589'
-    process(address, 'ETH', do_import=False)
+    process(address, 'ETH', do_import=True)
     exit(0)
 
 
