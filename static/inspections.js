@@ -85,6 +85,12 @@ function show_inspections_sub(js,which) {
 
 }
 
+function compare_vaultids(a,b) {
+     if (a.toLowerCase() < b.toLowerCase()) return -1;
+    if (a.toLowerCase() > b.toLowerCase()) return 1;
+    return 0;
+}
+
 $('body').on('click','#vaults_inspect,#loans_inspect', function() {
     $('.item_list').remove();
     let html = "<ul class='item_list'>";
@@ -97,7 +103,7 @@ $('body').on('click','#vaults_inspect,#loans_inspect', function() {
     for (mwr in mwr_mapping) {
         if (mwr in ids_by_mwr) {
             vault_ids = ids_by_mwr[mwr];
-            vault_ids.sort();
+            vault_ids.sort(compare_vaultids);
             for (let vault_id of vault_ids) {
                 html += "<li class='"+which+"'><div class='item_header t_class_"+mwr+"'><div class='item_id'>"+vault_id+"</div><div class='inspect_item_ic'></div></div></li>";
             }
@@ -119,7 +125,7 @@ $('body').on('click','#vaults_inspect_all,#loans_inspect_all', function() {
     for (let vault_id in lst) {
         vault_list.push(vault_id)
     }
-    vault_list.sort()
+    vault_list.sort(compare_vaultids)
     let html = "<ul class='item_list'>";
     for (let vault_id of vault_list) {
         mwr = lst[vault_id]['mwr'];
@@ -171,6 +177,14 @@ function display_action(history_entry) {
         html += "deductible loss of "+round(history_entry['amount'])+" "+symbol;
     }
 
+    if (action == 'sell on exit') {
+        html += "non-deductible loss of "+round(history_entry['amount'])+" "+symbol;
+    }
+
+    if (action == 'expense on exit') {
+        html += "business expense of "+round(history_entry['amount'])+" "+symbol;
+    }
+
     if (action == 'borrow') {
         html += "Borrow "+round(history_entry['amount'])+" "+symbol;
     }
@@ -192,7 +206,11 @@ function display_action(history_entry) {
     }
 
     if (action == 'buy loaned') {
-        html += "Buy remaining " + round(history_entry['amount']) + " "+symbol+" for $"+round_usd(history_entry['amount']*history_entry['rate']);
+        html += "Buy remaining " + round(history_entry['amount']) + " "+symbol+" for "+print_fiat(round_usd(history_entry['amount']*history_entry['rate']));
+    }
+
+    if (action == 'capgain on exit') {
+        html += "acquired "+round(history_entry['amount'])+" "+symbol +" for free";
     }
 
     html += "</div>";
@@ -321,6 +339,7 @@ function addup_running_tokens() {
         if (!(chain in rv)) {
             rv[chain] = {}
         }
+        let fiat_rate = tx['fiat_rate']
 
         let transfers = tx['rows']
         for (let trid in transfers) {
@@ -335,15 +354,20 @@ function addup_running_tokens() {
 
 
             let rate = null
-            rate = [transfer['rate_found'],transfer['rate'],transfer['rate_source']]
+            let transfer_rate = transfer['rate']
+            if (transfer_rate != null)
+                transfer_rate *= fiat_rate
+            rate = [transfer['rate_found'],transfer_rate,transfer['rate_source']]
 
             //if transfer is from my address to my other address, we need to account it twice
             let subs = []
-            if (fr in all_address_info && all_address_info[fr][chain]['used']) {
+            if (fr in all_address_info && chain in all_address_info[fr] && all_address_info[fr][chain]['used']) {
                 subs.push([fr,-1])
             }
 
-            if (to in all_address_info && all_address_info[to][chain]['used']) {
+//            console.log('missing chain?',to,chain)
+//            console.log(txid,'transfer',transfer, to, chain)
+            if (to in all_address_info && chain in all_address_info[to] && all_address_info[to][chain]['used']) {
                 subs.push([to,1])
             }
 //            console.log('subs',subs, fr, to, all_addresses)
@@ -367,9 +391,7 @@ function addup_running_tokens() {
                     if (!(contract in subdict)) {
                         subdict[contract] = {'symbol':symbol, 'amount':0, 'adjusted_amount':0, 'negative_balance':[], 'last_ts':0}
                     }
-//                    if (chain == 'ETH' && symbol == 'WETH' && Math.abs(amount) > 30) {
-//                        console.log("WETH running transfer",txid, adr, subamt)
-//                    }
+
 
 
                     subdict[contract]['amount'] += subamt
@@ -381,11 +403,11 @@ function addup_running_tokens() {
                         subdict[contract]['adjusted_amount'] = 0
                     }
 
-//                    if (chain == 'Optimism' && contract == 'ETH' && Math.abs(subamt) > 0.1) {
-//                        console.log(contract+" on "+ chain, tx['num'],txid,subamt,'running total',subdict[contract]['amount'])
-//                    }
+                    if (chain == 'ETH' && contract == 'ETH') {
+                        console.log(contract+" on "+ chain, tx['num'],txid,subamt,'running total',subdict[contract]['amount'])
+                    }
                     subdict[contract]['rate'] = rate
-                } else {
+                } else if (type == 4 || type == 5) {
                     if (!(contract in subdict)) {
                         subdict[contract] = {'symbol':symbol, 'nft_amounts':{}}
                     }
@@ -710,7 +732,7 @@ $('body').on('click','#dc_inspect', function() {
                 let level = tok_data['local_level']
                 html += "<li class='dc_token'><div class='item_header t_class_"+level+"'><div class='token_header' contract_info='"+address+"|"+chain+"|"+contract+"'>"+disp_token
                 if (usd_diff != null)
-                    html += ", $"+round_usd(Math.abs(usd_diff))
+                    html += ", "+print_fiat(round_usd(Math.abs(usd_diff)))
                 html += "</div><div class='inspect_item_ic'></div></div></li>"
             }
 
@@ -725,7 +747,7 @@ $('body').on('click','#dc_inspect', function() {
                     let usd_diff = nft_entry['usd_diff']
                     html += "<li class='dc_token'><div class='item_header t_class_"+level+"'><div class='token_header' contract_info='"+address+"|"+chain+"|"+contract+"|"+nft_id+"'>NFT: "+disp_token
                     if (usd_diff != null)
-                        html += ", $"+round_usd(Math.abs(usd_diff))
+                        html += ", "+print_fiat(round_usd(Math.abs(usd_diff)))
                     html += "</div><div class='inspect_item_ic'></div></div></li>"
                 }
             }
@@ -767,7 +789,7 @@ $('body').on('click','.dc_token .item_header', function() {
         html += "<tr><td>"+source+" returned</td><td>"+round(latest)+"</td></tr>"
         html += "<tr><td>Difference</td><td>"+round(running-latest)+"</td></tr>"
         if (usd_diff != null)
-            html += "<tr><td>Difference in USD</td><td>"+round_usd(-usd_diff)+"</td></tr>"
+            html += "<tr><td>Difference in "+fiat+"</td><td>"+round_usd(-usd_diff)+"</td></tr>"
     } else {
         let diff_data = token_amount_differences_problems[contract_info_ar[0]][chain_name]['nfts'][contract_info_ar[2]]['nft_ids'][contract_info_ar[3]]
         let usd_diff = diff_data['usd_diff']
@@ -779,7 +801,7 @@ $('body').on('click','.dc_token .item_header', function() {
             source = "Solana RPC"
         html += "<tr><td>"+source+" returned</td><td>"+round(latest)+"</td></tr>"
         if (usd_diff != null)
-            html += "<tr><td>Difference in USD (at floor price)</td><td>"+round_usd(-usd_diff)+"</td></tr>"
+            html += "<tr><td>Difference in "+fiat+" (at floor price)</td><td>"+round_usd(-usd_diff)+"</td></tr>"
     }
 
 

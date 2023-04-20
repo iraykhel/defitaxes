@@ -1,9 +1,7 @@
 mtm = false;
 
 
-function round_usd(amount) {
-    return Math.round(amount);
-}
+
 
 function display_tax_block() {
 
@@ -25,19 +23,23 @@ function display_tax_block() {
     if (params['matchups_visible']) html += " checked "
     html += "></label></div>";
 //    html +="<div id='mtm_selector'><label>Mark-to-market <div class='help help_mtm'></div><input type=checkbox id='mtm'></label></div>";
-    html += "<div id='download_transactions_block'><div class='header'>Download all transactions:</div>";
-    html +="<a id='download_transactions_json'>json (raw data)</a>";
-    html +="<a id='download_transactions_csv'>csv (easier to read)</a>";
-    html += "</div>";
-    html +="<a id='calc_tax'>Recalculate taxes</a>";
+//    html += "<div id='download_transactions_block'><div class='header'>Download all transactions:</div>";
+//    html +="<a id='download_transactions_json'>json (raw data)</a>";
+//    html +="<a id='download_transactions_csv'>csv (easier to read)</a>";
+//    html += "</div>";
+
 
 
 //    html += "<a href='download?address="+address+"&type=transactions_csv' id='download_transactions_csv'>csv</a></div>";
     html += "<div id='tax_data'>";
 
     html += year_html;
-    html +="<a id='download_tax_forms'>Download tax forms</a>";
+
+//    html +="<a id='download_tax_forms'>Download tax forms</a>";
+    html +="<a id='options'>Tax options</a>";
+    html +="<a id='downloads'>Download stuff</a>";
     html += "</div>";
+    html +="<a id='calc_tax'>Recalculate taxes</a>";
 
 
     html += "</div>";
@@ -76,10 +78,11 @@ function process_tax_js(js) {
     tokens = js['tokens'];
     incomes = js['incomes'];
     interest = js['interest'];
+    expenses = js['expenses'];
 //    console.log('process_tax_js',year);
-    show_sums(CA_long, CA_short, incomes, interest, year);
+    show_sums(CA_long, CA_short, incomes, interest, expenses, year);
     reset_impact();
-    indicate_matchups(CA_long, CA_short, incomes, interest);
+    indicate_matchups(CA_long, CA_short, incomes, interest, expenses);
 
 //    populate_vault_info(js['vault_info']);
 }
@@ -103,21 +106,23 @@ function sum_up(lines,year,field='amount',timestamp_field='timestamp') {
     return total;
 }
 
-function show_sums(CA_long, CA_short, incomes, interest,year) {
+function show_sums(CA_long, CA_short, incomes, interest, expenses, year) {
     $('#tax_sums').remove();
     total_gain_long = sum_up(CA_long,year,field='gain',timestamp_field='out_ts');
     total_gain_short = sum_up(CA_short,year,field='gain',timestamp_field='out_ts');
     total_income = sum_up(incomes,year);
     total_interest = sum_up(interest,year);
+    total_expenses = sum_up(expenses,year);
     html = "<table id='tax_sums'>";
     if (mtm) {
-        html += "<tr><td class='tax_sum_header'>Ordinary income</td><td class='tax_sum_val'>$"+round_usd(total_income+total_gain_short)+"</td></tr>";
+        html += "<tr><td class='tax_sum_header'>Ordinary income</td><td class='tax_sum_val'>"+print_fiat(round_usd(total_income+total_gain_short))+"</td></tr>";
     } else {
-        html += "<tr><td class='tax_sum_header'>Long-term cap gains</td><td class='tax_sum_val'>$"+round_usd(total_gain_long)+"</td></tr>";
-        html += "<tr><td class='tax_sum_header'>Short-term cap gains</td><td class='tax_sum_val'>$"+round_usd(total_gain_short)+"</td></tr>";
-        html += "<tr><td class='tax_sum_header'>Ordinary income</td><td class='tax_sum_val'>$"+round_usd(total_income)+"</td></tr>";
+        html += "<tr><td class='tax_sum_header'>Long-term cap gains</td><td class='tax_sum_val'>"+print_fiat(round_usd(total_gain_long))+"</td></tr>";
+        html += "<tr><td class='tax_sum_header'>Short-term cap gains</td><td class='tax_sum_val'>"+print_fiat(round_usd(total_gain_short))+"</td></tr>";
+        html += "<tr><td class='tax_sum_header'>Ordinary income</td><td class='tax_sum_val'>"+print_fiat(round_usd(total_income))+"</td></tr>";
     }
-    html += "<tr><td class='tax_sum_header'>Loan interest paid</td><td class='tax_sum_val'>$"+round_usd(total_interest)+"</td></tr>";
+    html += "<tr><td class='tax_sum_header'>Loan interest paid</td><td class='tax_sum_val'>"+print_fiat(round_usd(total_interest))+"</td></tr>";
+    html += "<tr><td class='tax_sum_header'>Business expenses</td><td class='tax_sum_val'>"+print_fiat(round_usd(total_expenses))+"</td></tr>";
     html += "</table>";
     $('#year_selector').after(html);
 }
@@ -208,17 +213,19 @@ function make_all_matchup_html() {
     }
 }
 
-function indicate_matchups(CA_long, CA_short, incomes, interest) {
+function indicate_matchups(CA_long, CA_short, incomes, interest, expenses) {
     lines = CA_short;
     matchups_basis = {}
     matchups_sales = {}
     matchups_incomes = {}
     matchups_interest = {}
+    matchups_expenses = {}
     matchup_gains = {}
     define_matchups(CA_long);
     define_matchups(CA_short);
     define_matchups_ii(incomes,matchups_incomes)
     define_matchups_ii(interest,matchups_interest)
+    define_matchups_ii(expenses,matchups_expenses)
 
     matchup_texts = {}
 
@@ -258,7 +265,7 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
                     text += "in more than 5 transactions";
                 }
                 let cap_gain = round_usd(matchups_basis[txid][trid][tok]['gain']);
-                text += ", total cap gain is $"+cap_gain;
+                text += ", total cap gain is "+print_fiat(cap_gain);
                 if (short) text += "<br><b>This involves a short sale</b>";
 
                 set_impact(txid,cap_gain)
@@ -317,7 +324,7 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
                     text += "in more than 5 transactions";
                 }
                 cap_gain = round_usd(matchups_sales[txid][trid][tok]['gain']);
-                text += ", total cap gain is $"+cap_gain;
+                text += ", total cap gain is "+print_fiat(cap_gain);
                 if (short) text += "<br><b>This involves a short sale</b>";
                 text += "</p>";
 
@@ -335,7 +342,7 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
         for (let trid in matchups_incomes[txid]) {
             entry = matchups_incomes[txid][trid];
             if (entry['amount'] > 1) {
-                text = entry['text'] + ": $"+round_usd(entry['amount']);
+                text = entry['text'] + ": "+print_fiat(round_usd(entry['amount']));
                 add_matchup_text(txid,trid,text)
                 set_impact(txid,round_usd(entry['amount']));
             }
@@ -348,7 +355,20 @@ function indicate_matchups(CA_long, CA_short, incomes, interest) {
         for (let trid in matchups_interest[txid]) {
             entry = matchups_interest[txid][trid];
             if (entry['amount'] > 1) {
-                text = entry['text'] + ": $"+round_usd(entry['amount']);
+                text = entry['text'] + ": "+print_fiat(round_usd(entry['amount']));
+                add_matchup_text(txid,trid,text)
+                set_impact(txid,round_usd(entry['amount']));
+            }
+        }
+    }
+
+    for (let txid in matchups_expenses) {
+        if (txid == -10) //mtm eoy
+            continue;
+        for (let trid in matchups_expenses[txid]) {
+            entry = matchups_expenses[txid][trid];
+            if (entry['amount'] > 1) {
+                text = entry['text'] + ": "+print_fiat(round_usd(entry['amount']));
                 add_matchup_text(txid,trid,text)
                 set_impact(txid,round_usd(entry['amount']));
             }
@@ -391,6 +411,8 @@ function highlight_impact() {
 
 function process_tax_errors(txid=null) {
     if (txid==null && typeof visible_order === 'undefined')
+        return
+    if (typeof CA_errors === 'undefined')
         return
 //    console.log("processing tax calc errors")
     let level_options = [0,3,5,10]
@@ -456,14 +478,17 @@ $('body').on('click','#calc_tax',function() {
     calc_tax();
 });
 
-$('body').on('click','#download_tax_forms',function() {
-    download_tax_forms();
+$('body').on('click','#download_tax_forms, #download_turbotax',function() {
+    let year = $('#tax_year').val();
+    let mtm = false
+    let dltype = $(this).attr('id').substr(9);
+    window.open("download?type="+dltype+"&year="+year+"&mtm="+mtm+"&address="+primary,'_blank');
 });
 
 $('body').on('change','#tax_year',function() {
     year = $('#tax_year').val();
 //    console.log(year);
-    show_sums(CA_long, CA_short, incomes, interest, year);
+    show_sums(CA_long, CA_short, incomes, interest, expenses, year);
 });
 
 $('body').on('change','#mtm',function() {
@@ -487,7 +512,17 @@ $('body').on('change','#matchups_visible',function() {
 
 
 function compare_ts(tx1,tx2) {
-    if (tx1.ts < tx2.ts) return -1;
+    let ts1 = tx1.ts
+    let ts2 = tx2.ts
+    if (tx1.chain == 'Avalanche' || tx1.chain == 'Fantom')
+        ts1 -= 30
+    if (tx2.chain == 'Avalanche' || tx2.chain == 'Fantom')
+        ts2 -= 30
+    if (ts1 < ts2) return -1;
+
+    if (ts1 > ts2) return 1;
+
+    if (tx1.nonce != null && tx2.nonce != null && tx1.nonce < tx2.nonce) return -1;
     return 1;
 }
 
@@ -561,13 +596,6 @@ $('body').on('click','#download_transactions_json, #download_transactions_csv',f
 //    });
 });
 
-function download_tax_forms() {
-//    address = window.sessionStorage.getItem('address');
-//    chain = window.sessionStorage.getItem('chain');
-    year = $('#tax_year').val();
-    mtm = $('#mtm').is(":checked");
-    window.open("download?type=tax_forms&year="+year+"&mtm="+mtm+"&address="+primary,'_blank');
-}
 
 function need_recalc(show=true) {
     if (show && $('#need_recalc').length == 0) {
@@ -582,3 +610,125 @@ function need_recalc(show=true) {
         $('.outdated').removeClass('outdated');
     }
 }
+
+
+$('body').on('click','#downloads',function() {
+    let html ="<div id='overlay'></div><div id='dl_popup' class='popup'>";
+    html += "<div class='header'>What do you want to download?</div>";
+    html += "<ul id='download_list'>"
+    html +="<li><a id='download_transactions_json'>Transactions json</a> (raw data)</li>";
+    html +="<li><a id='download_transactions_csv'>Transactions csv</a> (easier to read)</li>";
+    html +="<li><a id='download_tax_forms'>Tax forms for your CPA</a></li>";
+    html +="<li><a id='download_turbotax'>Form 8949 for TurboTax Online</a> (you will also need to report misc. income)<div class='help help_turbotax'></div></li>";
+    html += "</ul>";
+    html += "<div id='dl_cancel'>Cancel</div>";
+    $('#content').append(html);
+});
+
+$('body').on('click','#options',function() {
+    let html ="<div id='overlay'></div><div id='opt_popup' class='popup'>";
+    html += "<form id='opt_form'>"
+//    html += "<table id='option_list'>"
+//    html +="<tr><td>Your currency:</td>";
+//    html += "<td><select id='currency_select' name='opt_fiat'>";
+//    for (symbol in fiat_info) {
+//        let selected = ""
+//        if (symbol == fiat)
+//            selected = "selected"
+//        html += "<option "+selected+" value='"+symbol+"'>"+symbol+"</option>";
+//    }
+//    html += "</select></td></tr>";
+//    html += "</table>"
+    html += "<ul id='option_list'>"
+
+    html += "<li>Your currency:<select id='opt_fiat' name='opt_fiat'>"
+    for (symbol in fiat_info) {
+        let selected = ""
+        if (symbol == fiat)
+            selected = "selected"
+        html += "<option "+selected+" value='"+symbol+"'>"+symbol+"</option>";
+    }
+    html += "</select>"
+    html += "<div class='opt_note'>Note: this will only affect you currency and exchange rates. Tax forms are still going to be in the US format, but all values will be in the new currency.</div>"
+    html += "</li>"
+
+
+    html += "<li><div class='opt_left'>Your transaction costs are treated as part of your cost basis when the transaction involves a taxable event. How should they be treated if it doesn't? "
+    html += "For example, when you approve a contract, or when you stake something without getting anything back?</div>"
+    html += "<div class='opt_right'><ul class='opt_radio_list'>"
+    let opts = [['sell','Sale (not tax-deductible)'],['expense','Business expense'],['loss','Capital loss']]
+    for (let opt of opts) {
+        let checked = ""
+        if (global_options["opt_tx_costs"] == opt[0])
+            checked = "checked"
+        html += "<li><label><input type=radio "+checked+" name=opt_tx_costs value='"+opt[0]+"'>"+opt[1]+"</label></li>"
+    }
+    html += "</ul></div></li>"
+
+    html += "<li><div class='opt_left'>If you deposited something to a vault, and later withdrew more than you deposited, how should we treat this extra money?</div>"
+    html += "<div class='opt_right'><ul class='opt_radio_list'>"
+    opts = [['income','Income (taxable immediately as income)'],['gain','Free acquisition (taxable as capital gain when sold)']]
+    for (let opt of opts) {
+        let checked = ""
+        if (global_options["opt_vault_gain"] == opt[0])
+            checked = "checked"
+        html += "<li><label><input type=radio "+checked+" name=opt_vault_gain value='"+opt[0]+"'>"+opt[1]+"</label></li>"
+    }
+    html += "</ul></div></li>"
+
+    html += "<li><div class='opt_left'>If you deposited something to a vault, but later exited the vault with a loss, how should we treat this loss?</div>"
+    html += "<div class='opt_right'><ul class='opt_radio_list'>"
+    opts = [['sell','Sale (not tax-deductible)'],['expense','Business expense'],['loss','Capital loss']]
+    for (let opt of opts) {
+        let checked = ""
+        if (global_options["opt_vault_loss"] == opt[0])
+            checked = "checked"
+        html += "<li><label><input type=radio "+checked+" name=opt_vault_loss value='"+opt[0]+"'>"+opt[1]+"</label></li>"
+    }
+    html += "</ul></div></li>"
+
+
+    html += "</ul>"
+    html += "</form>";
+    html += "<div class='sim_buttons'><div id='opt_process'>Save changes</div>";
+    html += "<div id='opt_cancel'>Cancel</div></div>";
+    $('#content').append(html);
+});
+
+$('body').on('change', '#opt_fiat', function() {
+    let new_fiat = $(this).val();
+    if (new_fiat != fiat) {
+        if ($('#opt_fiat_update_custom').length == 0) {
+            html = "<div id='opt_fiat_update_custom'><label>Adjust your custom rates to the new currency? <input type=checkbox checked name='opt_fiat_update_custom'></label></div>"
+            $('#opt_fiat').after(html)
+        }
+    } else {
+        $('#opt_fiat_update_custom').remove()
+    }
+});
+
+$('body').on('click','#opt_process',function() {
+    data = $('#opt_form').serialize();
+    $.post("save_options?address="+primary, data, function(resp) {
+        var data = JSON.parse(resp);
+        if (data.hasOwnProperty('error')) {
+            $("#opt_form").after("<div class='err_mes'>"+data['error']+"</div>");
+        } else {
+            if (data['reproc_needed']) {
+                $('#main_form').submit();
+                return
+            } else if (data['recalc_needed']) {
+                need_recalc();
+            }
+
+            let opt_fields = ['fiat','opt_vault_gain','opt_vault_loss','opt_tx_costs']
+            for (opt of opt_fields) {
+                if (opt in data)
+                    global_options[opt] = data[opt]
+            }
+
+            $('#opt_popup').remove();
+            $('#overlay').remove();
+        }
+    });
+});

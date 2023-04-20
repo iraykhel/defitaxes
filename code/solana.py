@@ -5,6 +5,7 @@ import time
 import traceback
 import copy
 import uuid
+import os
 from collections import defaultdict
 
 from .transaction import Transaction, Transfer
@@ -189,12 +190,7 @@ class Solana(Chain):
         if len(query_list) == 0:
             log('error: query_list is empty for',json_template,filename='solana.txt')
             return {}
-        #chainstack api key pNvjJuZg.1zYEHCVXJ7V6Y08PMlC8SUmFEctyv6Mw
-        rpc_url = 'https://explorer-api.mainnet-beta.solana.com'
-        rpc_url = 'https://try-rpc.mainnet.solana.blockdaemon.tech'
-        rpc_url = 'https://rpc.ankr.com/solana/c9a8aac3e365ed12c403993c587a032d28d24e638a204100c08a4c5976bcfae2'
-        rpc_url = 'https://nd-859-051-685.p2pify.com'
-        rpc_url = 'https://floral-prettiest-wish.solana-mainnet.discover.quiknode.pro/61ca0cf9fb7087fa2a5bc0eadf643c5ab4ae61ca/'
+        rpc_url = 'https://floral-prettiest-wish.solana-mainnet.discover.quiknode.pro/'+os.environ.get('quicknode_solana_auth_token')+'/'
 
         query_list = list(query_list)
         log('rpc call', json_template, len(query_list), query_list[0], filename='solana.txt')
@@ -427,13 +423,13 @@ class Solana(Chain):
 
 
         done = False
-        limit = 1000
+        limit = 500
         tx_list = []
         self.update_pb('Getting signatures for ' + address)
         # json_template = {"method": "getConfirmedSignaturesForAddress2", "jsonrpc": "2.0", "params": [None, {"limit": limit}]}
         json_template = {"method": "getSignaturesForAddress", "jsonrpc": "2.0", "params": [None, {"limit": limit}]}
         while not done:
-            tx_multi_list = self.explorer_multi_request(json_template, [address], pb_text='Getting signatures for ' + address)
+            tx_multi_list = self.explorer_multi_request(json_template, [address], pb_text='Getting signatures for ' + address, timeout=120)
 
 
             output = tx_multi_list[address]
@@ -1128,7 +1124,7 @@ class Solana(Chain):
                     nft_id = None
                     input_len = 0
                     input = None
-                    type = 3
+                    type = Transfer.ERC20
                     fr = t['from']
                     to = t['to']
                     if fr == to:
@@ -1136,7 +1132,7 @@ class Solana(Chain):
 
                     if token == 'SOL':
                         symbol = 'SOL'
-                        type = 1
+                        type = Transfer.BASE
                     else:
                         token_data = all_token_data[token]
                         symbol = token_data['symbol']
@@ -1144,7 +1140,7 @@ class Solana(Chain):
                             symbol = 'WSOL'
                             # type = 1
                         elif all_token_data[token]['decimals'] == 0:
-                            type = 4
+                            type = Transfer.ERC721
                             nft_id = all_token_data[token]['name']
                             input_len = 200
                             input = token
@@ -1187,7 +1183,7 @@ class Solana(Chain):
                         T.function = ', '.join(op_str_lst)
                         # str(list(T.solana_external_programs)) + ":" + str(sorted(list(T.solana_operations)))
 
-                    row = [tx_hash, ts, nonce, ts, fr, to, t['amount'], symbol, token, nft_id, 0, input_len, input]
+                    row = [tx_hash, ts, nonce, ts, fr, to, t['amount'], symbol, token, None, nft_id, 0, input_len, input]
                     T.append(type, row)
                 all_transactions[tx_hash] = T
                 # all_transactions.append(T)

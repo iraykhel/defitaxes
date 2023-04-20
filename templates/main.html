@@ -1,6 +1,6 @@
 <html>
     <head>
-        <link rel="stylesheet" href="{{url_for('static', filename='styles.css')}}">
+        <link rel="stylesheet" href="{{url_for('static', filename='styles.css', v=version)}}">
         <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
         <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
         <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
@@ -28,20 +28,37 @@
     </head>
 
     <body>
+        <div class='header header_static'>
+            <h1>DeFi Taxes</h1>
+            <h4>Turn your blockchain transactions into tax forms in a reasonable amount of time.</h4>
+        </div>
         <div id='address_form'><form id='main_form'>Your main blockchain address:
             <input type=text placeholder='Ethereum or Solana address. No ENS.' id='your_address'/>
             <div id='supported_chain_list'>Supports <a id='chain_support_link' href='chains.html' target=_blank>{{ blockchain_count }} blockchains</a> including Ethereum, Solana, BSC, Polygon, Arbitrum, Optimism, Avalanche, Fantom.</div>
             <div id='initial_options'></div>
             <input type='submit' id='submit_address' value='Process transactions' /><a id='demo_link'>Try a demo</a></form></div>
         <div id='content'></div>
-    </body>
-    <script src="{{url_for('static', filename='pagination.js')}}"></script>
+        <div class='footer footer_static'>
+            <div class='social'>
+                <a href='services.html'>We can do your taxes</a>
+                <a id='discord_link' href='https://discord.gg/E7yuUZ3W4X' target='_blank'>Discord</a>
+                <a id='twitter_link' href='https://twitter.com/defitaxes' target='_blank'>Twitter</a>
+                <a id='email' href='mailto: iraykhel@gmail.com' target='_blank'>Email</a>
+                <a id='github' href='https://github.com/iraykhel/taxes' target='_blank'>Github</a>
+                <a id='donations_main'>Donations</a>
+            </div>
+            <div id='made_by'>Made by <a href='https://www.linkedin.com/in/ilya-raykhel/' target='_blank'>Ilya Raykhel</a></div>
 
-    <script src="{{url_for('static', filename='main.js')}}"></script>
-    <script src="{{url_for('static', filename='typing.js')}}"></script>
-    <script src="{{url_for('static', filename='inspections.js')}}"></script>
-    <script src="{{url_for('static', filename='tax_calc.js')}}"></script>
-    <script src="{{url_for('static', filename='manual_transaction.js')}}"></script>
-    <script src="{{url_for('static', filename='help.js')}}"></script>
+        </div>
+    </body>
+    <script src="{{url_for('static', filename='pagination.js', v=version)}}"></script>
+
+    <script src="{{url_for('static', filename='main.js', v=version)}}"></script>
+    <script src="{{url_for('static', filename='typing.js', v=version)}}"></script>
+    <script src="{{url_for('static', filename='inspections.js', v=version)}}"></script>
+    <script src="{{url_for('static', filename='tax_calc.js', v=version)}}"></script>
+    <script src="{{url_for('static', filename='manual_transaction.js', v=version)}}"></script>
+    <script src="{{url_for('static', filename='uploads.js', v=version)}}"></script>
+    <script src="{{url_for('static', filename='help.js', v=version)}}"></script>
     <script>address = "{{ address }}"; </script>
 </html>

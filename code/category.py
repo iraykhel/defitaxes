@@ -25,6 +25,12 @@ class Category:
     SELF = 20
     MULTISWAP = 21
     BALANCE_ADJUSTMENT = 22
+    DEDUCTIBLE_LOSS = 23
+    LOAN_INTEREST = 24
+    BUSINESS_EXPENSE = 25
+    PNL_CHANGE = 26
+    INCOME = 27
+    SPAM = 28
 
 
 
@@ -41,8 +47,8 @@ class Category:
         DEPOSIT: "transfer in",
         AIRDROP: "airdrop",
         WITHDRAW: "transfer out",
-        DEPOSIT_FROM_BRIDGE: "transfer from bridge",
-        WITHDRAW_TO_BRIDGE: "transfer to bridge",
+        DEPOSIT_FROM_BRIDGE: "transfer from your account elsewhere",
+        WITHDRAW_TO_BRIDGE: "transfer to your account elsewhere",
         WRAP: "wrap",
         UNWRAP: "unwrap",
         ADD_LIQUIDITY_NO_RECEIPT: "deposit",
@@ -57,7 +63,13 @@ class Category:
         COMPOUND:"compound",
         SELF:"interaction between your accounts",
         MULTISWAP:"multi-transactional swap",
-        BALANCE_ADJUSTMENT:"balance adjustment"
+        BALANCE_ADJUSTMENT:"balance adjustment",
+        DEDUCTIBLE_LOSS:"deductible loss",
+        LOAN_INTEREST:"loan interest",
+        BUSINESS_EXPENSE:"business expense",
+        PNL_CHANGE:"realized profit or loss",
+        INCOME:"income",
+        SPAM:"spam"
     }
 
 

@@ -12,7 +12,7 @@ function make_help_strings() {
             '<p>To select transactions you want to apply the rule to, find one of them, and use "Select transactions with the same" checkboxes on the bottom.</p>'
         },
         'balanced':{'header':'Balanced transactions','explanation':
-            '<p>If a transaction is balanced we assume that the total amount of USD that you sent out is the same as you received. '+
+            '<p>If a transaction is balanced we assume that the total amount of '+fiat+' that you sent out is the same as you received. '+
             'More precisely, total dollar amount spent on transfers that are "Buy at market price" is the same as amount received from transfers that are "Sell at market price".</p>'+
             '<p>This allows us to infer dollar rates for tokens that are not on Coingecko, for example Uniswap pool tokens. '+
             'If all tokens are on Coingecko it allows us to use a more precise exhange rate for them.</p>'+
@@ -28,6 +28,7 @@ function make_help_strings() {
             'tokens from the same vault. Same for loan IDs.</p>'+
             '<p>Claiming rewards from a staking farm is not "withdraw from vault", it\'s just "income".</p>'
         },
+        'tokenrule':{'header':'','explanation':'You can specify currency symbol, contract, or coingecko ID here.'},
         'issues':{'header':'Known issues and bugs','explanation':
             '<h4>Some scanners work intermittently</h4><p>We do not get our data straight from the blockchain, we get it from the third parties like Etherscan or Blockscout. '+
             '(full list of data providers is <a href="https://defitaxes.us/chains.html" target=_blank>here</a>). Some of these third parties work better than others. '+
@@ -75,9 +76,9 @@ function make_help_strings() {
         'treatments':{'header':'Tax treatment options','explanation':
             '<h4>Ignore</h4><p>This transfer is ignored entirely, including in calculations of your available assets. If you ignore an inbound transfer and then spend it, '+
             'that action will open a short position. If you ignore one transfer of a token, we recommend ignoring all transfers involving that token.</p>' +
-            '<h4>Buy</h4><p>Buy some tokens, spend USD. Default price is USD market price as provided by Coingecko (which may occasionally be wrong). You can adjust the price yourself. '+
+            '<h4>Buy</h4><p>Buy some tokens, spend '+fiat+'. Default price is '+fiat+' market price as provided by Coingecko (which may occasionally be wrong). You can adjust the price yourself. '+
             'This is typically not a taxable event and by itself has no effect on your tax forms (except when closing a short position).</p>'+
-            '<h4>Sell</h4><p>Sell some tokens, receive USD. Opposite of "Buy" treatment. Selling tokens is a taxable event and will add one or several lines to 8949 form. '+
+            '<h4>Sell</h4><p>Sell some tokens, receive '+fiat+'. Opposite of "Buy" treatment. Selling tokens is a taxable event and will add one or several lines to 8949 form. '+
             '<p>Anytime you spend your crypto on some service or product is also a "Sell".</p>'+
             '<h4>Acquire for free</h4><p>Same as "buy", but for price of 0. Do not use it for airdrops, rewards, mining, or anything else that gets you free money, use "Income" instead.'+
             ' Use sparingly for special situations.</p>'+
@@ -109,16 +110,16 @@ function make_help_strings() {
             'potential issues with this approach. First, you may have some realized gains or losses when you should not have any. Second, this may break your long-term status for your '+
             'capital gains.</p>If you want to improve the filing for this kind of transactions: set the treatment on the transfer to "ignore", '+
             'and manually create a transaction where you are buying/selling this token at the time and price you specified.</p>' +
-            '<h4>Spending crypto on a service or a product</h4><p>For tax purposes, this is a sale of that crypto for USD and should be assigned a "sell" treatment.</p>' +
+            '<h4>Spending crypto on a service or a product</h4><p>For tax purposes, this is a sale of that crypto for '+fiat+' and should be assigned a "sell" treatment.</p>' +
             '<h4>Bridging tokens between the same address on different blockchains</h4><p>We have some built-in handling for this, if both blockchains are supported. If sent amount is '+
             'exactly the same as received amount, and sent token and received token are the same as per Coingecko, we set both transfers to "ignore". If there is any '+
             'difference between the sent transfer and the received transfer, we set the sent transfer to "deposit to vault" and received transfer to "exit vault".</p>'+
             '<p>If you bridged to/from a different wallet address, or to/from a blockchain we don\'t support, we treat it as a usual external transfer described above.</p>'+
-            '<h4>Exchange token A for token B</h4><p>This is a sale of token A, and a simultaneous purchase of token B. It is a balanced transaction, meaning total amount of USD going out and '+
+            '<h4>Exchange token A for token B</h4><p>This is a sale of token A, and a simultaneous purchase of token B. It is a balanced transaction, meaning total amount of '+fiat+' going out and '+
             'coming in is the same.</p>'+
             '<h4>Provide liquidity into a liquidity pool</h4><p>Typically you would deposit some amount of token A and some amount of token B into a pool, in return getting receipt token LP. '+
             'We treat this as exchange of tokens A and B for LP: this is a sale of token A, a sale of token B, and a purchase of token LP. The transaction is balanced, allowing us to infer the '+
-            'USD rate for LP even though it is typically not available on Coingecko.</p><p>An alternate way to treat this is depositing tokens A and B into a common vault, and ignoring '+
+            ''+fiat+' rate for LP even though it is typically not available on Coingecko.</p><p>An alternate way to treat this is depositing tokens A and B into a common vault, and ignoring '+
             'transfers of token LP. This may help decrease your number of taxable events, but is more error-prone.</p>'+
             '<h4>Provide liquidity elsewhere</h4><p>If you get something back, it\'s better treat it as an exchange of one thing for the other (apply '+
             'provided "Swap" custom type). If you didn\'t get anything back, treat it as "deposit to vault".</p>'+
@@ -166,7 +167,53 @@ function make_help_strings() {
             'a blockchain transaction for some other reason. However, we can try to approximate it. Using this will create manual transactions (as if you created them yourself) by '+
             'following these rules:</p><p>1) Whenever we detect your token balance going negative, we will create a transaction just before that moment to make sure your token balance goes '+
             'to zero instead.</p><p>2) After your very last transaction with the token, we will create another one to make sure your final balance matches the one we retrieved from debank.com.</p>'
-        }
+        },
+
+        'turbotax':{'header':'Instructions for TurboTax Online','explanation':
+        '<h4>Capital gains & losses</h4>'+
+        '<p>You can download the 8949 form in a TurboTax-compatible format. On TurboTax, you can upload it if you go spelunking into their UI:</p>'+
+        '<ol><li>On the left side, click "Wages & Income"</li><li>Go to "Investments and Saving (1099-B, 1099-INT, 1099-DIV, 1099-K, Crypto)"</li>'+
+        '<li>Click through their interface until you get to their list of financial institutions.</li>'+
+        '<li>Click "Enter a different way" in the bottom-right corner</li><li>Click "Cryptocurrency"</li><li>Click "Upload it from my computer"</li>'+
+        '<li>Choose "Other" in crypto service menu. <b>Not "Other (Transactions CSV)"</b></li>'+
+        '<li>Enter "Defitaxes" in "Name". Or whatever you want, they don\'t care</li>'+
+        '<li>Browse and upload the form we provided</li><li>It might say "needs review", but you can ignore it</li></ol></p>'+
+        '<p>TurboTax has a limitation of no more than 4000 lines per upload. If you have more than that, we will batch them for you and have you download '+
+        'a .zip file. In that case, you\'ll need to upload the batches one by one as described above.</p>'+
+
+
+        '<h4>Ordinary income</h4><p>Besides the 8949 form, you will also need to report your income from yield farms etc. Time for another spelunking expedition!</p>'+
+        '<ol><li>Go to "Wages & Income" as before</li><li>Go to "Less Common Income" on the very bottom</li>'+
+        '<li>Go to "Miscellaneous Income, 1099-A, 1099-C" on the bottom of that</li><li>Go to "Other reportable income" on the bottom of THAT</li>'+
+        '<li>Click "Yes". Enter "Income from decentralized cryptocurrency operations" in "Description"</li>'+
+        '<li>In the "Amount" field enter the ordinary income reported on defitaxes.us for your tax year</li></ol></p>'+
+
+
+        '<h4>Loan interest paid</h4><p>You may also consider deducting loan interest paid, but we advise against it. Consult with a CPA about it. If you want to, it is under '+
+        'Deductions & Credits -> Retirement and Investments -> Investment Interest Expenses</p>'+
+
+        '<h4>Business expenses</h4><p>If you want to deduct business expenses, you will need to use their search to search for "Schedule C". Note that filing it '+
+        'requires an upgrade to Live Self-Employed version of TurboTax, may change how you would file you income, and you might be on the hook for additional '+
+        'self-employment taxes.</p>'
+        },
+
+        'upload_csv':{'header':'Instructions for CSV uploads','explanation':
+        '<p>You can upload your transactions from a CSV file. This is most useful when adding transactions from centralized exchanges. Download your order and transfer histories '+
+        'from an exchange, convert them to defitaxes format, and upload it here.</p>'+
+        '<p>Our upload format mimics that of CryptoTaxCalculator, you can read their guide <a href="https://cryptotaxcalculator.io/guides/advanced-manual-csv-import/" target=_blank>here</a>, '+
+        'but we might process the same input in a different way. Specific instructions are in the template itself, <a target=_blank href="https://docs.google.com/spreadsheets/d/1dm-41zxpfS1BQUYgEhC1-kmt8egYJwu3IICCXomnN68/edit?usp=sharing">here</a>.</p>'+
+        '<p>We have also prepared helpful conversion kits to convert from a few exchange formats to ours. To use them, first make a copy of the kit by going to File->Make a copy on Google Sheets, then '+
+        'paste your data in the corresponding sheet and get it in our format in the next sheet over. You may need to make some modifications, and the conversion kits might not cover all the '+
+        'kinds of data.</p><ul>'+
+        '<li><a href="https://docs.google.com/spreadsheets/d/1ZFsCyleTYEfebS2i5wVdcpAMQ6I0b0vPzSQPoSN-kyY/edit?usp=sharing" target=_blank>Binance</a></li>'+
+        '<li><a href="https://docs.google.com/spreadsheets/d/1bEiWQO_oo0GgnFlW35Cry3NxWIeIh9GrW_7cGdxd5zc/edit?usp=sharing" target=_blank>Coinbase Pro</a></li>'+
+        '<li><a href="https://docs.google.com/spreadsheets/d/1JgnLDTJe72yK_eo-AmbKyuLh27xPp7UBS6HMHywK0xo/edit?usp=sharing" target=_blank>Kraken</a></li>'+
+        '<li><a href="https://docs.google.com/spreadsheets/d/1FDcah9faGS3Hiu4aO3mPx2tmtaOxsNaESQWrqBaRRCc/edit?usp=sharing" target=_blank>Bittrex</a></li>'+
+        '<li><a href="https://docs.google.com/spreadsheets/d/1-ENDeAINNh6e5g8zUX2D5eBfxhwQHgvI7_OS9k0jnaY/edit?usp=sharing" target=_blank>Kucoin</a></li>'+
+        '</ul>'+
+        '<p>Let us know if these kits are incomplete or out of date. If you make a conversion kit for a different exchange, we would love to add it.</p>'
+
+        },
     }
 }
 
@@ -221,6 +268,7 @@ $('body').on('click','#help_main',function() {
     html += "<li id='help_topic_treatments' class='help_topic'>Tax treatment options</li>"
     html += "<li id='help_topic_examples' class='help_topic'>Kinds of transactions you might have</li>"
     html += "<li id='help_topic_vaultid' class='help_topic'>Vaults and loans</li>"
+    html += "<li id='help_topic_turbotax' class='help_topic'>TurboTax integration</li>"
     html += "<li id='help_topic_issues' class='help_topic'>Known issues</li>"
     html += "</ul></div>";
 

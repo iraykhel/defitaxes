@@ -57,7 +57,7 @@ class Chain:
 
         'ETH':{
             'scanner':'etherscan.io',
-            'api_key':'ABGDZF9A4GIPCHYZZS4FVUBFXUPXRDZAKQ',
+            'api_key':'api_key_etherscan',
             'outbound_bridges':['0XA0C68C638235EE32657E8F720A23CEC1BFC77C77',  # polygon
                                 '0X40EC5B33F54E0E8A33A975908C5BA1C14E5BBBDF',  # polygon
                                 '0x401f6c983ea34274ec46f84d70b31c151321188b',
@@ -77,7 +77,8 @@ class Chain:
             'coingecko_platform':'ethereum',
             'coingecko_id':'ethereum',
             'simplehash_mapping':'ethereum',
-            'covalent_mapping':1,
+            'covalent_mapping':'eth-mainnet',
+            'dexscreener_mapping':'ethereum',
             'order':0,
             'support':10,
             '1155_support':10,
@@ -87,14 +88,15 @@ class Chain:
         'BSC': {
             'scanner': 'bscscan.com',
             'base_asset': 'BNB',
-            'api_key': 'EVFEA2Z91JKN557RRY6AK7KCB8NM1PMBEZ',
-            'outbound_bridges': ['0X37C9980809D205972D8D092D5A5AE912BC91DA4C', '0X2170ED0880AC9A755FD29B2688956BD959F933F8'],
+            'api_key': 'api_key_bscscan',
+            'outbound_bridges': ['0X2170ED0880AC9A755FD29B2688956BD959F933F8'],
             'inbound_bridges': ['0X8894E0A0C962CB723C1976A4421C95949BE2D4E3'],
             'wrapper': '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c',
             'coingecko_platform': 'binance-smart-chain',
             'coingecko_id': 'binancecoin',
             'debank_mapping': 'bsc',
             'simplehash_mapping': 'bsc',
+            'covalent_mapping':'bsc-mainnet',
             'order': 1,
             'support': 10,
             'cp_availability': 10
@@ -104,7 +106,7 @@ class Chain:
         'Arbitrum': {
             'scanner': 'arbiscan.io',
             'base_asset': 'ETH',
-            'api_key': '19RVD81VR63SER25U17JG998GKU2NF35NQ',
+            'api_key': 'api_key_arbiscan',
             'outbound_bridges': ['0x0000000000000000000000000000000000000064'],
             'inbound_bridges': ['0x000000000000000000000000000000000000006e'],
             'wrapper': '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
@@ -112,24 +114,39 @@ class Chain:
             'coingecko_id': 'ethereum',
             'debank_mapping': 'arb',
             'simplehash_mapping': 'arbitrum',
-            'covalent_mapping': 42161,
+            'covalent_mapping': 'arbitrum-mainnet',
             'order': 2,
             'support': 10,
             '1155_support': 5,
             'cp_availability': 5
         },
 
+        'Arbitrum Nova': {
+            'scanner': 'nova.arbiscan.io',
+            'explorer_url': 'https://api-nova.arbiscan.io/api',
+            'base_asset': 'ETH',
+            'api_key': 'api_key_arbiscan_nova',
+            'wrapper': '0xf906A9c7b4d1207B38a2f18445047764763aB450',
+            'coingecko_platform': 'arbitrum-nova',
+            'coingecko_id': 'ethereum',
+            'debank_mapping': 'nova',
+            'dexscreener_mapping': 'arbitrumnova',
+            'order': 3,
+            'support': 3,
+        },
+
         'Polygon': {
             'scanner': 'polygonscan.com',
             'base_asset': 'MATIC',
-            'api_key': 'A1FQ2P7N8199KNXQNNC5GUXV329VX6U3AN',
+            'api_key': 'api_key_polygonscan',
             'outbound_bridges': ['0X7CEB23FD6BC0ADD59E62AC25578270CFF1B9F619'],
             'inbound_bridges': ['0X0000000000000000000000000000000000000000'],
             'wrapper': '0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270',
             'coingecko_platform': 'polygon-pos',
+            'covalent_mapping': 'matic-mainnet',
             'coingecko_id': 'matic-network',
             'simplehash_mapping': 'polygon',
-            'order': 3,
+            'order': 4,
             'support': 10,
             '1155_support': 3,
             'cp_availability': 10
@@ -138,22 +155,23 @@ class Chain:
         'Avalanche': {
             'scanner': 'snowtrace.io',
             'base_asset': 'AVAX',
-            'api_key': 'NQ63S9M3VZ8JVUY6DS5X3AM2Q8ZAZ2XVJS',
+            'api_key': 'api_key_snowtrace',
             'outbound_bridges': ['0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab'],
             'inbound_bridges': ['0x0000000000000000000000000000000000000000'],
             'wrapper': '0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7',
             'coingecko_id': 'avalanche-2',
             'simplehash_mapping': 'avalanche',
-            'order': 4,
+            'order': 5,
             'support': 10,
             '1155_support': 5,
-            'cp_availability': 5
+            'cp_availability': 5,
+            'covalent_mapping': 'avalanche-mainnet',
         },
 
         'Optimism': {
             'scanner': 'optimistic.etherscan.io',
             'base_asset': 'ETH',
-            'api_key': 'FZRCZQ2A6MIENZF2H4KZVRM8QR5EDIVSRC',
+            'api_key': 'api_key_etherscan_optimism',
             'wrapper': '0x4200000000000000000000000000000000000006',
             'coingecko_platform': 'optimistic-ethereum',
             'coingecko_id': 'ethereum',
@@ -161,7 +179,7 @@ class Chain:
             'simplehash_mapping': 'optimism',
             'explorer_url':'https://api-optimistic.etherscan.io/api',
             # 'covalent_mapping': 10, #covalent fees are also wrong
-            'order': 5,
+            'order': 6,
             'support': 5,
             'cp_availability': 3
         },
@@ -169,10 +187,10 @@ class Chain:
         'Fantom': {
             'scanner': 'ftmscan.com',
             'base_asset': 'FTM',
-            'api_key': 'AATCCIEAS1AV6WPETCBIATS4H972TNADK4',
+            'api_key': 'api_key_ftmscan',
             'wrapper': '0x21be370d5312f44cb42ce377bc9b8a0cef1a4c83',
-            'covalent_mapping': 250,
-            'order': 6,
+            'covalent_mapping': 'fantom-mainnet',
+            'order': 7,
             'support': 10,
             '1155_support': 5,
             'cp_availability': 10
@@ -181,30 +199,30 @@ class Chain:
         'Cronos': {
             'scanner': 'cronoscan.com',
             'base_asset': 'CRO',
-            'api_key': 'IUB2A1WDJ91RZN8I728XWFZ711QM1WZ63G',
+            'api_key': 'api_key_cronoscan',
             'wrapper': '0x5C7F8A570d578ED84E63fdFA7b1eE72dEae1AE23',
             'coingecko_id': 'crypto-com-chain',
-            'order': 7,
+            'order': 8,
             'support': 5,
             'cp_availability': 5
         },
 
-        'Solana': { 'scanner':'solscan.io', 'order': 8, 'support':10, 'cp_availability': 5 }, #special handling
+        'Solana': { 'scanner':'solscan.io', 'order': 9, 'support':10, 'cp_availability': 5, 'base_asset': 'SOL', 'coingecko_id':'solana'}, #special handling
 
         'Kava': {
             'scanner': 'explorer.kava.io',
             'wrapper': '0xc86c7c0efbd6a49b35e8714c5f59d99de09a225b',
             'blockscout':1,
-            'order': 9,
+            'order': 10,
             'support': 3
         },
 
         'Celo': {
             'scanner': 'celoscan.io',
             'base_asset': 'CELO',
-            'api_key':'G9HKINCNFI3XC4FTAYZ7D8I1TZWA3X8WR5',
+            'api_key':'api_key_celoscan',
             'wrapper': '0xc579D1f3CF86749E05CD06f7ADe17856c2CE3126',
-            'order': 10,
+            'order': 11,
             'support': 3
         },
 
@@ -212,10 +230,10 @@ class Chain:
             'scanner': 'moonscan.io',
             'explorer_url':'https://api-moonbeam.moonscan.io/api',
             'base_asset': 'GLMR',
-            'api_key': 'XH1UQEP2MRX1YF8QD9S8TCVVG2IIUENR3B',
+            'api_key': 'api_key_moonscan',
             'wrapper': '0xacc15dc74880c9944775448304b263d191c6077f',
             'debank_mapping':'mobm',
-            'order': 11,
+            'order': 10,
             'support': 3
         },
 
@@ -223,7 +241,7 @@ class Chain:
             'scanner': 'evm.explorer.canto.io',
             'wrapper': '0x826551890dc65655a0aceca109ab11abdbd7a07b',
             'blockscout':1,
-            'order': 12,
+            'order': 10,
             'support': 3
         },
 
@@ -232,7 +250,7 @@ class Chain:
             'base_asset':'ETH',
             'debank_mapping':'aurora',
             'blockscout': 1,
-            'order': 13,
+            'order': 10,
             'support': 3,
             'cp_availability':3
         },
@@ -240,14 +258,14 @@ class Chain:
         'HECO': {
             'scanner': 'hecoinfo.com',
             'base_asset': 'HT',
-            'api_key': 'T4UDKXYGYSFA3ACAX3XCD546IMH622HNV5',
+            'api_key': 'api_key_hecoinfo',
             'wrapper': '0x5545153ccfca01fbd7dd11c0b23ba694d9509a6f',
             'inbound_bridges':['0xd8e32fbfb7da70237c130a6d8d6e12471f6d029d'],
             'outbound_bridges':['0xd8e32fbfb7da70237c130a6d8d6e12471f6d029d'],
             'coingecko_platform': 'huobi-token',
             'coingecko_id': 'huobi-token',
             'debank_mapping':'heco',
-            'order': 14,
+            'order': 15,
             'support': 5,
             'cp_availability': 5
         },
@@ -267,12 +285,13 @@ class Chain:
         'Gnosis': {
             'scanner': 'gnosisscan.io',
             'base_asset': 'XDAI',
-            'api_key': 'C3E8N6EEU17ZZ73SICR4QXSDRRMRG7YVIR',
+            'api_key': 'api_key_gnosisscan',
             'wrapper': '0xe91d153e0b41518a2ce8dd3d7944fa863463a97d',
             'coingecko_platform': 'xdai',
             'coingecko_id': 'xdai',
             'simplehash_mapping': 'gnosis',
-            'order': 15,
+            'dexscreener_mapping': 'gnosischain',
+            'order': 16,
             'support': 3,
             '1155_support':3
         },
@@ -284,7 +303,7 @@ class Chain:
             'coingecko_id': 'kucoin-shares',
             'debank_mapping': 'kcc',
             'blockscout': 1,
-            'order': 16,
+            'order': 17,
             'support': 3
         },
 
@@ -293,9 +312,9 @@ class Chain:
             'scanner_name':'Moonscan',
             'explorer_url': 'https://api-moonriver.moonscan.io/api',
             'base_asset': 'MOVR',
-            'api_key': 'P6F13BP25JBD8B8K17UMHIB75R9EA2BYPD',
+            'api_key': 'api_key_moonscan_moonriver',
             'wrapper': '0x98878b06940ae243284ca214f92bb71a2b032b8a',
-            'order': 17,
+            'order': 18,
             'support': 3
         },
 
@@ -305,7 +324,7 @@ class Chain:
             'coingecko_platform': 'metis-andromeda',
             'coingecko_id': 'metis-token',
             'blockscout': 1,
-            'order': 18,
+            'order': 19,
             'support': 3
         },
 
@@ -314,9 +333,10 @@ class Chain:
             'base_asset':'ROSE',
             'wrapper': '0x21c718c22d52d0f3a789b752d4c2fd5908a8a733',
             'coingecko_id': 'oasis-network',
+            'dexscreener_mapping': 'oasisemerald',
             'debank_mapping':None,
             'blockscout': 1,
-            'order': 19,
+            'order': 20,
             'support': 3
         },
 
@@ -324,8 +344,21 @@ class Chain:
             'scanner': 'songbird-explorer.flare.network',
             'base_asset': 'SGB',
             'wrapper': '0x02f0826ef6ad107cfc861152b32b52fd11bab9ed',
+            'dexscreener_mapping': None,
             'blockscout': 1,
-            'order': 20,
+            'order': 21,
+            'support': 3
+        },
+
+        'Flare': {
+            'scanner': 'flare-explorer.flare.network',
+            'base_asset': 'FLR',
+            'wrapper': '0x1D80c49BbBCd1C0911346656B529DF9E5c2F783d',
+            'coingecko_id':'flare-networks',
+            'coingecko_platform': 'flare-network',
+            'debank_mapping': None,
+            'blockscout': 1,
+            'order': 22,
             'support': 3
         },
 
@@ -337,8 +370,9 @@ class Chain:
             'coingecko_platform': 'step-network',
             'coingecko_id': 'step-app-fitfi',
             'debank_mapping': 'step',
+            'dexscreener_mapping': 'stepnetwork',
             'blockscout': 1,
-            'order': 21,
+            'order': 23,
             'support': 3
         },
 
@@ -347,8 +381,9 @@ class Chain:
             'wrapper': '0xb7ddc6414bf4f5515b52d8bdd69973ae205ff101',
             'coingecko_platform':'dogechain',
             'coingecko_id':'dogecoin',
+            'dexscreener_mapping': 'dogechain',
             'blockscout': 1,
-            'order': 22,
+            'order': 24,
             'support': 3
         },
 
@@ -358,7 +393,7 @@ class Chain:
             'wrapper': '0xb58a9d5920af6ac1a9522b0b10f55df16686d1b6',
             'debank_mapping': None,
             'blockscout': 1,
-            'order': 23,
+            'order': 25,
             'support': 3
         },
 
@@ -367,7 +402,7 @@ class Chain:
             'wrapper': '0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000',
             'coingecko_id': 'boba-network',
             'blockscout': 1,
-            'order': 24,
+            'order': 26,
             'support': 3
         },
 
@@ -378,7 +413,7 @@ class Chain:
             'coingecko_id': 'sx-network',
             'debank_mapping': None,
             'blockscout': 1,
-            'order': 25,
+            'order': 27,
             'support': 3
         },
 
@@ -390,7 +425,7 @@ class Chain:
             'coingecko_id': 'bitcoin-cash',
             'debank_mapping': 'sbch',
             'blockscout': 1,
-            'order': 26,
+            'order': 28,
             'support': 3
         },
 
@@ -398,7 +433,7 @@ class Chain:
             'scanner': 'blockscout.evmos.org',
             'wrapper': '0xd4949664cd82660aae99bedc034a0dea8a0bd517',
             'blockscout': 1,
-            'order': 27,
+            'order': 29,
             'support': 3
         },
 
@@ -419,6 +454,7 @@ class Chain:
             'wrapper': '0x1953cab0E5bFa6D4a9BaD6E05fD46C1CC6527a5a',
             'coingecko_platform': 'ethereum-classic',
             'coingecko_id': 'ethereum-classic',
+            'dexscreener_mapping': 'ethereumclassic',
             'blockscout': 1,
             'order': 100,
             'support': 3
@@ -426,16 +462,19 @@ class Chain:
 
     }
 
-    def __init__(self,name,domain,main_asset, api_key, outbound_bridges=(),inbound_bridges=(),wrapper=None,rate_limit=5,blockscout=False,explorer_url=None):
-
+    def __init__(self,name,domain,main_asset, api_key, outbound_bridges=(),inbound_bridges=(),wrapper=None,rate_limit=5,blockscout=False,explorer_url=None, is_upload=False):
+        self.is_upload = is_upload
         self.domain = domain
-        if explorer_url is not None:
-            self.explorer_url = explorer_url
-        else:
-            if blockscout:
-                self.explorer_url = 'https://'+domain+'/api'
+        self.explorer_url = None
+        if domain is not None:
+            if explorer_url is not None:
+                self.explorer_url = explorer_url
             else:
-                self.explorer_url = 'https://api.'+domain+'/api'
+                if blockscout:
+                    self.explorer_url = 'https://'+domain+'/api'
+                else:
+                    self.explorer_url = 'https://api.'+domain+'/api'
+
         self.blockscout = blockscout
         self.main_asset = main_asset
         self.api_key = api_key
@@ -452,7 +491,7 @@ class Chain:
         if wrapper is not None:
             self.wrapper = normalize_address(wrapper)
 
-        self.hif = '0x8360daa62706f21f9acf06e4282a680838e6dda51e2c70dfc35bf603aedf784b'
+        self.hif = '0xd30822305c563c321df2137934d57bb409e17dbd64e8c2e85b2773052ea58502'
         self.wait_time = 1/float(rate_limit)+0.05
 
         self.wait_time *= 2
@@ -513,6 +552,10 @@ class Chain:
 
             #scanner:'etherscan.io', base_token:'ETH', scanner_name:'Etherscan', debank:1
 
+    @classmethod
+    def from_upload(cls,upload_source):
+        chain = Chain(upload_source, None, None, None, is_upload=True)
+        return chain
 
     @classmethod
     def from_name(cls,chain_name):
@@ -523,7 +566,7 @@ class Chain:
 
         api_key = None
         if 'api_key' in conf:
-            api_key = conf['api_key']
+            api_key = os.environ.get(conf['api_key'])
         outbound_bridges = ()
         inbound_bridges = ()
         wrapper = None
@@ -558,115 +601,6 @@ class Chain:
                         rate_limit=rate_limit)
         return chain
 
-        # if chain_name == 'ETH':
-        #     chain = Chain('ETH', 'etherscan.io', 'ETH', 'ABGDZF9A4GIPCHYZZS4FVUBFXUPXRDZAKQ',
-        #                 outbound_bridges=['0XA0C68C638235EE32657E8F720A23CEC1BFC77C77',  # polygon
-        #                                   '0X40EC5B33F54E0E8A33A975908C5BA1C14E5BBBDF',  # polygon
-        #                                   '0x401f6c983ea34274ec46f84d70b31c151321188b',
-        #                                   '0X59E55EC322F667015D7B6B4B63DC2DE6D4B541C3',  # bsc
-        #                                   '0x1485e9852ac841b52ed44d573036429504f4f602',
-        #                                   '0x4dbd4fc535ac27206064b68ffcf827b0a60bab3f',  #arbitrum
-        #                                   '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2', #avalanche
-        #                                   '0x09357819e5099232111d8377d5e089540e0b48bb' #heco
-        #                                 ],
-        #                 inbound_bridges=['0x8484ef722627bf18ca5ae6bcf031c23e6e922b30','0XA0C68C638235EE32657E8F720A23CEC1BFC77C77','0x40ec5b33f54e0e8a33a975908c5ba1c14e5bbbdf',
-        #                                  '0xe78388b4ce79068e89bf8aa7f218ef6b9ab0e9d0','0x09357819e5099232111d8377d5e089540e0b48bb'],
-        #                 wrapper='0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
-        #                 rate_limit=10)
-        #
-        # if chain_name == 'Polygon':
-        #     chain = Chain('Polygon', 'polygonscan.com', 'MATIC', 'A1FQ2P7N8199KNXQNNC5GUXV329VX6U3AN',
-        #                     outbound_bridges=['0X7CEB23FD6BC0ADD59E62AC25578270CFF1B9F619'],
-        #                     inbound_bridges=['0X0000000000000000000000000000000000000000'],
-        #                   wrapper='0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270')
-        #
-        # if chain_name == 'BSC':
-        #     chain = Chain('BSC', 'bscscan.com', 'BNB', 'EVFEA2Z91JKN557RRY6AK7KCB8NM1PMBEZ',
-        #                 outbound_bridges=['0X37C9980809D205972D8D092D5A5AE912BC91DA4C', '0X2170ED0880AC9A755FD29B2688956BD959F933F8'],  # eth
-        #                 inbound_bridges=['0X8894E0A0C962CB723C1976A4421C95949BE2D4E3'],
-        #                   wrapper='0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c')  # eth
-        #
-        # if chain_name == 'HECO':
-        #     chain = Chain('HECO', 'hecoinfo.com', 'HT', 'T4UDKXYGYSFA3ACAX3XCD546IMH622HNV5', wrapper='0x5545153ccfca01fbd7dd11c0b23ba694d9509a6f',
-        #                   inbound_bridges=['0xd8e32fbfb7da70237c130a6d8d6e12471f6d029d'],outbound_bridges=['0xd8e32fbfb7da70237c130a6d8d6e12471f6d029d'])
-        #
-        # if chain_name == 'Arbitrum':
-        #     chain = Chain('Arbitrum', 'arbiscan.io', 'ETH', '19RVD81VR63SER25U17JG998GKU2NF35NQ', wrapper='0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
-        #                   outbound_bridges=['0x0000000000000000000000000000000000000064'],inbound_bridges=['0x000000000000000000000000000000000000006e'])
-        #
-        # if chain_name == 'Avalanche':
-        #     chain = Chain( 'Avalanche', 'snowtrace.io', 'AVAX', 'NQ63S9M3VZ8JVUY6DS5X3AM2Q8ZAZ2XVJS',  wrapper='0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7',
-        #                    outbound_bridges=['0x49d5c2bdffac6ce2bfdb6640f4f80f226bc10bab'],inbound_bridges=['0x0000000000000000000000000000000000000000'])
-        #
-        # if chain_name == 'Fantom':
-        #     chain = Chain('Fantom', 'ftmscan.com', 'FTM', 'AATCCIEAS1AV6WPETCBIATS4H972TNADK4',  wrapper='0x21be370d5312f44cb42ce377bc9b8a0cef1a4c83')
-        #
-        # if chain_name == 'Moonriver':
-        #     chain = Chain('Moonriver', 'moonscan.io', 'MOVR', 'XH1UQEP2MRX1YF8QD9S8TCVVG2IIUENR3B',  wrapper='0x98878b06940ae243284ca214f92bb71a2b032b8a',
-        #                   explorer_url='https://api-moonbeam.moonscan.io/api')
-        #
-        # if chain_name == 'Cronos':
-        #     chain = Chain('Cronos', 'cronoscan.com', 'CRO', 'IUB2A1WDJ91RZN8I728XWFZ711QM1WZ63G', wrapper='0x5C7F8A570d578ED84E63fdFA7b1eE72dEae1AE23')
-        #
-        # if chain_name == 'Gnosis':
-        #     chain = Chain('Gnosis', 'blockscout.com', 'XDAI', '0bc0f6b7-c826-49f2-9959-749ffe4da4e8', wrapper='0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d',
-        #                   blockscout=True, explorer_url='https://blockscout.com/xdai/mainnet/api')
-        #
-        # if chain_name == 'Optimism':
-        #     chain = Chain('Optimism', 'etherscan.io', 'ETH', 'FZRCZQ2A6MIENZF2H4KZVRM8QR5EDIVSRC', wrapper='0x4200000000000000000000000000000000000006',
-        #                   explorer_url='https://api-optimistic.etherscan.io/api')
-        #
-        # if chain_name == 'Celo':
-        #     chain = Chain('Celo', 'celoscan.io', 'CELO', 'G9HKINCNFI3XC4FTAYZ7D8I1TZWA3X8WR5', wrapper='0xc579D1f3CF86749E05CD06f7ADe17856c2CE3126')
-        #
-        # if chain_name == 'ETC':
-        #     chain = Chain('ETC', 'blockscout.com', 'ETC', None, wrapper='0x1953cab0E5bFa6D4a9BaD6E05fD46C1CC6527a5a', blockscout=True, explorer_url='https://blockscout.com/etc/mainnet/api')
-        #
-        # if chain_name == 'Chiliz':
-        #     chain = Chain('Chiliz', 'explorer.chiliz.com', 'ETH', None, wrapper=None, blockscout=True)
-        #
-        # if chain_name == 'Oasis':
-        #     chain = Chain('Oasis', 'explorer.emerald.oasis.dev', 'ROSE', None, wrapper='0x21c718c22d52d0f3a789b752d4c2fd5908a8a733', blockscout=True)
-        #
-        # if chain_name == 'Doge':
-        #     chain = Chain(chain_name, 'explorer.dogechain.dog', 'DOGE', None, wrapper='0xb7ddc6414bf4f5515b52d8bdd69973ae205ff101', blockscout=True)
-        #
-        # if chain_name == 'Songbird':
-        #     chain = Chain(chain_name, 'songbird-explorer.flare.network', 'SGB', None, wrapper='0x02f0826ef6ad107cfc861152b32b52fd11bab9ed', blockscout=True)
-        #
-        # if chain_name == 'Metis':
-        #     chain = Chain(chain_name, 'andromeda-explorer.metis.io', 'METIS', None, wrapper='0x75cb093e4d61d2a2e65d8e0bbb01de8d89b53481', blockscout=True)
-        #
-        # if chain_name == 'Boba':
-        #     chain = Chain(chain_name, 'blockexplorer.bobabeam.boba.network', 'BOBA', None, wrapper='0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000', blockscout=True)
-        #
-        # if chain_name == 'SXNetwork':
-        #     chain = Chain(chain_name, 'explorer.sx.technology', 'SX', None, wrapper='0xaa99bE3356a11eE92c3f099BD7a038399633566f', blockscout=True)
-        #
-        # # if chain_name == 'Astar':
-        # #     chain = Chain(chain_name, 'blockscout.com/astar', 'ASTR', None, wrapper='0xaeaaf0e2c81af264101b9129c00f4440ccf0f720', blockscout=True)
-        #
-        # if chain_name == 'Evmos':
-        #     chain = Chain(chain_name, 'blockscout.evmos.org', 'EVMOS', None, wrapper='0xd4949664cd82660aae99bedc034a0dea8a0bd517', blockscout=True)
-        #
-        # if chain_name == 'Kava':
-        #     chain = Chain(chain_name, 'explorer.kava.io', 'KAVA', None, wrapper='0xc86c7c0efbd6a49b35e8714c5f59d99de09a225b', blockscout=True)
-        #
-        # if chain_name == 'Canto':
-        #     chain = Chain(chain_name, 'evm.explorer.canto.io', 'CANTO', None, wrapper='0x826551890dc65655a0aceca109ab11abdbd7a07b', blockscout=True)
-        #
-        # if chain_name == 'Aurora':
-        #     chain = Chain(chain_name, 'explorer.mainnet.aurora.dev', 'ETH', None, wrapper=None, blockscout=True)
-        #
-        # if chain_name == 'Step':
-        #     chain = Chain(chain_name, 'stepscan.io', 'FITFI', None, wrapper='0xb58a9d5920af6ac1a9522b0b10f55df16686d1b6', blockscout=True)
-        #
-        # if chain_name == 'KCC':
-        #     chain = Chain(chain_name, 'scan.kcc.io', 'KCS', None, wrapper='0x4446fc4eb47f2f6586f9faab68b3498f86c07521', blockscout=True)
-
-
-
-        # return chain
 
     def update_pb(self,entry=None,percent=None):
         if self.progress_bar:
@@ -674,23 +608,28 @@ class Chain:
                 entry = self.name+": "+entry
             self.progress_bar.update(entry,percent)
 
-    def init_addresses(self,address_db):
+    def init_addresses(self,address_db, contract_list=None):
         log("init_addresses",self.name,filename='address_lookups.txt')
+        t = time.time()
         if self.addresses_initialized or self.blockscout:
             return
 
         try:
-            rows = address_db.select("SELECT address, ancestor_address, entity FROM " + self.name + "_addresses")
-            for row in rows:
-                self.entity_map[row[0]] = row[2],row[1]
-            # for row in rows:
-            #     if row[2] is not None:
-            #         self.address_ancestor_map[row[0]] = row[2]
-            #     else:
-            #         self.ancestor_entities[row[0]] = row[3]
-            #     # self.addresses[row[0]]={'entity':row[3],'ancestor':row[2]}
+            if contract_list is None:
+                rows = address_db.select("SELECT address, ancestor_address, trim(entity) FROM " + self.name.upper().replace(" ","_") + "_addresses")
+                t1 = time.time()
+                log("init addresses timing 1",self.name,t1-t,filename='address_lookups.txt')
+                for row in rows:
+                    self.entity_map[row[0]] = row[2],row[1]
+                log("init addresses timing 2", self.name, time.time() - t1,filename='address_lookups.txt')
+            else:
+                for address in contract_list:
+                    rows = address_db.select("SELECT address, ancestor_address, trim(entity) FROM " + self.name.upper().replace(" ", "_") + "_addresses WHERE address='"+address+"' OR ancestor_address='"+address+"'")
+                    for row in rows:
+                        self.entity_map[row[0]] = row[2], row[1]
+                log("init addresses timing 3", self.name, time.time() - t,filename='address_lookups.txt')
         except:
-            log("No addresses found")
+            log_error("No addresses found")
         self.addresses_initialized = True
 
     def unwrap(self, what):
@@ -841,7 +780,7 @@ class Chain:
 
 
         headers = {}
-        if self.name in ['Moonriver','Moonbeam']:
+        if self.name in ['Moonriver','Moonbeam']:#,'Arbitrum','Optimism']:
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36',
                        'cache-control': 'max-age=0',
                        'accept-language': 'en-US,en;q=0.9,ru;q=0.8',
@@ -946,7 +885,7 @@ class Chain:
 
     def check_presence(self,address):
         if self.name == 'EVMOS':
-            data = self.get_all_transaction_from_api(address, 'txlist', reps=1, max_pages=1, timeout=30, sort=None, startblock=None)
+            data = self.get_all_transaction_from_api(address, 'txlist', reps=1, max_pages=1, timeout=5, sort=None, startblock=None)
         else:
             data = self.get_all_transaction_from_api(address, 'txlist', page=1, offset=100, reps=1, max_pages=1, timeout=30)
         for entry in data:
@@ -995,7 +934,7 @@ class Chain:
 
             hash = entry['hash']
             if hash == hif:
-                log('FROM API',entry)
+                log('FROM API-base',entry)
             ts = entry['timeStamp']
             # uid = str(ts) + "_" + str(hash)
             # uid = hash
@@ -1017,6 +956,7 @@ class Chain:
                 input_len = len(input)
                 if normalize_address(fr) == normalize_address(address) and input_len > 2:
                     T.interacted = normalize_address(to)
+                    T.originator = normalize_address(fr)
                     if 'functionName' in entry and len(entry['functionName']):
                         function = entry['functionName']
                         args = function.find('(')
@@ -1050,9 +990,9 @@ class Chain:
 
 
 
-            row = [hash, ts, nonce, block, fr, to, val, self.main_asset, self.main_asset, None, fee, input_len, input]
+            row = [hash, ts, nonce, block, fr, to, val, self.main_asset, self.main_asset, None, None, fee, input_len, input]
             # if fee + val > 0:
-            T.append(1, row)
+            T.append(Transfer.BASE, row)
         t1 = time.time()
 
 
@@ -1075,7 +1015,7 @@ class Chain:
                 else:
                     hash = entry['hash']
                 if hash == hif:
-                    log('FROM API',entry)
+                    log('FROM API-internal',entry)
             else:
                 if len(blockmap[block]) == 1:
                     hash = blockmap[block][0]
@@ -1100,12 +1040,12 @@ class Chain:
             if transactions[hash].success == False or (transactions[hash].success is None and entry['isError'] == "1"):
                 val = 0
 
-            row = [hash, ts, None, block, fr, to, val, self.main_asset, self.main_asset, None, 0,input_len, input]
+            row = [hash, ts, None, block, fr, to, val, self.main_asset, self.main_asset,None, None, 0,input_len, input]
             # if val > 0:
             if self.name == 'Fantom' and val in base_vals[hash]:
                 continue #skip Fantom duplicate
             else:
-                transactions[hash].append(2, row)
+                transactions[hash].append(Transfer.INTERNAL, row)
 
 
         t2 = time.time()
@@ -1122,7 +1062,7 @@ class Chain:
         for entry in data:
             hash = entry['hash']
             if hash == hif:
-                log('FROM API',entry)
+                log('FROM API-tokens',entry)
             ts = entry['timeStamp']
 
             fr = entry['from'].lower()
@@ -1136,7 +1076,7 @@ class Chain:
             token_contract = entry['contractAddress'].lower()
             nonce = entry['nonce']
             block = entry['blockNumber']
-            type = 3
+            type = Transfer.ERC20
 
 
 
@@ -1178,15 +1118,15 @@ class Chain:
                 transactions[hash] = Transaction(user,self)
             if self.name == 'Optimism' and token_contract == '0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000': #Optimism L1->L2 deposit
                 token = token_contract = 'ETH'
-                type = 1
+                type = Transfer.BASE
 
             # Celo native asset interchangeable
             if self.name == 'Celo' and token_contract == '0x471ece3750da237f93b8e339c536989b8978a438':
-                type = 1
+                type = Transfer.BASE
                 token = token_contract = 'CELO'
 
             if self.name == 'Metis' and token_contract == '0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000':
-                type = 1
+                type = Transfer.BASE
                 token = token_contract = 'METIS'
 
             # if self.name == 'Polygon' and token_contract == '0x0000000000000000000000000000000000001010': #MATIC mislabel
@@ -1199,7 +1139,7 @@ class Chain:
             if transactions[hash].success == False:
                 val = 0
 
-            row = [hash, ts, nonce, block, fr, to, val, token, token_contract, token_nft_id, 0, input_len, input]
+            row = [hash, ts, nonce, block, fr, to, val, token, token_contract, None, token_nft_id, 0, input_len, input]
             # self.transferred_tokens.add(token_contract)
             # if val > 0:
             transactions[hash].append(type, row)
@@ -1214,7 +1154,7 @@ class Chain:
             for entry in data:
                 hash = entry['hash']
                 if hash == hif:
-                    log('FROM API',entry)
+                    log('FROM API-nfts',entry)
                 ts = entry['timeStamp']
 
                 fr = entry['from'].lower()
@@ -1237,7 +1177,7 @@ class Chain:
                 # uid = hash
                 if hash not in transactions:
                     transactions[hash] = Transaction(user,self)
-                row = [hash, ts, nonce, block, fr, to, val, token, token_contract, str(token_nft_id), 0, input_len, input]
+                row = [hash, ts, nonce, block, fr, to, val, token, token_contract, None, str(token_nft_id), 0, input_len, input]
                 # self.transferred_tokens.add(token_contract)
                 # if val > 0:
                 transactions[hash].append(4, row)
@@ -1256,7 +1196,7 @@ class Chain:
                     hash = entry['hash']
                     # log('erc1155 transfer on',self.name,hash, entry,filename='aux_log.txt')
                     if hash == hif:
-                        log('FROM API', entry)
+                        log('FROM API-1155', entry)
                     ts = entry['timeStamp']
 
                     fr = entry['from'].lower()
@@ -1268,12 +1208,15 @@ class Chain:
                     if token == "":
                         token = "ERC1155" #matches what was scraped in scrape_erc1155 for symbols
                     token_nft_id = entry['tokenID']
-                    val = float(entry['tokenValue'])
+                    try:
+                        val = float(entry['tokenValue'])
+                    except:
+                        val = 1
                     nonce = entry['nonce']
                     block = entry['blockNumber']
                     if hash not in transactions:
                         transactions[hash] = Transaction(user,self)
-                    row = [hash, ts, nonce, block, fr, to, val, token, token_contract, str(token_nft_id), 0, input_len, input]
+                    row = [hash, ts, nonce, block, fr, to, val, token, token_contract, None, str(token_nft_id), 0, input_len, input]
                     # self.transferred_tokens.add(token_contract)
                     transactions[hash].append(5, row)
 
@@ -1315,17 +1258,14 @@ class Chain:
             wrap = False
             in_cnt = 0
             out_cnt = 0
-            hash, timestamp, nonce, block = transaction.grouping[0][1][0:4]
+            hash, ts, nonce, block = transaction.grouping[0][1][0:4]
             tx_symbols = {}
             tx_amounts = defaultdict(float)
 
 
             for _, (type, sub_data, _, _, _, _, _, _) in enumerate(transaction.grouping):
-                try:
-                    hash, ts, nonce, block, fr, to, val, token, token_contract, token_nft_id, base_fee, input_len, input = sub_data
-                except:
-                    print(sub_data)
-                    exit(1)
+                hash, ts, nonce, block, fr, to, val, token, token_contract, coingecko_id, token_nft_id, base_fee, input_len, input = sub_data
+                clog(transaction,"correcting, fee?",base_fee,fr,address)
                 if val != 0:
                     token_contract_mod = token_contract
                     if token_nft_id is not None:
@@ -1387,7 +1327,7 @@ class Chain:
                         running_amounts[contract] += diff
                         # print("Amt after rebase and sell",running_amounts[contract])
 
-                        row = [hash, timestamp, nonce, block, contract, address, diff, symbol, contract, None, 0, 0, None]
+                        row = [hash, ts, nonce, block, contract, address, diff, symbol, contract, None, None, 0, 0, None]
                         transaction.append(3, row, synthetic=Transfer.REBASE, prepend=True)
 
                 #missed ERC1155 mint?
@@ -1401,7 +1341,7 @@ class Chain:
                         diff = -running_amounts[contract]
                         running_amounts[contract] = 0
                         contract,nft_id = contract.split("_")
-                        row = [hash, timestamp, nonce, block, '0x0000000000000000000000000000000000000000', address, diff, symbol, contract, nft_id, 0, 0, None]
+                        row = [hash, ts, nonce, block, '0x0000000000000000000000000000000000000000', address, diff, symbol, contract, None, nft_id, 0, 0, None]
                         transaction.append(5, row, synthetic=Transfer.MISSED_MINT, prepend=True)
 
 
@@ -1432,14 +1372,15 @@ class Chain:
                         wrap_to = address
                     running_amounts[wrap_token] -= amount
                     # print(hash,'WRAP TRANSFER',wrap_fr,wrap_to,abs(amount),wrap_symbol,wrap_token, running_amounts[wrap_token])
-                    row = [hash, timestamp, nonce, block, wrap_fr, wrap_to, abs(amount), wrap_symbol, wrap_token, None, 0, 0, None]
+                    row = [hash, ts, nonce, block, wrap_fr, wrap_to, abs(amount), wrap_symbol, wrap_token,None, None, 0, 0, None]
                     transaction.append(wrap_type, row, synthetic=Transfer.WRAP)
 
 
 
             #network fee
             if total_fee > 0:
-                row = [hash, timestamp, nonce, block, address, "network", total_fee, self.main_asset, self.main_asset, None, 0, 0, None]
+                clog(transaction,"Adding fee", total_fee)
+                row = [hash, ts, nonce, block, address, "network", total_fee, self.main_asset, self.main_asset, None, None, 0, 0, None]
                 transaction.append(1,row, synthetic=Transfer.FEE)
 
             if self.name == 'Polygon':
@@ -1465,7 +1406,7 @@ class Chain:
                 #bridging into arbitrum has screwed up direction
                 if len(transaction.grouping) == 1:
                     type, sub_data, _, _, _, _, _, _ = transaction.grouping[0]
-                    hash, ts, nonce, block, fr, to, val, token, token_contract, token_nft_id, base_fee, input_len, input = sub_data
+                    hash, ts, nonce, block, fr, to, val, token, token_contract, coingecko_id, token_nft_id, base_fee, input_len, input = sub_data
                     if to == '0x000000000000000000000000000000000000006e' and input[:10] == '0x679b6ded':
                         row = sub_data
                         row[4] = to
@@ -1478,7 +1419,7 @@ class Chain:
                 for idx, entry in enumerate(transaction.grouping):
                     type, sub_data, _, _, _, _, _, _ = entry
                     if type == 1 or type == 2:
-                        hash, ts, nonce, block, fr, to, val, token, token_contract, token_nft_id, base_fee, input_len, input = sub_data
+                        hash, ts, nonce, block, fr, to, val, token, token_contract, coingecko_id, token_nft_id, base_fee, input_len, input = sub_data
                         tr_hash = fr+"_"+to+"_"+str(val)
                         if tr_hash not in eth_transfer_hashes:
                             eth_transfer_hashes.append(tr_hash)
@@ -1596,7 +1537,7 @@ class Chain:
                         transactions[txhash] = Transaction(user,self)
 
                     # log(txhash, '|' ,ts, '|', fr, '|', to, '|', tokenid, '|', amount, '|', what, '|', symbol)
-                    row = [txhash, ts, None, None, fr, to, float(amount), symbol, what, str(token_nft_id), 0, 0, None]
+                    row = [txhash, ts, None, None, fr, to, float(amount), symbol, what, None, str(token_nft_id), 0, 0, None]
                     # self.transferred_tokens.add(what)
                     cnt += 1
                     if txhash == self.hif:
@@ -1695,7 +1636,7 @@ class Chain:
                     if txhash not in transactions:
                         transactions[txhash] = Transaction(user,self)
                     # log(txhash, '|' ,ts, '|', fr, '|', to, '|', tokenid, '|', amount, '|', what, '|', symbol)
-                    row = [txhash, ts, None, None, fr, to, float(amount), symbol, what, None, 0, 0, None]
+                    row = [txhash, ts, None, None, fr, to, float(amount), symbol, what, None, None, 0, 0, None]
                     # self.transferred_tokens.add(what)
                     # print("plasma row",row)
                     if txhash == self.hif:
@@ -1712,9 +1653,9 @@ class Chain:
 
             page += 1
 
-    def covalent_download(self, chain_data, pb_alloc=None):
+    def covalent_download(self, chain_data, pb_alloc=None, max_requests = 50):
         tstart = time.time()
-        key = "ckey_d1ffe43c2215490db9cbb90fd28"
+        key = os.environ.get('api_key_covalenthq') #premium
         addresses = chain_data['import_addresses']
 
         try:
@@ -1743,12 +1684,18 @@ class Chain:
                 idx += 1
                 if pb_alloc is not None:
                     self.update_pb('Retrieving additional information from CovalentHQ for ' + address + ', batch '+str(idx)+' (this might take up to 5 minutes)')
-                # url = "https://api.covalenthq.com/v1/"+chain_id+"/address/"+address+"/transactions_v2/?quote-currency=USD&format=JSON&block-signed-at-asc=true&no-logs=true&page-number="+str(page_num)+"&key=ckey_53ec69f026ab4220a1e0347f330"
-                url = "https://api.covalenthq.com/v1/" + chain_id + "/address/" + address + "/transactions_v2/?no-logs=true&page-size="+str(ps)# + "&key=ckey_d1ffe43c2215490db9cbb90fd28"
+
+                url = "https://api.covalenthq.com/v1/" + chain_id + "/address/" + address + "/transactions_v2/?no-logs=true&page-size="+str(ps)
                 if page_num != 0:
                     url += "&page-number=" + str(page_num)
                 log('covalent url',url,filename='covalent.txt')
                 exc = None
+
+                if page_num > max_requests:
+                    self.current_import.add_error(Import.COVALENT_OVERLOAD, address=address, chain=self, debug_info=exc)
+                    log_error('Too many requests for covalent', address, url, exc)
+                    failure = True
+                    break
 
                 for rep in range(3):
                     log('rep', rep, filename='covalent.txt')
@@ -1837,6 +1784,7 @@ class Chain:
             return
         addresses = chain_data['import_addresses']
         covalent_dump = chain_data['covalent_dump']
+        log(self.name,"covalent_dump",covalent_dump,filename='covalent.txt')
         transactions = chain_data['transactions']
         for address in addresses:
             if address not in covalent_dump:
@@ -1873,10 +1821,19 @@ class Chain:
                                         row[1][6] = 0
                         to = entry['to_address']
                         fr = entry['from_address']
+                        val = None
+                        try:
+                            val = float(entry['value'])
+                        except:
+                            pass
 
-                        #originator is not the user, receiver is the contract -- set it as counterparty
-                        if fr is not None and to is not None and address not in [normalize_address(fr),normalize_address(to)]:
-                            T.interacted = normalize_address(to)
+                        #originator is not the user, receiver is a contract -- set the originator as the counterparty
+                        # if fr is not None and to is not None and address not in [normalize_address(fr),normalize_address(to)]:
+                        if fr is not None and to is not None and val == 0:
+                            if address != normalize_address(to):
+                                T.interacted = normalize_address(to)
+                            T.originator = normalize_address(fr)
+                        # T.originator = fr
 
 
     def balance_provider_correction(self,chain_data):
@@ -1939,15 +1896,15 @@ class Chain:
                                 log('acq found -- creating acq transfer',filename='aux_log.txt')
                                 symbol = ct[contract]['symbol']
                                 if ct[contract]['type'] == 'ERC721':
-                                    type = 4
+                                    type = Transfer.ERC721
                                 else:
-                                    type = 5
+                                    type = Transfer.ERC1155
                                 fr = '0x0000000000000000000000000000000000000000'
                                 to = address
                                 val = ct[contract]['nft_amounts'][nft_id]
                                 if symbol is None:
                                     symbol = 'Unknown NFT'
-                                row = T.hash, T.ts, T.nonce, T.block, fr, to, val, symbol, contract, nft_id, 0, 0, None
+                                row = [T.hash, T.ts, T.nonce, T.block, fr, to, val, symbol, contract, None, nft_id, 0, 0, None]
                                 log("Adding minting transfer based on simplehash", type,row,filename='aux_log.txt')
                                 T.append(type,row,synthetic=Transfer.MISSED_MINT)
 
@@ -1998,7 +1955,7 @@ class Chain:
         creators = {}
         if self.name != 'HECO':
             headers = {}
-            if self.name in ['Moonriver','Moonbeam']:
+            if self.name in ['Moonriver','Moonbeam']:#,'Arbitrum','Optimism']:
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36',
                            'cache-control': 'max-age=0',
                            'accept-language': 'en-US,en;q=0.9,ru;q=0.8',
@@ -2006,30 +1963,31 @@ class Chain:
                            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9'}
 
             url = self.explorer_url + "?module=contract&action=getcontractcreation&contractaddresses=" + ','.join(five_addresses) + "&apikey=" + self.api_key
+            log(self.name, "five address lookup url", url, filename='address_lookups.txt')
             try:
-                resp = requests.get(url, headers=headers)
+                resp = requests.get(url, headers=headers, timeout=10)
                 time.sleep(self.wait_time)
             except:
                 log_error("Failed to get contract creators", url)
                 self.current_import.add_error(Import.NO_CREATORS, chain=self, debug_info=traceback.format_exc())
                 return False, []
 
+            log(self.name,"fal 4", filename='address_lookups.txt')
+
             try:
-                data = resp.json()['result']
+                js = resp.json()
             except:
                 log_error("Failed to get contract creators",url,resp.status_code,resp.content)
                 self.current_import.add_error(Import.NO_CREATORS, chain=self, debug_info=traceback.format_exc())
                 return False, []
-            if data is None:
-                return False, []
-
-
-            try:
-                for entry in data:
-                    creators[normalize_address(entry['contractAddress'])] = normalize_address(entry['contractCreator'])
-            except:
-                log("Unexpected data",data,filename='address_lookups.txt')
-                return False, []
+            if 'result' in js:
+                data = js['result']
+                if data is not None:
+                    for entry in data:
+                        try:
+                            creators[normalize_address(entry['contractAddress'])] = normalize_address(entry['contractCreator'])
+                        except:
+                            log("Unexpected data",entry,filename='address_lookups.txt')
 
             log(self.name, "five address lookup creator data", creators, filename='address_lookups.txt')
 
@@ -2064,8 +2022,6 @@ class Chain:
                 log('Adding up ancestor', self.name, address, creator, entity, filename='address_lookups.txt')
             db_writes.append([self.name,[address,None,creator,entity,'lookup']])
             # self.addresses[address] = {'tag': None, 'entity': entity, 'ancestor': creator}
-
-
 
         return True, db_writes
 
@@ -2212,6 +2168,9 @@ class Chain:
             if address == '0x0000000000000000000000000000000000000000':
                 continue
 
+            if not is_ethereum(address):
+                continue
+
             entity, _ = self.get_progenitor_entity( address)
             if entity is not None:
                 continue
@@ -2244,12 +2203,36 @@ class Chain:
             offset = 0
             for batch_idx in range(batch_cnt):
                 good, db_writes = self.update_multiple_addresses_from_scan(addresses_to_lookup[offset:offset+5])
+                log(self.name, "update_multiple_addresses_from_scan return", good, db_writes, filename='address_lookups.txt')
                 all_db_writes.extend(db_writes)
                 offset += 5
                 self.update_pb('Looking up counterparties (runs slowly once): ' + str(batch_idx+1) + '/' + str(batch_cnt), pb_per_batch)
+                # self.update_pb('Looking up counterparties (runs slowly once): ' + str(batch_idx+1) + '/' + str(batch_cnt)+' <a id="skip_step" step=cp chain="'+self.name+'">Skip this step</a>', pb_per_batch)
                 if not good:
                     break
         return all_db_writes
+
+    def merge_transaction(self, source, destination):
+        clog(source,"Merging")
+        if destination.function is None:
+            destination.function = source.function
+
+        if destination.interacted is None:
+            destination.interacted = source.interacted
+
+        if destination.originator is None:
+            destination.originator = source.originator
+
+        for _, (type, sub_data, transfer_id, custom_treatment, custom_rate, custom_vaultid, synthetic, derived) in enumerate(source.grouping):
+            hash, ts, nonce, block, fr, to, val, token, token_contract, coingecko_id, token_nft_id, base_fee, input_len, input = sub_data
+            for _, (c_type, c_sub_data, _, _, _, _, _, _) in enumerate(destination.grouping):
+                hash, ts, nonce, block, c_fr, c_to, c_val, c_token, c_token_contract, c_coingecko_id, c_token_nft_id, c_base_fee, c_input_len, c_input = c_sub_data
+                if fr == c_fr and to == c_to and val == c_val and token == c_token and token_nft_id == c_token_nft_id and input == c_input:
+                    clog(source, "Skipping transfer", sub_data, "synthetic", synthetic)
+                    break
+            else:
+                clog(source,"Adding transfer",sub_data, "synthetic",synthetic)
+                destination.append(type, sub_data, synthetic=synthetic)
             # address_db.commit()
 
         # for idx,contract in enumerate(counterparty_list):

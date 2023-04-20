@@ -17,6 +17,7 @@ class Import:
     NO_CREATORS = 10
     TOO_MANY_TRANSACTIONS = 11
     COINGECKO_CACHE_FAIL = 12
+    COVALENT_OVERLOAD = 13
 
     def __init__(self,user,all_chains=None, id=None):
         if id is None:
@@ -101,6 +102,8 @@ class Import:
                     s = "failed to get data from CovalentHQ, failed transactions are counted as completed"
                 elif chain == 'ETH':
                     s = "failed to get data from CovalentHQ, some counterparty info might be missing"
+            elif code == Import.COVALENT_OVERLOAD:
+                s = "too many transactions, stopped Covalent data at 50 requests, some transaction data might be wrong"
             elif code == Import.DEBANK_TOKEN_FAILURE:
                 s = "failed to get token data from DeBank, balance check can't be performed"
             elif code == Import.DEBANK_PROTOCOL_FAILURE:

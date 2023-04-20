@@ -1,8 +1,12 @@
 base58==2.1.1
-beautifulsoup4==4.11.1
+beautifulsoup4==4.12.2
 Flask==1.1.2
+Flask_Session==0.4.0
+html_to_json==2.0.0
 pip==21.0.1
 pure25519==0.0.1
+python-dotenv==1.0.0
 redis==4.0.2
 requests==2.25.1
 sortedcontainers==2.3.0
+Werkzeug==1.0.1

@@ -3,28 +3,35 @@ import copy
 
 from sortedcontainers import *
 from .sqlite import SQLite
-from .util import log
+from .util import log, ProgressBar
 from .transaction import *
 from .coingecko import Coingecko
+from .fiat_rates import Twelve
 from .signatures import Signatures
 from .classifiers import Classifier
 from .chain import Chain
 from .imports import Import
 from .solana import Solana
+from .redis_wrap import Redis
 from datetime import datetime
 import re
 import os
 import json, csv
 import requests
 import shutil
+from statistics import median
+from werkzeug.utils import secure_filename
 
+import hashlib
 
 class User:
-    def __init__(self,address, do_logging=False, version=1.3, load_addresses=True):
+    def __init__(self,address, do_logging=False, load_addresses=True):
+        version = float(os.environ.get('version'))
         debug_level = int(os.environ.get('debug'))
         self.debug = debug_level > 0
-        self.sql_logging = debug_level > 1 or do_logging
+        self.sql_logging = debug_level > 2 or do_logging
         self.last_db_modification_timestamp = 0
+        self.current_tokens = None
 
         # try:
         #     self.debug = g.debug
@@ -36,6 +43,7 @@ class User:
 
         address = normalize_address(address)
         self.address = address
+
 
         # if relevant_addresses is None:
         #     relevant_addresses = [address]
@@ -54,7 +62,10 @@ class User:
             os.makedirs(path)
             first_run = True
 
-
+        path = 'data/users/'+address+'/db.db'
+        if not os.path.exists(path):
+            first_run = True
+        self.first_run = first_run
         self.db = SQLite('users/' + address+'/db',do_logging=self.sql_logging)
 
 
@@ -74,15 +85,16 @@ class User:
             self.db.create_table('addresses', 'id integer primary key, chain, address', drop=drop)
             self.db.create_index('addresses_idx', 'addresses', 'address, chain', unique=True)
 
-            self.db.create_table('tokens', 'id integer primary key, chain, contract, symbol', drop=drop)
+            self.db.create_table('tokens', 'id integer primary key, chain, contract, symbol, coingecko_id, custom_coingecko_id', drop=drop)
             self.db.create_index('tokens_idx', 'tokens', 'chain, contract, symbol', unique=True)
 
 
-            self.db.create_table('transactions', 'id integer primary key autoincrement, user_address_id INTEGER, chain, hash, timestamp INTEGER, nonce INTEGER, block INTEGER, interacted_addr_id INTEGER, function, custom_type_id INTEGER, custom_color_id INTEGER, custom_note, manual INTEGER, import_id INTEGER',drop=drop)
+            self.db.create_table('transactions', 'id integer primary key autoincrement, chain, hash, timestamp INTEGER, nonce INTEGER, block INTEGER, interacted_addr_id INTEGER, originator_addr_id INTEGER, function, custom_type_id INTEGER, custom_color_id INTEGER, custom_note, minimized INTEGER, manual INTEGER, import_id INTEGER, upload_id INTEGER',drop=drop)
             self.db.create_index('transactions_idx', 'transactions', 'hash', unique=True)
 
+
             self.db.create_table('transaction_transfers', 'id integer primary key autoincrement, type INTEGER, transaction_id INTEGER, from_addr_id INTEGER, to_addr_id INTEGER, val REAL, token_id INTEGER, token_nft_id TEXT, base_fee REAL, input_len INTEGER, input, '
-                                                          'custom_treatment, custom_rate REAL, custom_vaultid, synthetic INTEGER DEFAULT 0, import_id INTEGER', drop=drop)
+                                                          'custom_treatment, custom_rate REAL, custom_vaultid, synthetic INTEGER DEFAULT 0, import_id INTEGER, upload_id INTEGER', drop=drop)
             self.db.create_index('transaction_transfers_idx1', 'transaction_transfers', 'from_addr_id')
             self.db.create_index('transaction_transfers_idx2', 'transaction_transfers', 'to_addr_id')
             self.db.create_index('transaction_transfers_idx3', 'transaction_transfers', 'transaction_id')
@@ -94,7 +106,7 @@ class User:
             # self.db.create_table('transaction_transfers_derived', 'idx INTEGER, transaction_id INTEGER, coingecko_id, rate REAL, rate_found INTEGER, rate_source, treatment, vault_id', drop=drop)
             # self.db.create_index('transaction_transfers_derived_idx', 'transaction_transfers_derived', 'idx, transaction_id', unique=True)
 
-            self.db.create_table('user_addresses', 'id integer primary key autoincrement, address, chain, previously_used INTEGER DEFAULT 0, present INTEGER DEFAULT 0, last_update INTEGER DEFAULT 0', drop=False)
+            self.db.create_table('user_addresses', 'id integer primary key autoincrement, address, chain, previously_used INTEGER DEFAULT 0, present INTEGER DEFAULT 0, last_update INTEGER DEFAULT 0, is_upload INTEGER DEFAULT 0', drop=False)
             self.db.create_index('user_addresses_idx', 'user_addresses', 'address, chain', unique=True)
 
             self.db.create_table('latest_token_amounts', 'user_address_id INTEGER, token_id INTEGER, nft_id, amount REAL, debank_rate REAL, nft_eth_floor REAL', drop=drop)
@@ -105,6 +117,9 @@ class User:
             self.db.create_index('imports_addresses_idx', 'imports_addresses', 'import_id')
             self.db.create_table('imports_errors', 'id integer primary key autoincrement, import_id integer, chain TEXT, address TEXT, txtype INTEGER, error_code INTEGER, additional_text TEXT, debug_info TEXT', drop=drop)
             self.db.create_index('imports_errors_idx', 'imports_errors', 'import_id')
+
+            self.db.create_table('uploads', 'id integer primary key autoincrement, started INTEGER, ended INTEGER, version NUMERIC, status INTEGER, source', drop=drop)
+
 
             self.db.commit()
             self.set_info('version', version)
@@ -246,6 +261,35 @@ class User:
                 self.db.create_table('imports_errors', 'id integer primary key autoincrement, import_id integer, chain TEXT, address TEXT, txtype INTEGER, error_code INTEGER, additional_text TEXT, debug_info TEXT, txhash TEXT', drop=drop)
                 self.db.create_index('imports_errors_idx', 'imports_errors', 'import_id')
 
+            if current_version < 1.4:
+                self.db.query('ALTER TABLE user_addresses ADD COLUMN is_upload INTEGER DEFAULT 0')
+                self.db.query('ALTER TABLE transactions ADD COLUMN upload_id INTEGER')
+                self.db.query('ALTER TABLE transaction_transfers ADD COLUMN upload_id INTEGER')
+
+                self.db.create_table('uploads', 'id integer primary key autoincrement, started INTEGER, ended INTEGER, version NUMERIC, status INTEGER, source', drop=drop)
+
+                self.db.query('ALTER TABLE tokens ADD COLUMN coingecko_id')
+                self.db.query('ALTER TABLE tokens ADD COLUMN custom_coingecko_id')
+
+                try:
+                    coingecko_id_update_query = "select token_id, coingecko_id, count( distinct coingecko_id) " \
+                        "from transaction_transfers as t, transaction_transfers_derived as td " \
+                        "where t.id = td.id and coingecko_id is not NULL " \
+                        "group by token_id"
+                    rows = self.db.select(coingecko_id_update_query)
+                    for row in rows:
+                        token_id, coingecko_id, cnt = row
+                        if cnt == 1:
+                            self.db.update_kw("tokens","id="+str(token_id),coingecko_id=coingecko_id)
+                except:
+                    log_error("Failed executing coingecko_id_update_query")
+
+            if current_version < 1.41:
+                self.db.query('ALTER TABLE transactions ADD COLUMN originator_addr_id INTEGER')
+
+            if current_version < 1.42:
+                self.db.query('ALTER TABLE transactions ADD COLUMN minimized INTEGER')
+
             if current_version != version:
                 self.set_info('data_version', data_version)
                 self.set_info('version',version)
@@ -260,8 +304,20 @@ class User:
         self.custom_rates = {}
         self.version = version
 
+        self.fiat = 'USD'
+        fiat = self.get_info('fiat')
+        if fiat is not None:
+            self.fiat = fiat
+        self.fiat_rates = Twelve(self.fiat)
+
+        # if load_fiat:
+        #     self.load_fiat()
+
         if load_addresses:
             self.load_addresses()
+
+    def load_fiat(self):
+        self.fiat_rates.init_rates()
 
     def make_backup(self,backup_version):
         if backup_version is None:
@@ -275,6 +331,8 @@ class User:
             self.db.disconnect()
         except:
             pass
+
+
 
     #not fugly
     def load_addresses(self):
@@ -321,12 +379,14 @@ class User:
             cnt, id = row
             id_mapping[id]['tx_count'] = cnt
 
-    def check_user_address(self,chain,address):
+    def check_user_address(self,chain,address, strict=False):
 
         try:
-            # if self.all_addresses[address][chain]['used']:
-            #     return True
-            if address in self.all_addresses:
+
+            #needs to be strict in classifier
+            if strict and self.all_addresses[address][chain]['used']:
+                return True
+            if not strict and address in self.all_addresses:
                 return True
         except:
             pass
@@ -454,9 +514,13 @@ class User:
         self.db.insert_kw('custom_types', chain='ALL', name='Claim reward',
                           description='You can use this type when getting staking rewards, or just generally getting tokens out of thin air.', balanced=1)
         self.db.insert_kw('custom_types_rules', type_id=2, from_addr='any', to_addr='my_address', token='any', treatment='income', vault_id='address')
-        self.db.insert_kw('custom_types', chain='ALL', name='Worthless airdrop',
+        self.db.insert_kw('custom_types', chain='ALL', name='Spam',
                           description='You can use this type when receiving spammy airdrops of scam tokens or worthless NFTs.', balanced=0)
         self.db.insert_kw('custom_types_rules', type_id=3, from_addr='any', to_addr='my_address', token='any', treatment='ignore', vault_id='address')
+        self.db.insert_kw('custom_types', chain='ALL', name='Bridge',
+                          description='Apply this type to bridging transactions -- both outgoing and incoming.', balanced=0)
+        self.db.insert_kw('custom_types_rules', type_id=4, from_addr='my_address', to_addr='any', token='any', treatment='deposit', vault_id='other', vault_id_custom='Bridge')
+        self.db.insert_kw('custom_types_rules', type_id=4, from_addr='any', to_addr='my_address', token='any', treatment='exit', vault_id='other', vault_id_custom='Bridge')
         self.db.commit()
 
 
@@ -484,23 +548,31 @@ class User:
         result = {}
         for transaction in transactions:
             ts = transaction.ts
-            chain_name = transaction.chain.name
-            if chain_name not in result:
-                result[chain_name] = {}
-            t_contracts, t_counterparties, t_inputs = transaction.get_contracts()
-            for contract in t_contracts:
-                if contract not in result[chain_name]:
-                    result[chain_name][contract] = set()
-                result[chain_name][contract].add(ts)
+            for type, sub_data, _, _, _, _, _, _ in transaction.grouping:
+                hash, ts, nonce, block, fr, to, val, token, token_contract, coingecko_id, token_nft_id, base_fee, input_len, input = sub_data
+                if coingecko_id is not None:
+                    if coingecko_id not in result:
+                        result[coingecko_id] = set()
+                    result[coingecko_id].add(ts)
+            # t_contracts, t_counterparties, t_inputs = transaction.get_contracts()
+            # for contract in t_contracts:
+            #     if contract not in result[chain_name]:
+            #         result[chain_name][contract] = set()
+            #     result[chain_name][contract].add(ts)
+            #     log("Adding to needed token times",transaction.hash,contract,ts,filename='coingecko2.txt')
         return result
 
-    def locate_insert_transaction(self,chain_name,hash,timestamp,nonce,block, interacted, function):
+    def locate_insert_transaction(self,chain_name,hash,timestamp,nonce,block, interacted, originator, function, custom_note=None,upload_id=None,minimized=None):
         db = self.db
         rows = db.select("SELECT * FROM transactions WHERE hash='" + hash + "'",return_dictionaries=True)
         interacted_addr_id = self.locate_insert_address(chain_name, interacted)  # interacted might be None
+        originator_addr_id = self.locate_insert_address(chain_name, originator)
+        import_id = None
+        if self.current_import is not None:
+            import_id = self.current_import.id
         if len(rows) == 1:
             row = rows[0]
-            update_fields = {'interacted_addr_id':interacted_addr_id,'function':function,'import_id':self.current_import.id}
+            update_fields = {'chain':chain_name,'interacted_addr_id':interacted_addr_id,'originator_addr_id':originator_addr_id,'function':function,'import_id':import_id,'custom_note':custom_note,'upload_id':upload_id}
             for field in update_fields:
                 if row[field] != update_fields[field]:
                     db.update_kw('transactions','id='+str(row['id']),**update_fields)
@@ -508,23 +580,25 @@ class User:
 
             return row['id'], True
         else:
-            db.insert_kw('transactions', chain=chain_name, hash=hash,timestamp=timestamp,nonce=nonce,block=block,interacted_addr_id=interacted_addr_id,function=function,import_id=self.current_import.id)
+            db.insert_kw('transactions', chain=chain_name, hash=hash,timestamp=timestamp,nonce=nonce,block=block,
+                         interacted_addr_id=interacted_addr_id,originator_addr_id=originator_addr_id,function=function,import_id=import_id,
+                         custom_note=custom_note, upload_id=upload_id, minimized=minimized)
             return db.select("SELECT last_insert_rowid()")[0][0], False
 
     def locate_insert_address(self,chain_name,address):
         db = self.db
         if address is None:
-            row = db.select("SELECT id FROM addresses WHERE chain='" + chain_name + "' and address IS NULL")
+            row = db.select("SELECT id FROM addresses WHERE LOWER(chain)=LOWER('" + chain_name + "') and address IS NULL")
         else:
-            row = db.select("SELECT id FROM addresses WHERE chain='" + chain_name + "' and address = '" + address + "'")
+            row = db.select("SELECT id FROM addresses WHERE LOWER(chain)=LOWER('" + chain_name + "') and address = '" + address + "'")
         if len(row) == 1:
             return row[0][0]
         else:
             db.insert_kw('addresses', chain=chain_name, address=address)
             return db.select("SELECT last_insert_rowid()")[0][0]
 
-    def locate_insert_token(self,chain_name,contract,symbol):
-        log('locate_insert_token', chain_name, contract, symbol, filename='token_insert.txt')
+    def locate_insert_token(self,chain_name,contract,symbol,coingecko_id=None):
+        # log('locate_insert_token', chain_name, contract, symbol, filename='token_insert.txt')
         db = self.db
         assert contract is not None or symbol is not None
         if symbol is None:
@@ -541,38 +615,56 @@ class User:
         #     Q = "SELECT id FROM tokens WHERE chain='" + chain_name + "' and symbol = '" + symbol + "' and (contract IS NULL OR contract ='"+symbol+"') ORDER BY id ASC"
         # else:
         #     Q = "SELECT id FROM tokens WHERE chain='" + chain_name + "' and contract = '" + contract + "'  ORDER BY id ASC"
-        Q = "SELECT id FROM tokens WHERE chain='" + chain_name + "' and contract = '" + contract + "'  ORDER BY id ASC"
-        row = db.select(Q)
+        Q = "SELECT id, coingecko_id FROM tokens WHERE LOWER(chain)=LOWER('" + chain_name + "') and contract = '" + contract + "'  ORDER BY id ASC"
+        rows = db.select(Q)
 
-        if len(row) >= 1:
-            log('locate_insert_token-found ',len(row), row[0][0], filename='token_insert.txt')
-            return row[0][0]
+        if len(rows) >= 1:
+            # log('locate_insert_token-found ',len(row), row[0][0], filename='token_insert.txt')
+            id, current_coingecko_id = rows[0]
+            if coingecko_id is not None and coingecko_id != current_coingecko_id:
+                db.update_kw('tokens','id='+str(id),coingecko_id=coingecko_id)
+            return id
         else:
-            db.insert_kw('tokens', chain=chain_name, contract=contract, symbol=symbol)
+            db.insert_kw('tokens', chain=chain_name, contract=contract, symbol=symbol,coingecko_id=coingecko_id)
             id = db.select("SELECT last_insert_rowid()")[0][0]
-            log('locate_insert_token-inserting',id, chain_name, contract, symbol, filename='token_insert.txt')
+            # log('locate_insert_token-inserting',id, chain_name, contract, symbol, filename='token_insert.txt')
             return id
 
 
 
 
-    def wipe_transactions(self,chain_name):
-        db = self.db
-        where = ""
-        if chain_name is not None:
-            where = " WHERE chain='"+chain_name+"'"
-            db.query("DELETE FROM info WHERE field='"+chain_name+"_presence'")
-            db.query("DELETE FROM info WHERE field='" + chain_name + "_last_update'")
-        else:
-            db.query("DELETE FROM info")
-        db.query("DELETE FROM addresses"+where)
-        db.query("DELETE FROM custom_names"+where)
-        db.query("DELETE FROM custom_types"+where)
-        db.query("DELETE FROM tokens"+where)
-        db.query("delete from transaction_transfers where transaction_id in (select id from transactions"+where+")")
-        db.query("delete from transactions"+where)
+    def wipe_transactions(self):
+        if not self.first_run:
+            self.make_backup('manual_wipe')
+        try:
+            self.db.disconnect()
+        except:
+            pass
+        path = 'data/users/' + self.address
+        os.remove(path+"/db.db")
+        filenames = ["db.db","transactions.json","rates","data_cache.json","calculator_cache"]
+        for filename in filenames:
+            try:
+                os.remove(path+"/"+filename)
+            except:
+                pass
+        try:
+            redis = Redis(self.address)
+            to_delete = [self.address + "_progress", self.address + "_progress_entry", self.address + "_last_update", self.address +"_running"]
+            redis.R.delete(*to_delete)
+            redis.deq()
+        except:
+            pass
 
-        db.commit()
+        try:
+            shutil.rmtree(path+"/uploads")
+        except:
+            pass
+        self.__init__(self.address,load_addresses=True)
+
+    def restore_backup(self):
+        path = 'data/users/' + self.address
+        shutil.copy(path + "/db_backup_manual_wipe.db", path + "/db.db")
 
 
     def store_current_tokens(self,chain,current_tokens):
@@ -625,6 +717,7 @@ class User:
         log('resp len', len(rows))
         rv = {}
         _, eth_rate, _ = self.lookup_rate_including_custom(coingecko,'ETH','ETH',t)
+        fiat_rate = self.fiat_rates.lookup_rate(self.fiat,t)
         for row in rows:
             chain_name, address, contract, symbol, nft_id, amount, debank_rate, nft_eth_floor = row
             if chain_name not in rv:
@@ -640,7 +733,7 @@ class User:
                     rv[chain_name][address][contract]['nft_amounts'] = {}
                 rv[chain_name][address][contract]['nft_amounts'][nft_id] = amount
                 if nft_eth_floor is not None:
-                    rv[chain_name][address][contract]['rate'] = [1,nft_eth_floor*eth_rate,'opensea_nft_floor']
+                    rv[chain_name][address][contract]['rate'] = [1,nft_eth_floor*eth_rate*fiat_rate,'opensea_nft_floor']
             else:
                 rv[chain_name][address][contract]['amount'] = amount
                 if debank_rate is None:
@@ -648,15 +741,20 @@ class User:
                     log('load_current_tokens rate lookup',chain_name,contract,rate_found,rate,rate_source)
                     if rate_source is not None and 'after last' in rate_source:
                         rate_found = 1
+                    if rate is not None:
+                        rate *= fiat_rate
                     rv[chain_name][address][contract]['rate'] = [rate_found, rate, rate_source]
 
                 else:
+                    if debank_rate is not None:
+                        debank_rate *= fiat_rate
                     rv[chain_name][address][contract]['rate'] = [1,debank_rate,'debank']
 
+        self.current_tokens = rv
         return rv
 
 
-    def store_transactions(self,chain,transactions, import_addresses):
+    def store_transactions(self,chain,transactions, import_addresses, coingecko):
         chain.update_pb('Storing transactions',0)
         db = self.db
 
@@ -670,7 +768,7 @@ class User:
 
             # db.insert_kw('transactions', chain=chain.name, hash=hash, timestamp=timestamp)
             # txid = db.select("SELECT last_insert_rowid()")[0][0]
-            txid, existing = self.locate_insert_transaction(chain.name,hash,timestamp,nonce,block,transaction.interacted,transaction.function)
+            txid, existing = self.locate_insert_transaction(chain.name,hash,timestamp,nonce,block,transaction.interacted,transaction.originator,transaction.function, transaction.minimized)
 
             new_transfers = {}
             tx_has_suspect_amount = False
@@ -681,10 +779,12 @@ class User:
                     break
 
             for index_, (type, sub_data, id, _, _, _, synthetic, _) in enumerate(transaction.grouping):
-                hash, ts, nonce, block, fr, to, val, token, token_contract, token_nft_id, base_fee, input_len, input = sub_data
+                hash, ts, nonce, block, fr, to, val, token, token_contract, _, token_nft_id, base_fee, input_len, input = sub_data
                 fr_id = self.locate_insert_address(chain.name, fr)
                 to_id = self.locate_insert_address(chain.name, to)
-                token_id = self.locate_insert_token(chain.name, token_contract, token)
+                coingecko_id = coingecko.lookup_id(chain.name,token_contract)
+                log('locate_insert_token',chain.name,token_contract,token,coingecko_id,filename='tokens.txt')
+                token_id = self.locate_insert_token(chain.name, token_contract, token, coingecko_id=coingecko_id)
 
 
                 if chain.name != 'Solana':
@@ -711,6 +811,7 @@ class User:
                     new_transfers[tr_hash].append(transfer)
 
             new_hashes = list(new_transfers.keys())
+            clog(transaction,"storing, new",new_transfers)
 
             ids_to_delete = []
             transfers_to_add = []
@@ -733,6 +834,7 @@ class User:
                         existing_transfers[tr_hash] = [row]
                     else:
                         existing_transfers[tr_hash].append(row)
+                clog(transaction,"storing, existing", existing_transfers)
 
                 for tr_hash, identical_existing_transfers in existing_transfers.items():
                     #possibly overwrite old transfers on perfect import
@@ -751,13 +853,15 @@ class User:
                         del new_transfers[tr_hash]
 
             #unaccounted remainder
+            clog(transaction,"storing, unaccounted", new_transfers)
             for tr_hash, identical_new_transfers in new_transfers.items():
                 transfers_to_add.extend(identical_new_transfers)
 
             if existing and len(ids_to_delete) > 0:
-                log('transfer overwrite',chain.name,txid,hash,'ids_to_delete',ids_to_delete,'transfers_to_add',transfers_to_add,'existing hashes',list(existing_transfers.keys()),'new hashes',new_hashes,filename='overwrites.txt')
+                clog(transaction,'transfer overwrite',chain.name,txid,hash,'ids_to_delete',ids_to_delete,'transfers_to_add',transfers_to_add,'existing hashes',list(existing_transfers.keys()),'new hashes',new_hashes,filename='overwrites.txt')
 
             if len(ids_to_delete) > 0:
+                clog(transaction,"storing, ids to delete", ids_to_delete)
                 db.query('DELETE FROM transaction_transfers WHERE id IN '+sql_in(ids_to_delete))
 
             for prepared_transfer in transfers_to_add:
@@ -808,6 +912,7 @@ class User:
 
 
         for transfer in transaction.transfers.values():
+            log("Storing derived transfer",id,transaction.hash,transfer.coingecko_id,transfer.rate)
             db.insert_kw('transaction_transfers_derived',id=transfer.id, coingecko_id=transfer.coingecko_id,
                          rate=transfer.rate, rate_found = transfer.rate_found, rate_source=transfer.rate_source,
                          treatment = transfer.treatment, vault_id = transfer.vault_id)
@@ -841,13 +946,13 @@ class User:
     def load_transactions(self,chain_dict=None,tx_id_list=None,load_derived=False):
         db = self.db
         self.relevant_import_ids = set()
-
+        fiat_needed = set()
 
 
 
         query = "SELECT " \
-                "tx.chain, tx.id, tx.hash, tx.timestamp, tx.nonce, tx.block, interacted_addr.address, tx.function, tx.custom_type_id, tx.custom_color_id, tx.manual, tx.custom_note, tx.import_id, " \
-                "tr.id, tr.type, tr.from_addr_id, from_addr.address, tr.to_addr_id, to_addr.address, tr.val, tk.symbol, IFNULL(tk.contract,tk.symbol), tr.token_nft_id, tr.base_fee, tr.input_len, tr.input," \
+                "tx.chain, tx.id, tx.hash, tx.timestamp, tx.nonce, tx.block, interacted_addr.address, tx.function, tx.custom_type_id, tx.custom_color_id, tx.minimized, tx.manual, tx.custom_note, tx.import_id, tx.upload_id, " \
+                "tr.id, tr.type, tr.from_addr_id, from_addr.address, tr.to_addr_id, to_addr.address, tr.val, tk.symbol, IFNULL(tk.contract,tk.symbol), tk.coingecko_id, tk.custom_coingecko_id, tr.token_nft_id, tr.base_fee, tr.input_len, tr.input," \
                 "tr.custom_treatment, tr.custom_rate, tr.custom_vaultid, tr.synthetic "
         if load_derived:
             query += ",txd.category,txd.claim,txd.nft,txd.protocol,txd.protocol_note,txd.certainty,txd.cp_progenitor,txd.cp_address,txd.cp_name,txd.sig_hex,txd.sig_decoded,txd.balanced, " \
@@ -856,6 +961,7 @@ class User:
 
         query +="FROM transactions as tx, transaction_transfers as tr, addresses as from_addr, addresses as to_addr, tokens as tk "
         query +="LEFT OUTER JOIN addresses as interacted_addr  ON interacted_addr.id = tx.interacted_addr_id "
+        query += "LEFT OUTER JOIN addresses as originator_addr  ON originator_addr.id = tx.originator_addr_id "
         if load_derived:
             query += "LEFT OUTER JOIN transactions_derived as txd ON txd.id=tx.id " \
                      "LEFT OUTER JOIN transaction_transfers_derived as trd ON tr.id=trd.id "
@@ -873,7 +979,8 @@ class User:
             created_chain_dict = {}
         if tx_id_list is not None:
             query += " AND tx.id IN " + sql_in(tx_id_list)
-        query += " ORDER BY tx.timestamp, tx.nonce, tx.id, tx.hash, tr.id"
+        timing_adjustment = "CASE tx.chain WHEN 'Fantom' THEN -30 WHEN 'Avalanche' THEN -30 ELSE 0 END"
+        query += " ORDER BY tx.timestamp + "+timing_adjustment+", tx.nonce, tx.id, tx.hash, tr.id"
 
         log("BIG QUERY", query)
 
@@ -883,14 +990,14 @@ class User:
 
         for row in rows:
             if load_derived:
-                chain_name, txid, hash, ts, nonce, block, interacted, function, custom_type_id, custom_color_id, manual, custom_note, import_id, \
-                trid, transfer_type, fr_id, fr, to_id, to, val, token, token_contract, token_nft_id, base_fee, input_len, input, \
+                chain_name, txid, hash, ts, nonce, block, interacted, function, custom_type_id, custom_color_id, minimized, manual, custom_note, import_id, upload_id, \
+                trid, transfer_type, fr_id, fr, to_id, to, val, token, token_contract, coingecko_id, custom_coingecko_id, token_nft_id, base_fee, input_len, input, \
                 custom_treatment, custom_rate, custom_vaultid, synthetic, \
                 d_category,d_claim,d_nft,d_protocol,d_protocol_note,d_certainty,d_cp_progenitor,d_cp_address,d_cp_name,d_sig_hex,d_sig_decoded,d_balanced,\
                 d_coingecko_id,d_rate,d_rate_found,d_rate_source,d_treatment,d_vault_id = row
             else:
-                chain_name,txid, hash, ts, nonce, block, interacted, function, custom_type_id, custom_color_id, manual, custom_note, import_id, \
-                trid, transfer_type, fr_id, fr, to_id, to,val,token,token_contract,token_nft_id, base_fee, input_len, input, \
+                chain_name,txid, hash, ts, nonce, block, interacted, function, custom_type_id, custom_color_id, minimized, manual, custom_note, import_id, upload_id, \
+                trid, transfer_type, fr_id, fr, to_id, to,val,token,token_contract, coingecko_id, custom_coingecko_id, token_nft_id, base_fee, input_len, input, \
                 custom_treatment, custom_rate, custom_vaultid, synthetic = row
 
             if import_id is not None:
@@ -899,8 +1006,8 @@ class User:
             if txid != prev_txid:
                 if created_chain_dict is not None:
                     if chain_name not in created_chain_dict:
-                        chain = self.chain_factory(chain_name)
-                        if not load_derived:
+                        chain = self.chain_factory(chain_name, is_upload = upload_id is not None)
+                        if not load_derived and upload_id is None:
                             chain.init_addresses(address_db)
                         created_chain_dict[chain_name] = chain
                     else:
@@ -913,29 +1020,42 @@ class User:
                 # else:
                 #     address = to
 
-                T = Transaction(self, chain, txid=txid, custom_type_id=custom_type_id, custom_color_id=custom_color_id, custom_note=custom_note, manual=manual)
+                T = Transaction(self, chain, txid=txid, custom_type_id=custom_type_id, custom_color_id=custom_color_id, custom_note=custom_note, manual=manual, upload_id=upload_id)
                 T.interacted = interacted
                 T.function = function
+                T.minimized = minimized
                 if load_derived:
                     T.derived_data = {'category':d_category,'claim':d_claim,'nft':d_nft,'protocol':d_protocol,
                                  'protocol_note':d_protocol_note,'certainty':d_certainty,'cp_progenitor':d_cp_progenitor,'cp_address':d_cp_address,'cp_name':d_cp_name,
                                  'sig_hex':d_sig_hex,'sig_decoded':d_sig_decoded,'balanced':d_balanced}
+                    log('\nsetting dd',T.hash, T.derived_data,filename='derived.txt')
                 transactions.append(T)
                 prev_txid = txid
             if val is not None and "," in str(val):
                 val = float(val.replace(",",""))
-            row = [hash, ts, nonce, block, fr, to, val, token, token_contract, token_nft_id, base_fee, input_len, input]
+
             # T.chain.transferred_tokens.add(token_contract)
             row_derived = None
             if load_derived:
                 row_derived = {'coingecko_id':d_coingecko_id,'rate':d_rate,'rate_found':d_rate_found,'rate_source':d_rate_source,'treatment':d_treatment,'vault_id':d_vault_id}
+                log('setting ddt', row_derived, filename='derived.txt')
+            if custom_coingecko_id is not None:
+                coingecko_id = custom_coingecko_id
+            # elif coingecko_id is not None:
+            #     token_contract = 'coingecko_id:'+coingecko_id
+            row = [hash, ts, nonce, block, fr, to, val, token, token_contract, coingecko_id, token_nft_id, base_fee, input_len, input]
 
-            log('loaded transfer',txid,transfer_type,row)
+            # log('loaded transfer',txid,transfer_type,row)
             T.append(transfer_type, row, transfer_id=trid, custom_treatment=custom_treatment, custom_rate=custom_rate, custom_vaultid=custom_vaultid, synthetic=synthetic, derived=row_derived)
             T.chain.transferred_tokens.add(token_contract)
+
+            if token_contract in Twelve.FIAT_SYMBOLS and token_contract != 'USD':
+                fiat_needed.add(token_contract)
         self.relevant_import_ids = list(self.relevant_import_ids)
         if address_db is not None:
             address_db.disconnect()
+        if len(fiat_needed) or self.fiat != 'USD':
+            self.load_fiat()
         return transactions, created_chain_dict
 
 
@@ -1064,7 +1184,7 @@ class User:
         # classifier = Classifier()
         res = []
         for idx,transaction in enumerate(transactions):
-            transaction.finalize(C, None)
+            transaction.finalize(C, self.fiat_rates, None)
             self.apply_final_rate(C, transaction)
             self.apply_custom_cp_name(transaction)
             # classifier.classify(transaction)
@@ -1072,6 +1192,7 @@ class User:
             # transaction.add_fee_transfer()
             transaction.infer_and_adjust_rates(self,C)
             self.apply_custom_val(transaction)
+            self.apply_fiat(transaction)
             js = transaction.to_json()
             res.append(js)
 
@@ -1102,7 +1223,7 @@ class User:
         res = []
         classifier = Classifier()
         for idx, transaction in enumerate(transactions):
-            transaction.finalize(C, None)
+            transaction.finalize(C, self.fiat_rates, None)
             self.apply_final_rate(C, transaction)
             self.apply_custom_cp_name(transaction)
             if transaction.custom_type_id is not None:
@@ -1115,6 +1236,7 @@ class User:
             # transaction.add_fee_transfer()
             transaction.infer_and_adjust_rates(self, C)
             self.apply_custom_val(transaction)
+            self.apply_fiat(transaction)
             js = transaction.to_json()
             res.append(js)
 
@@ -1152,14 +1274,19 @@ class User:
                 return 0
             return 1
 
-        def check_token_match(transfer_contract, transfer_symbol, rule_token, rule_token_custom):
-            # log('ctm',rule_token, transfer_symbol, rule_token_custom, transfer_contract, rule_token_custom)
+        def check_token_match(transfer_contract, transfer_symbol, transfer_coingecko_id, rule_token, rule_token_custom):
+            # log('ctm',rule_token, 'transfer_symbol', transfer_symbol,'transfer_contract', transfer_contract,'rule_token_custom', rule_token_custom,filename='custom_types.txt')
             if rule_token_custom is not None:
-                rule_token_custom = normalize_address(rule_token_custom)
+                if is_ethereum(rule_token_custom) or is_solana(rule_token_custom):
+                    rule_token_custom = normalize_address(rule_token_custom)
+                else:
+                    rule_token_custom = rule_token_custom.lower()
             transfer_symbol = transfer_symbol.lower()
-            if rule_token == 'specific' and (transfer_symbol == rule_token_custom or transfer_contract == rule_token_custom):
+            if transfer_coingecko_id is not None:
+                transfer_coingecko_id = transfer_coingecko_id.lower()
+            if rule_token == 'specific' and rule_token_custom in [transfer_contract,transfer_symbol,transfer_coingecko_id]:
                 return 1
-            if rule_token == 'specific_excl' and (transfer_symbol != rule_token_custom and transfer_contract != rule_token_custom):
+            if rule_token == 'specific_excl' and rule_token_custom not in [transfer_contract,transfer_symbol,transfer_coingecko_id]:
                 return 1
             if rule_token == 'any':
                 return 1
@@ -1173,6 +1300,7 @@ class User:
             to = normalize_address(transfer.to)
             what = normalize_address(transfer.what)
             symbol = transfer.symbol.lower()
+            coingecko_id = transfer.coingecko_id
 
             rule_found = False
             selected_treatment = None
@@ -1190,7 +1318,7 @@ class User:
                     # log("To address fail")
                     continue
 
-                if not check_token_match(what, symbol, token, token_custom):
+                if not check_token_match(what, symbol, coingecko_id, token, token_custom):
                     # log("Token fail")
                     continue
 
@@ -1277,7 +1405,7 @@ class User:
         C = Coingecko.init_from_cache(self)
         classifier = Classifier()
 
-        transaction.finalize(C, None)
+        transaction.finalize(C, self.fiat_rates, None)
         log('undoing custom changes 1', transaction)
         # self.apply_final_rate(C, transaction)
         # log('undoing custom changes 2', transaction)
@@ -1294,6 +1422,7 @@ class User:
             classifier.classify(transaction)
         # transaction.add_fee_transfer()
         transaction.infer_and_adjust_rates(self, C)
+        self.apply_fiat(transaction)
         js = transaction.to_json()
 
         return js
@@ -1318,9 +1447,10 @@ class User:
 
         for transfer in transaction.transfers.values():
             lookup_rate_contract = transfer.what
+            coingecko_id = transfer.coingecko_id
             if transfer.type == 5:
                 lookup_rate_contract = lookup_rate_contract + "_" + str(transfer.token_nft_id)
-            transfer.rate_found, transfer.rate, transfer.rate_source = self.lookup_rate_including_custom(coingecko_rates, transaction.chain.name, lookup_rate_contract, transaction.ts, verbose=transaction.hash == transaction.chain.hif)
+            transfer.rate_found, transfer.rate, transfer.rate_source = self.lookup_rate_including_custom(coingecko_rates, transaction.chain.name, lookup_rate_contract, transaction.ts, coingecko_id=coingecko_id, verbose=transaction.hash == transaction.chain.hif)
             if transaction.hash == transaction.chain.hif:
                 log('LOOKUP RATE RESULT',transfer,transfer.rate_found, transfer.rate, transfer.rate_source)
 
@@ -1349,7 +1479,7 @@ class User:
         self.db.update_kw('transactions','id='+str(txid),custom_note=note)
         self.db.commit()
 
-    def save_manual_transactions(self,chain_name,address,all_tx_blobs):
+    def save_manual_transactions(self,chain_name,address,all_tx_blobs,coingecko):
         txid_list = []
         chain = self.chain_factory(chain_name)
         for row in all_tx_blobs:
@@ -1417,7 +1547,8 @@ class User:
                 elif what.upper() == chain.main_asset.upper():
                     transfer_type = 1
                     what = what.upper()
-                    tok_id = self.locate_insert_token(chain_name, what, what)
+                    coingecko_id = coingecko.lookup_id(chain_name,what)
+                    tok_id = self.locate_insert_token(chain_name, what, what, coingecko_id=coingecko_id)
 
                 if transfer_type != 1:
                     contract = re.search(r'0x[0-9a-fA-F]{40}', what)
@@ -1425,7 +1556,8 @@ class User:
                         contract = contract.group()
                     else:
                         contract = what
-                    tok_id = self.locate_insert_token(chain_name, contract, contract[:8])
+                    coingecko_id = coingecko.lookup_id(chain_name, contract)
+                    tok_id = self.locate_insert_token(chain_name, contract, contract[:8], coingecko_id=coingecko_id)
 
 
                 fr_id = self.locate_insert_address(chain_name,fr)
@@ -1489,7 +1621,8 @@ class User:
         js = json.load(f)
         f.close()
         color_map = {0:'red',3:'orange',5:'yellow',10:'green'}
-        type_map = {1:'base token transfer',2:'internal transfer',3:'ERC20 transfer',4:'ERC721 (NFT) transfer',5:'ERC1155 (multi-token) transfer'}
+        type_map = {1:'base token transfer',2:'internal transfer',3:'ERC20 transfer',4:'ERC721 (NFT) transfer',5:'ERC1155 (multi-token) transfer',
+                    20:'received transfer from an upload',21:'sent transfer from an upload',22:'fee transfer from an upload'}
         csv_rows = []
         for T in js:
             if 'custom_color_id' in T:
@@ -1557,6 +1690,7 @@ class User:
     def transactions_to_log(self,coingecko_rates, signatures, transactions, progress_bar=None, store_derived=False):
         log("transactions_to_log called",len(transactions),'store_derived',store_derived)
         t = time.time()
+        t_stats = {'finalize':0,'classify':0,'iad':0}
         all_rows = []
         if len(transactions) == 0:
             return all_rows
@@ -1570,10 +1704,23 @@ class User:
         self.prepare_all_custom_types()
         # user.prepare_all_custom_treatment_and_rates()
         classifier = Classifier()
+        t_fin_all = None
         for idx, transaction in enumerate(transactions):
-            transaction.finalize(coingecko_rates, signatures)
+            t1 = time.time()
+            t_fin = transaction.finalize(coingecko_rates, self.fiat_rates, signatures, store_derived)
+            if t_fin_all is None:
+                t_fin_all = t_fin
+            else:
+                for i,t in enumerate(t_fin):
+                    t_fin_all[i] += t
+            t2 = time.time()
             classifier.classify(transaction)
+            t3 = time.time()
             transaction.infer_and_adjust_rates(self, coingecko_rates)
+            t4 = time.time()
+            t_stats['finalize']+=(t2-t1)
+            t_stats['classify'] += (t3 - t2)
+            t_stats['iad'] += (t4 - t3)
             if progress_bar is not None:
                 progress_bar.update( 'Classifying transactions: '+str(idx)+"/"+str(len(transactions)), pb_update_per_transaction)
 
@@ -1583,9 +1730,11 @@ class User:
 
             log("Storing derived",len(transactions),filename='derived.txt')
             for idx, transaction in enumerate(transactions):
+                classifier.compare(transaction)
                 self.store_derived_data(transaction)
                 if progress_bar is not None:
                     progress_bar.update('Saving classification data: ' + str(idx) + "/" + str(len(transactions)), pb_update_per_transaction)
+            self.set_info('force_forget_derived',0)
             self.db.commit()
 
         if progress_bar is not None:
@@ -1629,12 +1778,13 @@ class User:
         if progress_bar:
             progress_bar.set('Preparing transactions for display', 88)
         for idx,transaction in enumerate(transactions):
+            self.apply_fiat(transaction)
             js = transaction.to_json()
             if len(js['rows']) == 0:
                 continue #no non-zero transfers, skip
             all_rows.append(js)
 
-        log('timing:transactions_to_log 2', time.time() - t)
+        log('transactions_to_log timing stats',t_stats,'finalize stats',t_fin_all, filename='timing.txt')
 
         # pprint.pprint(dict(classifier.outgoing_transfers))
 
@@ -1642,9 +1792,10 @@ class User:
 
 
 
-    def lookup_rate_including_custom(self,coingecko, chain_name, token_contract, ts, verbose=False):
+    def lookup_rate_including_custom(self,coingecko, chain_name, token_contract, ts, coingecko_id=None, verbose=False):
 
         #first look in custom rates
+        log('lookup_rate_including_custom',coingecko.initialized,chain_name,token_contract,ts,coingecko_id,filename='lookups.txt')
         cust_level = -1
         level = -1
         cp_pair = chain_name +":"+token_contract
@@ -1670,8 +1821,18 @@ class User:
                 cust_rate = rates_table[ts_lookup]
                 cust_level = 0.5
 
+        if token_contract == self.fiat:
+            level, rate, source = 1, 1./self.fiat_rates.lookup_rate(token_contract,ts), 'fiat'
+            return level, rate, source
+        elif token_contract in Twelve.FIAT_SYMBOLS:
+            level, rate, source = 1, 1./self.fiat_rates.lookup_rate(token_contract,ts), 'fiat-other'
+            return level, rate, source
+
         if coingecko.initialized:
-            level, rate, source = coingecko.lookup_rate(chain_name,token_contract, ts)
+            if coingecko_id is not None:
+                level, rate, source = coingecko.lookup_rate_by_id(coingecko_id, ts)
+            else:
+                level, rate, source = coingecko.lookup_rate(chain_name,token_contract, ts)
 
         if verbose:
             if level > -1:
@@ -1721,58 +1882,20 @@ class User:
         return 0, None, None
 
 
-    def chain_factory(self,chain_name):
-        if chain_name == 'Solana':
+    def chain_factory(self,chain_name, is_upload=False):
+        if is_upload:
+            chain = Chain.from_upload(chain_name)
+        elif chain_name == 'Solana':
             chain = Solana()
         else:
             chain = Chain.from_name(chain_name)
         return chain
 
-    # def covalent_correction_multichain(self,all_chains, transactions, progress_bar=None):
-    #     covalent_chain_mapping = {'Arbitrum': 42161, 'Fantom': 250}
-    #     session = requests.session()
-    #     for chain_name, chain_data in all_chains.items():
-    #         if chain_name in covalent_chain_mapping:
-    #             addresses = chain_data['import_addresses']
-    #             chain_id = str(covalent_chain_mapping[chain_name])
-    #             for address in addresses:
-    #                 done = False
-    #                 page_num = 0
-    #                 if progress_bar:
-    #                     progress_bar.update(chain_name+': Retrieving additional information from CovalentHQ for ' + address,0)
-    #                 while not done:
-    #                     time.sleep(0.25)
-    #                     url = "https://api.covalenthq.com/v1/" + chain_id + "/address/" + address + "/transactions_v2/?quote-currency=USD&format=JSON&block-signed-at-asc=true&no-logs=true&page-number=" + str(
-    #                         page_num) + "&page-size=1000&key=ckey_53ec69f026ab4220a1e0347f330"
-    #                     try:
-    #                         resp = session.get(url, timeout=10)
-    #                         data = resp.json()
-    #                         entries = data['data']['items']
-    #                         for entry in entries:
-    #                             txhash = entry['tx_hash']
-    #                             if txhash in transactions:
-    #                                 T = transactions[txhash]
-    #                                 if chain_name == 'Arbitrum':
-    #                                     fee = float(entry['fees_paid']) / pow(10, 18)
-    #                                     for row in T.grouping:
-    #                                         if row[0] == 1 and row[1][10] != 0:
-    #                                             row[1][10] = fee
-    #                                 if chain_name == 'Fantom':
-    #                                     success = entry['successful']
-    #                                     if not success:
-    #                                         for row in T.grouping:
-    #                                             if row[1][5] != 'network':
-    #                                                 row[1][6] = 0
-    #                         done = not data['data']['pagination']['has_more']
-    #                     except:
-    #                         log('Failed to get fees from covalent', address, url, traceback.format_exc(), filename='global_error_log.txt')
-    #                         break
-    #                     page_num += 1
 
     def get_thirdparty_data(self,all_chains, progress_bar=None):
 
         session = requests.session()
-        session.headers.update({'AccessKey': 'c774bd64e13f462b33bc45894b5de2bfb9ef1421'})
+        session.headers.update({'AccessKey': os.environ.get('debank_access_key')})
         # debank_chain_mapping = {
         #     'ETH': 'eth', 'Polygon': 'matic', 'Arbitrum': 'arb', 'Avalanche': 'avax', 'Fantom': 'ftm', 'BSC': 'bsc', 'HECO': 'heco', 'Moonriver': 'movr', 'Cronos': 'cro', 'Gnosis': 'xdai',
         #     'Optimism': 'op', 'Celo':'celo', 'Doge':'doge', 'Songbird':'sgb', 'Metis':'metis', 'Boba':'boba', 'Astar':'astar', 'Evmos':'evmos','Kava':'kava','Canto':'canto',
@@ -1794,6 +1917,8 @@ class User:
             inverse_debank_mapping[v] = k
         all_addresses = set()
         for chain_name, chain_data in all_chains.items():
+            if chain_data['is_upload']:
+                continue
             all_addresses = all_addresses.union(set(chain_data['import_addresses']))
         addresses = list(all_addresses)
         log('all addresses for debank',addresses, filename='current_tokens_log.txt')
@@ -1816,6 +1941,8 @@ class User:
                         chain_name = inverse_debank_mapping[debank_chain_name]
                         if chain_name in all_chains:
                             chain_data = all_chains[chain_name]
+                            if chain_data['is_upload']:
+                                continue
                             if active_address in chain_data['import_addresses']:
                                 amount = entry['amount']
                                 #occasional misclassified NFT? ex 0xdf5d68d54433661b1e5e90a547237ffb0adf6ec2
@@ -1890,13 +2017,17 @@ class User:
         # simplehash_chain_mapping = {'ETH':'ethereum','Polygon':'polygon','Arbitrum':'arbitrum','Avalanche':'avalanche','Gnosis':'gnosis','Optimism':'optimism','BSC':'bsc'}
 
         session = requests.session()
-        session.headers.update({'X-API-Key': 'iraykhel_sk_611e330c-c5db-42c6-9588-442a252096fa_6wcav1e4g7ip411d'})
+        session.headers.update({'X-API-Key': os.environ.get('api_key_simplehash')})
         rq_cnt = 0
         for chain_name, chain_data in all_chains.items():
+            if chain_data['is_upload']:
+                continue
             if 'simplehash_mapping' in Chain.CONFIG[chain_name]:
                 rq_cnt += 1
 
         for chain_name, chain_data in all_chains.items():
+            if chain_data['is_upload']:
+                continue
             accepted_addresses = []
             addresses = chain_data['import_addresses']
             chain = chain_data['chain']
@@ -2005,3 +2136,888 @@ class User:
                 if chain_name in self.all_addresses[addr]:
                     self.all_addresses[addr][chain_name]['min_ver'] = row['min_ver']
                     self.all_addresses[addr][chain_name]['max_ver'] = row['max_ver']
+
+
+    def upload_csv(self,source,file, coingecko, pb):
+
+
+
+        log('source',source,filename='file_uploads.txt')
+        path = 'data/users/' + self.address+'/uploads/csv/'
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        filename = secure_filename(source+".csv")
+        file.save(os.path.join(path,filename))
+
+        file = open(path+filename,'r', encoding='utf_8')
+        csv_reader = csv.reader(file, delimiter=',')
+        try:
+            first_row = csv_reader.__next__()
+        except:
+            return "Unexpected characters in the first row. Is it really a CSV?", None
+        ignore_column_indexes = set()
+        headers = []
+        for c_idx,h in enumerate(first_row):
+            if len(h) == 0 or h[0] != '#':
+                headers.append(h)
+            else:
+                ignore_column_indexes.add(c_idx)
+
+
+        if len(headers) != 15:
+            return "Unexpected number of headers, expected 15, got "+str(len(headers)), None
+
+        # #no headers?
+        # try:
+        #     dt = datetime.strptime(headers[0][:19], "%Y-%m-%d %H:%M:%S")
+        #     headers = ['Timestamp','Type','Base Currency','Base Amount','Quote Currency','Quote Amount','Fee Currency','Fee Amount','From','To','Blockchain','ID','Description','Reference Price Per Unit','Reference Price Currency']
+        # except:
+        #     pass
+
+
+        rows = []
+
+        for idx, row in enumerate(csv_reader):
+            rows.append(row)
+        file.close()
+
+        fields = [
+            {'name': headers[0], 'type':'date', 'required':True},
+            {'name': headers[1], 'type': 'label', 'required':True},
+            {'name': headers[2], 'type': 'currency','required':True},
+            {'name': headers[3], 'type': 'float','required':True},
+            {'name': headers[4], 'type': 'currency'},
+            {'name': headers[5], 'type': 'float'},
+            {'name': headers[6], 'type': 'currency'},
+            {'name': headers[7], 'type': 'float'},
+            {'name': headers[8], 'type': 'place'},
+            {'name': headers[9], 'type': 'place'},
+            {'name': headers[10], 'type': 'chain'},
+            {'name': headers[11], 'type': 'id'},
+            {'name': headers[12], 'type': 'desc'},
+            {'name': headers[13], 'type': 'float'},
+            {'name': headers[14], 'type': 'currency'},
+        ]
+
+        pb.set('Checking format', 5)
+
+
+        #pass 1 -- check for errors and normalize values
+        parsed = []
+        for ridx,row in enumerate(rows):
+            row_index = ridx+1
+            vals = []
+
+            field_cnt = 0
+            for cidx, _ in enumerate(row):
+                if cidx not in ignore_column_indexes:
+                    field_cnt += 1
+            if field_cnt != 15:
+                return "Row " + str(row_index) + ": Unexpected number of columns, expected 15, got "+str(field_cnt), None
+            #skip empty rows and comments
+            if ''.join(row) == "" or len(row[0]) == 0 or row[0][0] == "#":
+                continue
+            skip = False
+            # for field_idx,field in enumerate(fields):
+            #     if field_idx in ignore_column_indexes:
+            #         continue
+            field_idx = -1
+            for col_idx, val in enumerate(row):
+                if col_idx in ignore_column_indexes:
+                    continue
+                if len(val) > 0 and val[0] == '#':
+                    val = ""
+                field_idx += 1
+                field = fields[field_idx]
+                val = val.strip()
+                type = field['type']
+                name = field['name']
+                valm = val
+                if 'required' in field and field['required'] and val == "":
+                    return "Row "+str(row_index)+":"+ name + " is required", None
+
+
+                if type == 'date':
+
+                    try:
+                        dt = datetime.strptime(val[:19], "%Y-%m-%d %H:%M:%S")
+                        valm = int(dt.timestamp())
+                    except:
+                        return "Unexpected "+name+" in row " + str(row_index) + ", got \"" + val + "\", expecting YYYY-MM-DD HH:MM:SS", None
+                elif type == 'float':
+                    if len(val) != 0:
+                        try:
+                            valm = val.replace(",", "")
+                            valm = float(valm)
+                            if valm < 0:
+                                return "Row "+str(row_index)+":"+name+" needs to be a positive number, got " + val, None
+                        except:
+                            return "Row "+str(row_index)+":"+name+" needs to be a positive number, got \"" + val +"\"", None
+                elif type == 'currency':
+                    valm = val.upper()
+                elif type == 'label':
+                    valm = val.lower()
+                    if valm == 'skip':
+                        skip = True
+                        break
+
+
+                    label = valm
+                    if ":" in valm:
+                        label,_ = valm.split(":")
+
+
+                    if label not in ['sell', 'buy', 'fiat-deposit', 'fiat-withdrawal', 'receive', 'send', 'chain-split', 'expense',
+                            'stolen', 'lost', 'burn', 'income', 'interest', 'mining', 'airdrop', 'staking', 'cashback', 'royalty', 'royalties', 'personal-use',
+                            'gift', 'borrow', 'loan-repayment', 'liquidate', 'fee', 'margin-fee','from-vault','to-vault','realized-profit','realized-loss']:
+                        return "Row " + str(row_index) + ": unknown " + name+", got \""+valm+"\", please click the help icon for the supported list", None
+                vals.append(valm)
+
+            if skip:
+                continue
+            # log('row',row_index,'vals',vals,filename='file_uploads.txt')
+
+            for cp_idx in [2,4,6,13]:
+                if (vals[cp_idx] != "" and vals[cp_idx+1] == "") or (vals[cp_idx] == "" and vals[cp_idx+1] != ""):
+                    return "Row "+str(row_index)+":"+fields[cp_idx]['name']+" and "+fields[cp_idx+1]['name']+" should both be present, or both missing", None
+
+            if vals[14] not in ["",self.fiat]:
+                return "Row "+str(row_index)+":"+fields[14]['name'] + " can only be empty, or "+self.fiat+", got \""+str(vals[14])+"\" instead.", None
+
+            if label in ['realized-profit','realized-loss'] and vals[2] == 'USD':
+                return "Row " + str(row_index) + ": quote currency needs to be USD, base currency needs to be the name of the futures contract", None
+
+            # if is_ethereum(vals[8]) and vals[10] == '':
+            #     return "Row " + str(row_index) + ": please specify "+fields[10]['name']+" for "+vals[8], None
+            # if is_ethereum(vals[9]) and vals[10] == '':
+            #     return "Row " + str(row_index) + ": please specify "+fields[10]['name']+" for "+vals[9], None
+
+            # if vals[1] in ['sell','buy']:
+            #     if vals[5] == "" and vals[11] == "":
+            #         return "Row " + str(row_index) + ": needs either " + fields[5]['name'] + " or " + fields[11]['name'], None
+
+
+
+
+            parsed.append(vals)
+
+        #pass 2 -- group trades together to find rates
+        trades = {}
+        def add_asset(trade,where,cur,amt):
+            if cur not in trade[where]:
+                trade[where][cur] = 0
+            trade[where][cur] += amt
+
+
+        def make_hash(row):
+            ts, label, base_cur, base_amt, quote_cur, quote_amt, fee_cur, fee_amt, fr, to, chain_name, txhash, desc, usd_ref_price, usd_cur = row
+            if txhash == "":
+                txhash = hashlib.sha256((str(ts)+str(base_cur)+str(quote_cur)).encode('UTF-8')).hexdigest()
+            return txhash
+
+        for row in parsed:
+            ts, label, base_cur, base_amt, quote_cur, quote_amt, fee_cur, fee_amt, fr, to, chain_name, txhash, desc, usd_ref_price, usd_cur = row
+            if label not in ['buy','sell']:
+                continue
+            # if txhash == "":
+            #     txhash = str(abs(hash(str(ts) + str(base_amt) + str(quote_amt) + str(fee_amt))))
+            txhash = make_hash(row)
+
+            if txhash not in trades:
+                trade = {'in':{},'out':{},'ts':set()}
+            else:
+                trade = trades[txhash]
+            trade['ts'].add(ts)
+            if label == 'buy':
+                add_asset(trade,'in',base_cur,base_amt)
+                if quote_cur != "":
+                    add_asset(trade, 'out', quote_cur, quote_amt)
+            else:
+                add_asset(trade, 'out', base_cur, base_amt)
+                if quote_cur != "":
+                    add_asset(trade, 'in', quote_cur, quote_amt)
+            trades[txhash] = trade
+
+
+
+
+        pb.set('Looking up rates', 20)
+        #pass 3 -- coingecko rates -- need to map symbols to ids
+        symbol_times = {}
+        majors = ['BTC','ETH','USDT','USDC']
+        for row in parsed:
+            # log('row', row, filename='file_uploads.txt')
+            # ts, out_amt, out_cur, in_amt, in_cur, fee_amt, fee_cur, usd_amt, usd_cur, label, desc, txhash = row
+            ts, label, base_cur, base_amt, quote_cur, quote_amt, fee_cur, fee_amt, fr, to, chain_name, txhash, desc, usd_ref_price, usd_cur = row
+            for cur in [base_cur, quote_cur, fee_cur]:
+                if cur != "":
+                    if cur not in symbol_times:
+                        symbol_times[cur] = {'needed':set(),'custom_rates':{},'id_candidates':[],'BTC_rates':{},'ETH_rates':{},'USDC_rates':{},'USDT_rates':{}}
+                    symbol_times[cur]['needed'].add(ts)
+            if usd_ref_price != '':
+                symbol_times[base_cur]['custom_rates'][ts] = usd_ref_price
+
+        updated_trades = {}
+        for txhash,trade in trades.items():
+            if len(trade['in']) == 1 and len(trade['out']) == 1 and len(trade['ts']) == 1:
+                log("trade",trade,filename='file_uploads.txt')
+                in_cur = list(trade['in'].keys())[0]
+                out_cur = list(trade['out'].keys())[0]
+                in_amt = trade['in'][in_cur]
+                out_amt = trade['out'][out_cur]
+                ts = list(trade['ts'])[0]
+                if in_cur == self.fiat:
+                    symbol_times[out_cur]['custom_rates'][ts] = in_amt / out_amt
+                if out_cur == self.fiat:
+                    symbol_times[in_cur]['custom_rates'][ts] = out_amt / in_amt
+
+                for coin in majors:
+                    if in_cur == coin:
+                        symbol_times[out_cur][coin+'_rates'][ts] = in_amt / out_amt
+                    if out_cur == coin:
+                        symbol_times[in_cur][coin+'_rates'][ts] = out_amt / in_amt
+                updated_trades[txhash] = trade
+
+            # elif base_amt != '' and quote_amt != '':
+            #     if base_cur == 'USD':
+            #         symbol_times[quote_cur]['custom_rates'][ts] = base_amt / quote_amt
+            #     if quote_cur == 'USD':
+            #         symbol_times[base_cur]['custom_rates'][ts] = quote_amt / base_amt
+            #
+            #
+            #     for coin in majors:
+            #         if base_cur == coin:
+            #             symbol_times[quote_cur][coin+'_rates'][ts] = base_amt / quote_amt
+            #         if quote_cur == coin:
+            #             symbol_times[base_cur][coin+'_rates'][ts] = quote_amt / base_amt
+
+
+        symbol_id_mapping = {
+            'BTC':'bitcoin',
+            'ETH':'ethereum',
+            'USDT':'tether',
+            'USDC':'usd-coin',
+            'BNB':'binancecoin',
+            'XRP':'ripple',
+            'SOL':'solana',
+            'DOGE':'dogecoin',
+            'BCH':'bitcoin-cash',
+            'AVAX':'avalanche-2'
+        }
+
+        rows = self.db.select("SELECT symbol, coingecko_id FROM tokens WHERE chain='"+source+"' AND coingecko_id IS NOT NULL")
+        for row in rows:
+            symbol_id_mapping[row[0]] = row[1]
+
+        db = SQLite('db', do_logging=False, read_only=False)
+        for symbol in majors: #need these first to get USD rates through them
+            if symbol in symbol_times:
+                id = symbol_id_mapping[symbol]
+                to_download, ranges = coingecko.load_rates(db, id, symbol_times[symbol]['needed'])
+                if len(to_download) > 0:
+                    pb.update('Downloading rates for '+str(id))
+                    coingecko.download_rates(db, id, to_download, ranges)
+
+        for symbol,symbol_data in symbol_times.items():
+            log('\nmapping '+symbol+' to coingecko id','symbol_data', symbol_data,filename='file_uploads.txt')
+            if symbol in Twelve.FIAT_SYMBOLS:
+                log(symbol,'is FIAT, skip',filename='file_uploads.txt')
+                continue
+            if symbol in symbol_id_mapping:
+                id = symbol_id_mapping[symbol]
+                log('assigning id -- in symbol_id_mapping', symbol, id, filename='file_uploads.txt')
+                symbol_data['id'] = id
+                to_download, ranges = coingecko.load_rates(db, id, symbol_data['needed'])
+                if len(to_download) > 0:
+                    pb.update('Downloading rates for ' + str(id))
+                    coingecko.download_rates(db, id, to_download, ranges)
+                continue
+
+
+
+            log('still mapping ' + symbol + ' to coingecko id', filename='file_uploads.txt')
+            sqlite_symbol = symbol.lower().replace("'","")
+            rows = db.select("SELECT id FROM symbols WHERE symbol='"+sqlite_symbol+"' AND id NOT LIKE '%-peg%'")
+            log('candidates', rows,  filename='file_uploads.txt')
+            min_metric = 1
+            max_available = 0
+            best_match = None
+            cand_count = len(rows)
+            for row in rows:
+                id = row[0]
+                log("checking", id, symbol_data['needed'], filename='file_uploads.txt')
+
+
+
+                to_download, ranges = coingecko.load_rates(db, id, symbol_data['needed'])
+                log('loaded rates', id, ranges, filename='file_uploads.txt')
+                if len(to_download) > 0:
+                    log('init download',id,to_download, filename='file_uploads.txt')
+                    pb.update('Downloading rates for ' + str(id))
+                    coingecko.download_rates(db, id, to_download, ranges)
+
+                rate_diff_entries = []
+                for ts,usd_rate in symbol_data['custom_rates'].items():
+                    good, coingecko_rate, rate_source = coingecko.lookup_rate_by_id(id,ts)
+                    if good >= 1:
+                        rate_diff = abs(usd_rate-coingecko_rate)/(usd_rate+coingecko_rate)
+                        rate_diff_entries.append(rate_diff)
+                for coin in majors:
+                    for ts, custom_rate in symbol_data[coin+'_rates'].items():
+                        good1, coingecko_rate, rate_source = coingecko.lookup_rate_by_id(id, ts)
+                        good2, major_rate, rate_source = coingecko.lookup_rate_by_id(symbol_id_mapping[coin],ts)
+                        if good1 >=1 and good2 >= 1:
+                            usd_rate = custom_rate*major_rate
+                            rate_diff = abs(usd_rate - coingecko_rate) / (usd_rate + coingecko_rate)
+                            rate_diff_entries.append(rate_diff)
+
+                if len(rate_diff_entries) > 0:
+                    available = len(rate_diff_entries)
+                    id_match_metric = median(rate_diff_entries)
+                    log('metric calc',id_match_metric,rate_diff_entries,'available',available, filename='file_uploads.txt')
+                    if min_metric < 0.02 and id_match_metric < 0.02: #if multiple good candidates, pick one with more data
+                        if available > max_available:
+                            best_match = id
+                            max_available = available
+
+                    elif id_match_metric < min_metric:
+                        min_metric = id_match_metric
+                        best_match = id
+                        max_available = available
+                else:
+                    log('no rate data for needed times',filename='file_uploads.txt')
+
+            if min_metric < 0.05:
+                log('assigning id -- good metric', symbol, best_match, min_metric, filename='file_uploads.txt')
+                symbol_data['id'] = best_match
+
+            elif cand_count == 1 and min_metric == 1:
+                log('assigning id -- only one option with no metric', symbol, rows[0], min_metric, filename='file_uploads.txt')
+                symbol_data['id'] = rows[0][0]
+            else:
+                log('id not found', symbol, len(rows), min_metric, filename='file_uploads.txt')
+
+
+
+        db.disconnect()
+
+        pb.set('Populating transactions',40)
+        # pass 3 -- determine token and address IDs, create/locate transactions, populate transfer arrays (but don't add them to db yet)
+        db = self.db
+        t = int(time.time())
+        db.insert_kw('uploads',started=t,status=0,source=source,version=self.version)
+        upload_id = db.select("SELECT last_insert_rowid()")[0][0]
+
+        self_address='my account'
+        self_address_id = self.locate_insert_address(source, self_address)
+        rows = db.select("SELECT * FROM user_addresses WHERE address='"+self_address+"' AND chain='"+source+"'")
+        if len(rows) == 0:
+            db.insert_kw('user_addresses',address=self_address,chain=source,previously_used=1,present=1,last_update=t, is_upload=1)
+        else:
+            db.update_kw('user_addresses',"address='"+self_address+"' AND chain='"+source+"'",last_update=t)
+
+        other_address_id = self.locate_insert_address(source, 'elsewhere')
+        fee_address_id = self.locate_insert_address(source, source+' fee')
+        margin_fee_address_id = self.locate_insert_address(source, source+' margin fee')
+        loan_address_id = self.locate_insert_address(source, source+' loan')
+        vault_address_id = self.locate_insert_address(source, source + ' vault')
+        counter_address_id = self.locate_insert_address(source, 'counter-trader')
+        all_new_transfers = {}
+        function = None
+
+
+
+        for row in parsed:
+            ts, label, base_cur, base_amt, quote_cur, quote_amt, fee_cur, fee_amt, fr, to, chain_name, txhash, desc, usd_ref_price, usd_cur = row
+            # if label in ['fiat-deposit','fiat-withdrawal']:
+            #     continue
+
+            # if txhash == "": #create unique id for transaction
+            #     txhash = str(ts)+str(base_amt)+str(quote_amt)+str(fee_amt)
+            # txhash = source +txhash
+            # txhash = str(hash(txhash))
+
+            # if txhash == "":
+            #     txhash = str(abs(hash(str(ts) + str(base_amt) + str(quote_amt) + str(fee_amt))))
+            txhash = make_hash(row)
+
+
+            if desc == "":
+                desc = None
+
+
+
+            base_token_id = None
+            quote_token_id = None
+            fee_token_id = None
+            # chain_name = chain_name.lower()
+
+            # see if we can find on-chain contracts
+            if chain_name != "":
+                symbol_data = symbol_times[base_cur]
+                try:
+                    coingecko_id = symbol_data['id']
+                    contract = coingecko.inverse_contract_map[chain_name][coingecko_id]
+                    base_token_id = self.locate_insert_token(chain_name, contract, base_cur, coingecko_id=coingecko_id)
+                    log('Found contract for ', chain_name, coingecko_id, contract, base_token_id, filename='file_uploads.txt')
+                except:
+                    log('Did not find contract for ',chain_name, base_cur, symbol_data, traceback.format_exc(), filename='file_uploads.txt')
+
+                if quote_cur != "":
+                    symbol_data = symbol_times[quote_cur]
+                    try:
+                        coingecko_id = symbol_data['id']
+                        contract = coingecko.inverse_contract_map[chain_name][coingecko_id]
+                        quote_token_id = self.locate_insert_token(chain_name, contract, quote_cur, coingecko_id=coingecko_id)
+                        log('Found contract for ', chain_name, coingecko_id, contract, quote_token_id, filename='file_uploads.txt')
+                    except:
+                        log('Did not find contract for ', chain_name, quote_cur, symbol_data, traceback.format_exc(), filename='file_uploads.txt')
+
+                if fee_cur != "":
+                    if fee_cur == base_cur:
+                        if base_token_id is not None:
+                            fee_token_id = base_token_id
+                    elif fee_cur == quote_cur:
+                        if quote_token_id is not None:
+                            fee_token_id = quote_token_id
+                    else:
+                        symbol_data = symbol_times[fee_cur]
+                        try:
+                            coingecko_id = symbol_data['id']
+                            contract = coingecko.inverse_contract_map[chain_name][coingecko_id]
+                            fee_token_id = self.locate_insert_token(chain_name, contract, fee_cur, coingecko_id=coingecko_id)
+                            log('Found contract for ', chain_name, coingecko_id, contract, fee_token_id, filename='file_uploads.txt')
+                        except:
+                            log('Did not find contract for ', chain_name, fee_cur, symbol_data, traceback.format_exc(), filename='file_uploads.txt')
+
+            if base_token_id is None:
+                symbol_data = symbol_times[base_cur]
+                coingecko_id = None
+                if 'id' in symbol_data:
+                    coingecko_id = symbol_data['id']
+                base_token_id = self.locate_insert_token(source, base_cur, base_cur, coingecko_id=coingecko_id)
+
+            if quote_cur != "" and quote_token_id is None:
+                symbol_data = symbol_times[quote_cur]
+                coingecko_id = None
+                if 'id' in symbol_data:
+                    coingecko_id = symbol_data['id']
+                quote_token_id = self.locate_insert_token(source, quote_cur, quote_cur, coingecko_id=coingecko_id)
+
+            if fee_cur != "" and fee_amt > 0:
+                if fee_cur == base_cur:
+                    if base_token_id is not None:
+                        fee_token_id = base_token_id
+                elif fee_cur == quote_cur:
+                    if quote_token_id is not None:
+                        fee_token_id = quote_token_id
+                else:
+                    symbol_data = symbol_times[fee_cur]
+                    coingecko_id = None
+                    if 'id' in symbol_data:
+                        coingecko_id = symbol_data['id']
+                    fee_token_id = self.locate_insert_token(source, fee_cur, fee_cur, coingecko_id=coingecko_id)
+
+            if chain_name is None or chain_name not in Chain.CONFIG:
+                chain_name = source
+
+            fr_id = None
+            if fr != "" and fr is not None:
+                fr_id = self.locate_insert_address(chain_name, fr)
+
+            to_id = None
+            if to != "" and to is not None:
+                to_id = self.locate_insert_address(chain_name, to)
+
+            # if is_ethereum(fr):
+            #     fr_id = self.locate_insert_address(chain_name, fr)
+            # if chain_name == 'Solana' and is_solana(fr):
+            #     fr_id = self.locate_insert_address(chain_name, fr)
+            #
+            # to_id = None
+            # if is_ethereum(to):
+            #     to_id = self.locate_insert_address(chain_name, to)
+            # if chain_name == 'Solana' and is_solana(to):
+            #     to_id = self.locate_insert_address(chain_name, to)
+
+            received_token_id = None
+            sent_token_id = None
+            received_treatment = None
+            received_vaultid = None
+            sent_treatment = None
+            sent_vaultid = None
+            extra_token_id = None
+
+            # if label in ['buy','sell'] and txhash in updated_trades:
+            vault_id = None
+            if ":" in label:
+                label,vault_id = label.split(":")
+
+            # if label != "fee":
+            function = label
+
+            if base_amt > 0:
+                if label == 'buy':
+                    received_token_id = base_token_id
+                    received_amt = base_amt
+                    received_fr_id = fr_id or counter_address_id
+                    received_to_id = to_id or self_address_id
+
+
+                    if quote_token_id is not None:
+                        sent_token_id = quote_token_id
+                        sent_amt = quote_amt
+                        sent_fr_id = fr_id or self_address_id
+                        sent_to_id = to_id or counter_address_id
+                    function = "trade"
+
+
+                elif label == 'sell':
+                    sent_token_id = base_token_id
+                    sent_amt = base_amt
+                    sent_fr_id = fr_id or self_address_id
+                    sent_to_id = to_id or counter_address_id
+
+
+                    if quote_token_id is not None:
+                        received_token_id = quote_token_id
+                        received_amt = quote_amt
+                        received_fr_id = fr_id or counter_address_id
+                        received_to_id = to_id or self_address_id
+                    function = "trade"
+
+
+                elif label in ['receive','deposit','chain-split','income','interest','mining','airdrop','cashback','royalty','royalties','gift','borrow','staking','fiat-deposit','from-vault']:
+                    received_token_id = base_token_id
+                    received_amt = base_amt
+                    if fr_id is None:
+                        if label == 'from-vault':
+                            received_fr_id = vault_address_id
+                            received_vaultid = vault_id
+                        elif label == 'borrow':
+                            received_fr_id = loan_address_id
+                            received_vaultid = vault_id
+                        else:
+                            received_fr_id = other_address_id
+                    else:
+                        received_fr_id = fr_id
+                    if to_id is None:
+                        received_to_id = self_address_id
+                    else:
+                        received_to_id = to_id
+                    # if label in ['chain-split','income','interest','mining','airdrop','cashback','royalty','royalties','gift','staking']:
+                    #     received_treatment = 'income'
+                    # if label == 'borrow':
+                    #     received_treatment = 'borrow'
+                    #     received_vaultid = source+" "+base_cur
+
+                elif label in ['send','withdrawal','expense','stolen','lost','burn','personal-use','loan-repayment','liquidate','margin-fee','fiat-withdrawal','to-vault']:
+                    sent_token_id = base_token_id
+                    sent_amt = base_amt
+                    if fr_id is None:
+                        sent_fr_id = self_address_id
+                    else:
+                        sent_fr_id = fr_id
+                    if to_id is None:
+                        if label == 'margin-fee':
+                            sent_to_id = margin_fee_address_id
+                        elif label == 'to-vault':
+                            sent_to_id = vault_address_id
+                            sent_vaultid = vault_id
+                        elif label == 'loan-repayment':
+                            sent_to_id = loan_address_id
+                            sent_vaultid = vault_id
+                        else:
+                            sent_to_id = other_address_id
+                    else:
+                        sent_to_id = to_id
+
+                elif label in ['realized-profit','realized-loss']:
+                    received_token_id = sent_token_id = base_token_id
+                    received_amt = sent_amt = base_amt
+                    received_fr_id = sent_to_id = other_address_id
+                    received_to_id = sent_fr_id = self_address_id
+                    if quote_token_id is not None:
+                        extra_treatment = None
+                        extra_token_id = quote_token_id
+                        extra_amt = quote_amt
+                        if label == 'realized-profit':
+                            extra_type = Transfer.UPLOAD_IN
+                            extra_to_id = self_address_id
+                            extra_fr_id = other_address_id
+                        else:
+                            extra_type = Transfer.UPLOAD_OUT
+                            extra_to_id = other_address_id
+                            extra_fr_id = self_address_id
+
+
+                    # if label in ['expense','stolen','lost','burn','personal-use','liquidate','margin-fee']:
+                    #     sent_treatment = 'burn'
+
+                elif label == 'fee':
+                    # sent_treatment = 'fee'
+                    fee_token_id = base_token_id
+                    fee_amt = base_amt
+
+                    # if label == 'loan-repayment':
+                    #     sent_treatment = 'repay'
+                    #     sent_vaultid = source+" "+base_cur
+
+            custom_rate = None
+            if usd_ref_price != "":
+                custom_rate = usd_ref_price
+                log('custom rate for txhash',txhash,usd_ref_price,filename='file_uploads.txt')
+
+            # locate_insert_transaction(self,chain_name,hash,timestamp,nonce,block, interacted, function, custom_note=None,upload_source=None)
+
+            txid, existing = self.locate_insert_transaction(source, txhash, ts, 0, 0, None, None, function, custom_note=desc, upload_id=upload_id)
+            log('locate_insert_transaction', txhash, txid, existing, filename='file_uploads.txt')
+            if txid not in all_new_transfers:
+                all_new_transfers[txid] = {'existing': existing, 'new_transfers': [], 'txhash': txhash, 'functions':set(), 'ts':ts, 'notes':[]}
+            all_new_transfers[txid]['functions'].add(function)
+            if desc is not None:
+                all_new_transfers[txid]['notes'].append(desc)
+
+            new_transfers = []
+            if received_token_id is not None:
+                new_transfers.append({'type':Transfer.UPLOAD_IN,'from_addr_id':received_fr_id,'to_addr_id':received_to_id, 'val':received_amt,
+                                      'token_id':received_token_id, 'upload_id':upload_id, 'custom_treatment':received_treatment, 'custom_vaultid':received_vaultid,
+                                      'custom_rate':custom_rate, 'base_fee':0,'input_len':0})
+            #
+            if sent_token_id is not None:
+                new_transfers.append({'type':Transfer.UPLOAD_OUT,'from_addr_id': sent_fr_id, 'to_addr_id': sent_to_id, 'val': sent_amt,
+                                      'token_id': sent_token_id, 'upload_id':upload_id, 'custom_treatment':sent_treatment, 'custom_vaultid':sent_vaultid,
+                                      'custom_rate':custom_rate, 'base_fee':0,'input_len':0})
+            #
+            if fee_token_id is not None:
+                new_transfers.append({'type':Transfer.UPLOAD_FEE,'from_addr_id': self_address_id, 'to_addr_id': fee_address_id, 'val': fee_amt, 'token_id': fee_token_id, 'upload_id':upload_id,
+                                      'custom_treatment':None, 'custom_vaultid':None,'base_fee':0,'input_len':0, 'synthetic':Transfer.FEE})
+
+            if extra_token_id is not None:
+                new_transfers.append({'type': extra_type, 'from_addr_id': extra_fr_id, 'to_addr_id': extra_to_id, 'val': extra_amt,
+                                      'token_id': extra_token_id, 'upload_id': upload_id, 'custom_treatment': extra_treatment, 'custom_vaultid':None,
+                                      'custom_rate':custom_rate, 'base_fee': 0, 'input_len': 0})
+
+            all_new_transfers[txid]['new_transfers'].extend(new_transfers)
+
+
+
+        pb.set('Adding data to database', 60)
+        #pass 4 -- compare new transfers to existing ones, find approximate matches, insert/update/delete
+        for txid in all_new_transfers:
+            new_transfers = all_new_transfers[txid]['new_transfers']
+            txhash = all_new_transfers[txid]['txhash']
+            notes = all_new_transfers[txid]['notes']
+            ts = all_new_transfers[txid]['ts']
+            functions = list(all_new_transfers[txid]['functions'])
+            #multiple rows for the same ID, and multiple different labels -- agglo labels
+            if len(functions) > 1 or len(notes) > 1:
+                if 'fee' in functions:
+                    functions.remove('fee')
+                elif 'margin-fee' in functions:
+                    functions.remove('margin-fee')
+                function = ','.join(functions)
+                note = None
+                if len(notes) > 0:
+                    note = '<br>'.join(notes)
+                txid, existing = self.locate_insert_transaction(source, txhash, ts, 0, 0, None, None, function, custom_note=note, upload_id=upload_id)
+            log('\n\ntxid, hash',txid,txhash, filename='file_uploads.txt')
+
+            existing_transfers = db.select("SELECT * FROM transaction_transfers WHERE transaction_id="+str(txid)+" AND upload_id IS NOT NULL",return_dictionaries=True)
+            log('existing_transfers',existing_transfers, filename='file_uploads.txt')
+            log('new_transfers', new_transfers, filename='file_uploads.txt')
+
+            transfer_fields = ['type','from_addr_id','to_addr_id','val','token_id']
+            update_fields = ['custom_treatment','custom_vaultid']
+            #finds similar transfers among existing ones. If only different in one thing, update. Otherwise, replace.
+            for nt in new_transfers:
+                best_diff = 100
+                best_match = None
+                for et in existing_transfers:
+                    if 'matched' not in et:
+                        diffcnt = 0
+                        for field in transfer_fields:
+                            if nt[field] != et[field]:
+                                diffcnt += 1
+                        if diffcnt == 0:
+                            log(txhash,"Fully matched existing transfer",et,"to new transfer", nt, filename='file_uploads.txt')
+                            for field in update_fields:
+                                if nt[field] != et[field]:
+                                    log(txhash, "Updating due to new update_field", nt,'new',nt[field],'old',et[field], filename='file_uploads.txt')
+                                    db.update_kw('transaction_transfers', 'id=' + str(et['id']), **nt)
+                                    break
+                            et['matched'] = 'full'
+                            break
+                        if diffcnt < best_diff:
+                            best_diff = diffcnt
+                            best_match = et
+                else:
+                    # if best_diff == 1:
+                    if best_diff <= 1:
+                        best_match['matched'] = 'partial'
+                        log(txhash,"Partially matched existing transfer",best_match,"to new transfer",nt,"updating", filename='file_uploads.txt')
+                        db.update_kw('transaction_transfers','id='+str(best_match['id']),**nt)
+                    else:
+                        log(txhash,"Did not match existing transfers", best_diff, "to new transfer", nt, "inserting", filename='file_uploads.txt')
+                        nt['transaction_id'] = txid
+                        db.insert_kw('transaction_transfers', **nt)
+            for et in existing_transfers:
+                if 'matched' not in et:
+                    log(txhash,"Existing transfer not found in new", et, "deleting", filename='file_uploads.txt')
+                    db.query("DELETE FROM transaction_transfers WHERE id="+str(et['id']))
+
+
+        #delete transactions that have become empty
+        upload_ids = []
+        rows = db.select("SELECT id FROM uploads WHERE source='"+source+"'")
+        for row in rows:
+            upload_ids.append(row[0])
+        txids = set()
+        rows = db.select("SELECT id FROM transactions WHERE upload_id IN "+sql_in(upload_ids))
+        for row in rows:
+            txids.add(row[0])
+        txids_from_transfers = set()
+        rows = db.select("select distinct transaction_id from transaction_transfers")
+        for row in rows:
+            txids_from_transfers.add(row[0])
+        txids_to_delete = txids.difference(txids_from_transfers)
+        log("Deleting empty transactions", list(txids_to_delete), filename='file_uploads.txt')
+        if len(txids_to_delete) > 0:
+            db.query("DELETE FROM transactions WHERE id IN "+sql_in(list(txids_to_delete)))
+
+
+
+        db.update_kw('uploads', "id="+str(upload_id), ended=int(time.time()), status=1)
+        db.commit()
+        coingecko.dump(self)
+
+        new_txids = list(txids.difference(txids_to_delete))
+        log("Loading transactions", list(new_txids),filename='file_uploads.txt')
+        pb.set('Loading transactions from database', 75)
+        chain = self.chain_factory(source,is_upload=True)
+        S = Signatures()
+
+        self.load_addresses()
+        self.load_tx_counts()
+        transactions, _ = self.load_transactions({source: {'chain': chain}}, tx_id_list=new_txids)
+        _, _, input_list = self.get_contracts(transactions)
+        S.init_from_db(input_list)
+        self.wipe_derived_data(transactions)
+
+        pb.set('Classifying transactions', 85)
+        transactions_js = self.transactions_to_log(coingecko, S, transactions, store_derived=True)
+        self.set_info('force_forget_derived', 1)
+
+        return None, transactions_js
+
+
+    def delete_upload(self,source):
+        db = self.db
+        txids = []
+        txrows = db.select("SELECT id FROM transactions WHERE chain='"+source+"'")
+        for row in txrows:
+            txids.append(row[0])
+
+        self.db.query("DELETE FROM transactions WHERE id IN " + sql_in(txids))
+        self.db.query("DELETE FROM transactions_derived WHERE id IN " + sql_in(txids))
+        self.db.query("DELETE FROM transaction_transfers_derived WHERE id IN (SELECT id FROM transaction_transfers WHERE transaction_id IN " + sql_in(txids) + ")")
+        self.db.query("DELETE FROM transaction_transfers WHERE transaction_id IN " + sql_in(txids))
+
+        self.db.query("DELETE FROM addresses WHERE chain='" + source + "'")
+        self.db.query("DELETE FROM tokens WHERE chain='" + source + "'")
+        self.db.query("DELETE FROM user_addresses WHERE chain='"+source+"'")
+        self.db.query("VACUUM")
+        self.set_info('force_forget_derived',1)
+        self.db.commit()
+        return txids
+
+    def delete_address(self,address_to_delete):
+        address_ids_to_delete = set()
+        address_ids_to_keep = set()
+        reproc_needed = False
+        for address in self.all_addresses:
+            for chain,entry in self.all_addresses[address].items():
+                id = entry['id']
+                if address == address_to_delete:
+                    address_ids_to_delete.add(id)
+                    if entry['used']:
+                        reproc_needed = True
+                else:
+                    address_ids_to_keep.add(id)
+        ids_to_keep_query = \
+            "SELECT id, transaction_id FROM transaction_transfers WHERE from_addr_id in "+sql_in(address_ids_to_keep)+" OR to_addr_id in "+sql_in(address_ids_to_keep)
+        log("address ids, keep",address_ids_to_keep,"delete",address_ids_to_delete,filename='delete_address.txt')
+        transfer_ids_to_keep = set()
+        transaction_ids_to_keep = set()
+        rows = self.db.select(ids_to_keep_query)
+        for row in rows:
+            transfer_ids_to_keep.add(row[0])
+            transaction_ids_to_keep.add(row[1])
+        log("entry ids to keep, transfers", len(transfer_ids_to_keep), "transactions",  len(transaction_ids_to_keep), filename='delete_address.txt')
+        self.db.query("DELETE FROM transaction_transfers WHERE id NOT IN "+sql_in(transfer_ids_to_keep))
+        self.db.query("DELETE FROM transactions WHERE id NOT IN " + sql_in(transaction_ids_to_keep))
+        if not reproc_needed:
+            self.db.query("DELETE FROM transaction_transfers_derived WHERE id NOT IN " + sql_in(transfer_ids_to_keep))
+            self.db.query("DELETE FROM transactions_derived WHERE id NOT IN " + sql_in(transaction_ids_to_keep))
+
+        self.db.query("DELETE FROM user_addresses WHERE address='"+address_to_delete+"'")
+        self.db.commit()
+        return reproc_needed
+
+
+    def update_coingecko_id(self,chain_name,contract,new_id, coingecko, pb):
+        pb.set('Updating token', 5)
+        db = self.db
+        if len(new_id) == 0:
+            new_id = None
+        db.update_kw('tokens',"contract='"+contract+"' AND chain='"+chain_name+"'",custom_coingecko_id=new_id)
+        db.commit()
+        rows = db.select("SELECT id FROM tokens WHERE contract='"+contract+"' AND chain='"+chain_name+"'")
+        if len(rows) != 1:
+            return "Error when looking for a token", None
+        token_id = rows[0][0]
+        rows = db.select("SELECT transaction_id FROM transaction_transfers WHERE token_id="+str(token_id))
+        txids = []
+        for row in rows:
+            txids.append(row[0])
+
+        pb.set('Loading transactions from database', 15)
+        chain = self.chain_factory(chain_name, is_upload=chain_name not in Chain.CONFIG)
+        chain_dict = {chain_name: {'chain': chain}}
+        S = Signatures()
+        self.load_addresses()
+        self.load_tx_counts()
+
+        transactions, _ = self.load_transactions(chain_dict,tx_id_list=txids)
+        needed_token_times = self.get_needed_token_times(transactions)
+
+        pb.set('Updating Coingecko data', 50)
+        coingecko.init_from_db_2(chain_dict,needed_token_times,pb)
+        coingecko.dump(self)
+
+
+        _, _, input_list = self.get_contracts(transactions)
+        S.init_from_db(input_list)
+        self.wipe_derived_data(transactions)
+        pb.set('Classifying transactions', 85)
+        transactions_js = self.transactions_to_log(coingecko, S, transactions, store_derived=True)
+        self.set_info('force_forget_derived', 1)
+        return None, transactions_js
+
+    def apply_fiat(self,transaction):
+        ts = transaction.ts
+        rate = self.fiat_rates.lookup_rate(self.fiat,ts)
+        transaction.fiat_rate = rate
+
+    def adjust_custom_rates(self,new_fiat):
+        query = "select t.timestamp, tr.id, tr.custom_rate from transactions as t, transaction_transfers as tr where t.id = tr.transaction_id and custom_rate is not null"
+        rows = self.db.select(query)
+        if len(rows):
+            for row in rows:
+                ts, transfer_id, old_custom_rate = row
+                old_fiat_rate = self.fiat_rates.lookup_rate(self.fiat,ts)
+                new_fiat_rate = self.fiat_rates.lookup_rate(new_fiat, ts)
+                new_custom_rate = old_custom_rate * new_fiat_rate/old_fiat_rate
+                self.db.update_kw('transaction_transfers',"id="+str(transfer_id),custom_rate=new_custom_rate)
+            self.db.commit()

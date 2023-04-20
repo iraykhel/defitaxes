@@ -322,7 +322,7 @@ class SQLite:
 
 
 
-    def select(self,query, return_dictionaries=False, id_col=None):
+    def select(self,query, return_dictionaries=False, id_col=None, raw=False):
         def printer(b):
             print('converting', b)
             if b[0] == 'b' and b[1] in["'","\'"]:
@@ -354,8 +354,11 @@ class SQLite:
                     for row in res:
                         conv_res.append(dict(row))
                 else:
-                    for row in res:
-                        conv_res.append(list(row))
+                    if raw:
+                        conv_res = res
+                    else:
+                        for row in res:
+                            conv_res.append(list(row))
             else:
                 conv_res = {}
                 if return_dictionaries:

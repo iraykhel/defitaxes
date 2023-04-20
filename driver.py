@@ -11,9 +11,13 @@ from code.solana import Solana
 from code.util import log
 from code.sqlite import *
 import pickle
+from datetime import datetime
 from code.signatures import *
 from code.user import User
 from code.tax_calc import Calculator
+from code.fiat_rates import Twelve
+from code.dex_rates import *
+from dotenv import load_dotenv
 
 def update_rates_db():
     C = Coingecko()
@@ -26,27 +30,31 @@ def update_signatures():
     exit(0)
 
 def add_chain_to_addresses(chain_name):
-    address_db = SQLite('addresses')
-    chain_name = chain_name.upper()
+    address_db = SQLite('addresses_prod')
+    chain_name = chain_name.upper().replace(" ","_")
     address_db.create_table(chain_name+"_addresses","address PRIMARY KEY, tag, ancestor_address, entity,inclusion_reason",drop=False)
     address_db.create_table(chain_name + "_labels", "address, label", drop=False)
     address_db.create_index(chain_name+"_addresses_idx_1",chain_name+"_addresses","entity")
     address_db.create_index(chain_name + "_labels_idx_1", chain_name + "_labels", "address,label")
+    address_db.create_index(chain_name + "_adr_idx_1", chain_name + "_addresses", "address")
+    address_db.create_index(chain_name + "_adr_idx_2", chain_name + "_addresses", "ancestor_address")
     address_db.commit()
     address_db.disconnect()
 
 
-def process(address, chain_name, do_import=True):
+def process(address, chain_name, do_import=True, do_calc=True, do_lookups=True):
     chain_names = [chain_name]
     S = Signatures()
+    C = Coingecko(verbose=False)
     user = User(address, do_logging=False)
+    user.wipe_transactions()
     user.set_address_present(address, chain_names[0], value=1, commit=True)
     user.set_address_used(address, chain_names[0], value=1, commit=True)
 
     # chain_names = Chain.list()
     chains = {}
     for chain_name in chain_names:
-        chains[chain_name] = {'chain': user.chain_factory(chain_name), 'current_tokens':{}}
+        chains[chain_name] = {'chain': user.chain_factory(chain_name), 'current_tokens':{}, 'is_upload':False}
 
     user.get_custom_rates()
 
@@ -58,7 +66,6 @@ def process(address, chain_name, do_import=True):
     if do_import:
         user.start_import(chains)
         for chain_name, chain_data in chains.items():
-            user.wipe_transactions(chain_name)
             chain_data['import_addresses'] = [address]
             chain = chain_data['chain']
             transactions = chain.get_transactions(user, address, 0)  # alloc 20
@@ -77,74 +84,110 @@ def process(address, chain_name, do_import=True):
         for chain_name, chain_data in chains.items():
             chain = chain_data['chain']
             print("Storing transactions",chain,len(chain_data['transactions']))
-            user.store_transactions(chain_data['chain'], chain_data['transactions'], address)
+            user.store_transactions(chain_data['chain'], chain_data['transactions'], address,C)
             user.store_current_tokens(chain_data['chain'], chain_data['current_tokens'])
 
     user.load_addresses()
     user.load_tx_counts()
 
+
     transactions, _ = user.load_transactions(chains)
     print("Loaded transactions", len(transactions))
     contract_dict, counterparty_by_chain, input_list = user.get_contracts(transactions)
-    print('contract_dict', contract_dict)
-    print('counterparty_by_chain', counterparty_by_chain)
-    for chain_name, chain_data in chains.items():
-        chain = chain_data['chain']
-        filtered_counterparty_list = chain.filter_progenitors(list(counterparty_by_chain[chain_name]))
-        print(chain_name, 'counterparty_list', filtered_counterparty_list)
-        if len(filtered_counterparty_list) > 0:
-            chain_data['progenitor_db_writes'] = chain.update_progenitors(filtered_counterparty_list, 0)  # alloc 30
+    if do_lookups:
+        print('contract_dict', contract_dict)
+        print('counterparty_by_chain', counterparty_by_chain)
+        for chain_name, chain_data in chains.items():
+            chain = chain_data['chain']
+            filtered_counterparty_list = chain.filter_progenitors(list(counterparty_by_chain[chain_name]))
+            print(chain_name, 'counterparty_list', filtered_counterparty_list)
+            if len(filtered_counterparty_list) > 0:
+                chain_data['progenitor_db_writes'] = chain.update_progenitors(filtered_counterparty_list, 0)  # alloc 30
 
-    all_db_writes = []
-    for chain_name, chain_data in chains.items():
-        if 'progenitor_db_writes' in chain_data:
-            all_db_writes.extend(chain_data['progenitor_db_writes'])
+        all_db_writes = []
+        for chain_name, chain_data in chains.items():
+            if 'progenitor_db_writes' in chain_data:
+                all_db_writes.extend(chain_data['progenitor_db_writes'])
 
-    if len(all_db_writes):
-        insert_cnt = 0
-        for write in all_db_writes:
-            chain_name, values = write
-            entity = values[-2]
-            address_to_add = values[0]
-            rc = address_db.insert_kw(chain_name + '_addresses', values=values, ignore=(entity == 'unknown'))
-            if rc > 0:
-                address_db.insert_kw(chain_name + '_labels', values=[address_to_add, 'auto'], ignore=True)
-                insert_cnt += 1
-        if insert_cnt > 0:
-            address_db.commit()
-            log('New addresses added', insert_cnt, filename='address_lookups.txt')
+        if len(all_db_writes):
+            insert_cnt = 0
+            for write in all_db_writes:
+                chain_name, values = write
+                entity = values[-2]
+                address_to_add = values[0]
+                rc = address_db.insert_kw(chain_name + '_addresses', values=values, ignore=(entity == 'unknown'))
+                if rc > 0:
+                    address_db.insert_kw(chain_name + '_labels', values=[address_to_add, 'auto'], ignore=True)
+                    insert_cnt += 1
+            if insert_cnt > 0:
+                address_db.commit()
+                log('New addresses added', insert_cnt, filename='address_lookups.txt')
 
 
     S.init_from_db(input_list)
     needed_token_times = user.get_needed_token_times(transactions)
-    C = Coingecko(verbose=False)
+
     C.init_from_db_2(chains, needed_token_times)
     if do_import:
         user.finish_import()
-
+    user.load_current_tokens(C)
     address_db.disconnect()
 
     transactions_js = user.transactions_to_log(C, S, transactions, store_derived=True)  # alloc 20
-    #
-    custom_types = user.load_custom_types()
-    calculator = Calculator(address, C)
-    calculator.process_transactions(transactions_js)
-    # #
-    # #
-    # # C.dump(user)
-    calculator.matchup()
-    calculator.cache()
+    print("do_calc",do_calc)
+    if do_calc:
+        custom_types = user.load_custom_types()
+        calculator = Calculator(user,C)
+        calculator.process_transactions(transactions_js,user)
+        calculator.matchup()
+        calculator.cache()
+
+        log("Calculator summary",calculator.CA_short)
 
 if __name__ == "__main__":
-    os.environ['debug'] = '1'
-    address = '0x032b7d93aeed91127baa55ad570d88fd2f15d589'
-    process(address, 'ETH', do_import=True)
+    os.environ['debug'] = '2'
+    os.environ['version'] = '1.42'
+    load_dotenv()
+    address = '0x032b7d93aeed91127baa55ad570d88fd2f15d589'  # hodl
+    process(address, 'Arbitrum', do_import=True, do_lookups=True)
     exit(0)
 
 
+    #dex
+    # dex = DEX()
+    # pair = dex.locate_pair('0x0da67235dd5787d67955420c84ca1cecd4e5bb3b','Avalanche')
+    # # pair = dex.locate_pair('0x136acd46c134e8269052c62a67042d6bdedde3c9', 'Avalanche')
+    # print('pair',pair)
+    # # rates = pair.download_dexscreener_rates()
+    # # pprint.pprint(dict(rates))
+    # # if pair is not None:
+    # #     pair.get_cmc_id()
+    # exit(0)
 
 
-    s = Solana()
+
+    #twelve
+    # url = "https://api.twelvedata.com/forex_pairs"
+    # resp = requests.get(url)
+    # data = resp.json()
+    # for entry in data['data']:
+    #     if entry['currency_group'] == 'Major':
+    #         print(entry)
+    # symbol = "EUR"
+    # url = "https://api.twelvedata.com/time_series?symbol=USD/" + symbol + "&interval=1day&outputsize=5000&timezone=UTC&start_date=2013-01-01&end_date=2019-12-31&order=ASC&apikey=" + ""
+    # js = requests.get(url).json()
+    # data = js['values']
+    # for entry in data:
+    #     date = entry['datetime']
+    #     ts = datetime.datetime.strptime(date,"%Y-%m-%d").replace(tzinfo=datetime.timezone.utc).timestamp()
+    #     print(date,ts)
+    # Twelve.create_table()
+    # T = Twelve('USD')
+    # T.download_all_rates()
+    # exit(0)
+
+
+    # s = Solana()
     # json_template = {"method": "getTransaction", "jsonrpc": "2.0", "params": [None, {"encoding": "jsonParsed", "commitment": "confirmed", "maxSupportedTransactionVersion": 0}]}
     # list = ['3dy39aBE1kXumXz2Vz85tWV9unkarGcRFkK8PNnqTne28htWFaoLbvKvXF8vFKbm2SRbATK3s4hmP1k32B8zHKqn','2oTtPc7fTWQhh7QfGwUCkFqca2i3KciH2zXW3vpzNcLSB4pFk6yRabA7pU994QKXqmy6ACGpHEnpFoD6Tot2nvqz']
     #
@@ -165,27 +208,24 @@ if __name__ == "__main__":
     #     explorer_dump['id'] = uid
     #     multi_explorer_request.append(explorer_dump)
     #
-    # # url = 'https://api.mainnet-beta.solana.com'
-    # # url = 'https://try-rpc.mainnet.solana.blockdaemon.tech'
-    # # url = 'https://rpc.ankr.com/solana'
-    # # url = 'https://nd-859-051-685.p2pify.com'
-    # # url = 'https://nd-859-051-685.p2pify.com/e68cad11abe5e040b7361f19377a539c'
-    url = 'https://floral-prettiest-wish.solana-mainnet.discover.quiknode.pro/61ca0cf9fb7087fa2a5bc0eadf643c5ab4ae61ca/'
-    # print('dump',multi_explorer_request)
-    # # multi_explorer_request = [{"jsonrpc":"2.0","method":"getBalance","params":["95iZStZPdxWoKUfinEtxq8X7SfTn496D1tKDiUuyNeqC"],"id":1}]
-    # multi_explorer_request = [{"jsonrpc": "2.0", "method": "getSignaturesForAddress", "params": ["95iZStZPdxWoKUfinEtxq8X7SfTn496D1tKDiUuyNeqC", {"limit":1}], "id": 1}]
-    multi_explorer_request = {"method": "getAccountInfo", "jsonrpc": "2.0", "params": ["59RrHznHcpnSTgtwp2DwXtP1fS8VUzJWBifW2XoP9xpF", {"encoding": "jsonParsed", "commitment": "confirmed"}]}
-    resp = requests.post(url, timeout=60, json=multi_explorer_request)
-    print(resp.status_code)
-    print(resp.headers)
-    print(resp.content)
-    #
-    exit(0)
+    # url = 'https://floral-prettiest-wish.solana-mainnet.discover.quiknode.pro//'
+    # # print('dump',multi_explorer_request)
+    # # # multi_explorer_request = [{"jsonrpc":"2.0","method":"getBalance","params":["95iZStZPdxWoKUfinEtxq8X7SfTn496D1tKDiUuyNeqC"],"id":1}]
+    # # multi_explorer_request = [{"jsonrpc": "2.0", "method": "getSignaturesForAddress", "params": ["95iZStZPdxWoKUfinEtxq8X7SfTn496D1tKDiUuyNeqC", {"limit":1}], "id": 1}]
+    # multi_explorer_request = {"method": "getAccountInfo", "jsonrpc": "2.0", "params": ["59RrHznHcpnSTgtwp2DwXtP1fS8VUzJWBifW2XoP9xpF", {"encoding": "jsonParsed", "commitment": "confirmed"}]}
+    # resp = requests.post(url, timeout=60, json=multi_explorer_request)
+    # print(resp.status_code)
+    # print(resp.headers)
+    # print(resp.content)
+    # #
+    # exit(0)
 
 
     # covalent
     # session = requests.session()
-    # url ='https://api.covalenthq.com/v1/42161/address/0xd603a49886c9B500f96C0d798aed10068D73bF7C/transactions_v2/?quote-currency=USD&format=JSON&block-signed-at-asc=true&no-logs=true&page-number=0&page-size=1000&key=ckey_53ec69f026ab4220a1e0347f330'
+    # session.auth = ("", "")
+    # session.headers = {'Content-Type': 'application/json'}
+    # url ='https://api.covalenthq.com/v1/250/address/0x7d93f170dfd65d14d58682678b7a0d171f287c93/transactions_v2/?no-logs=true&page-size=1000'
     # t = time.time()
     # resp = session.get(url, timeout=100)
     # data = resp.json()
@@ -201,22 +241,22 @@ if __name__ == "__main__":
 
     # # debank pro
     # session = requests.session()
-    # session.headers.update({'AccessKey':'c774bd64e13f462b33bc45894b5de2bfb9ef1421'})
-    # # url = 'https://pro-openapi.debank.com/v1/user/all_complex_protocol_list?id=0xd603a49886c9B500f96C0d798aed10068D73bF7C'
-    # # url = 'https://pro-openapi.debank.com/v1/token?chain_id=eth&id=0x5954aB967Bc958940b7EB73ee84797Dc8a2AFbb9'
-    # # url = 'https://pro-openapi.debank.com/v1/user/all_token_list?id=0x50b1c57159be31b401adc4ee5ab454b2277b6b5f'
-    # # url = 'https://pro-openapi.debank.com/v1/chain/list'
-    # # url = 'https://pro-openapi.debank.com/v1/user/history_list?id=0xd603a49886c9B500f96C0d798aed10068D73bF7C&chain_id=arb&token_id=arb&page_count=100'
-    # url = 'https://pro-openapi.debank.com/v1/token?id=0x130966628846bfd36ff31a822705796e8cb8c18d&chain_id=avax'
-    # url = 'https://pro-openapi.debank.com/v1/token?id=0x82f0b8b456c1a451378467398982d4834b6829c1&chain_id=ftm'
-    #
+    # session.headers.update({'AccessKey':''})
+    # # # url = 'https://pro-openapi.debank.com/v1/user/all_complex_protocol_list?id=0xd603a49886c9B500f96C0d798aed10068D73bF7C'
+    # # # url = 'https://pro-openapi.debank.com/v1/token?chain_id=eth&id=0x5954aB967Bc958940b7EB73ee84797Dc8a2AFbb9'
+    # # # url = 'https://pro-openapi.debank.com/v1/user/all_token_list?id=0x50b1c57159be31b401adc4ee5ab454b2277b6b5f'
+    # url = 'https://pro-openapi.debank.com/v1/chain/list'
+    # # # url = 'https://pro-openapi.debank.com/v1/user/history_list?id=0xd603a49886c9B500f96C0d798aed10068D73bF7C&chain_id=arb&token_id=arb&page_count=100'
+    # # url = 'https://pro-openapi.debank.com/v1/token?id=0x130966628846bfd36ff31a822705796e8cb8c18d&chain_id=avax'
+    # # url = 'https://pro-openapi.debank.com/v1/token?id=0x82f0b8b456c1a451378467398982d4834b6829c1&chain_id=ftm'
+    # #
     # resp = session.get(url,timeout=10)
     # if resp.status_code !=200:
     #     print(resp.status_code, resp.content)
     # data = resp.json()
     # pprint.pprint(data)
-    # print(len(data['history_list']))
-    exit(0)
+    # # print(len(data['history_list']))
+    # exit(0)
 
 
     # ids = []
@@ -274,10 +314,10 @@ if __name__ == "__main__":
 
     #ankr
     # session = requests.session()
-    # url = 'https://rpc.ankr.com/multichain/c9a8aac3e365ed12c403993c587a032d28d24e638a204100c08a4c5976bcfae2'
-    # # url = 'https://rpc.ankr.com/arbitrum/c9a8aac3e365ed12c403993c587a032d28d24e638a204100c08a4c5976bcfae2'
+    # url = 'https://rpc.ankr.com/multichain/'
+    # # url = 'https://rpc.ankr.com/arbitrum/'
     # session.headers.update({'Content-Type': 'application/json'})
-    # # proxy = 'http://5uu5k:7sdcf2x2@104.128.115.239:5432'
+    # # proxy = ''
     # # session.proxies = {
     # #     'http': proxy,
     # #     'https': proxy
@@ -341,7 +381,7 @@ if __name__ == "__main__":
     # exit(0)
 
     # session = requests.session()
-    # session.headers.update({'X-API-Key': 'iraykhel_sk_611e330c-c5db-42c6-9588-442a252096fa_6wcav1e4g7ip411d'})
+    # session.headers.update({'X-API-Key': })
     # url = 'https://api.simplehash.com/api/v0/nfts/owners?chains=arbitrum&wallet_addresses=0xd603a49886c9B500f96C0d798aed10068D73bF7C&queried_wallet_balances=1'
     # resp = session.get(url)
     # print(resp.status_code)
@@ -351,7 +391,7 @@ if __name__ == "__main__":
     # exit(0)
 
     # session = requests.session()
-    # session.headers.update({'X-API-Key': 'key871f6043a4dbef1f2432df07'})
+    # session.headers.update({'X-API-Key': })
     # url = 'https://api.center.dev/v1/polygon-mainnet/account/0xd603a49886c9B500f96C0d798aed10068D73bF7C/assets-owned?limit=100'
     # resp = session.get(url)
     # print(resp.status_code)
@@ -364,7 +404,7 @@ if __name__ == "__main__":
     # resp = session.post(url,json={'assets':assets})
     # print('assets',resp.status_code, resp.content)
 
-    # session.headers.update({'X-API-KEY': 'b728f651bdf641cb85d620a2244e37ca'})
+    # session.headers.update({'X-API-KEY': })
     # url = 'https://api.opensea.io/api/v1/assets?owner=0xed2ab4948bA6A909a7751DEc4F34f303eB8c7236'
     # resp = session.get(url)
     # print(resp.status_code)
@@ -383,6 +423,8 @@ if __name__ == "__main__":
     # print(resp.content)
     # exit(0)
 
+    # add_chain_to_addresses('Flare')
+    # add_chain_to_addresses('Arbitrum Nova')
     # add_chain_to_addresses('Celo')
     # add_chain_to_addresses('ETC')
     # add_chain_to_addresses('Chiliz')
@@ -422,7 +464,7 @@ if __name__ == "__main__":
     address = '9HdPeqZGJDTtoHoGz4x6vNoPBxhnQLazjmfzYAjAiZVK'
 
 
-    # chain = Chain('ETH', 'https://api.etherscan.io/api', 'ETH', 'ABGDZF9A4GIPCHYZZS4FVUBFXUPXRDZAKQ',
+    # chain = Chain('ETH', 'https://api.etherscan.io/api', 'ETH', '',
     #               outbound_bridges=['0XA0C68C638235EE32657E8F720A23CEC1BFC77C77',  # polygon
     #                                 '0X40EC5B33F54E0E8A33A975908C5BA1C14E5BBBDF',  # polygon
     #                                 '0X59E55EC322F667015D7B6B4B63DC2DE6D4B541C3'],  # bsc
@@ -437,7 +479,7 @@ if __name__ == "__main__":
     # address = '0x3401ea5a8d91c5e3944962c0148b08ac4a77f153' #so many nfts
     # address = '0x641c2fef13fb417db01ef955a54904a6400f8b07' #delso
     # address = '0x6f69f79cea418024b9e0acfd18bd8de26f9bbe39'  #cap
-    # address = '0x032b7d93aeed91127baa55ad570d88fd2f15d589' #hodl
+    address = '0x032b7d93aeed91127baa55ad570d88fd2f15d589' #hodl
     # address = '0xd96fbf82f4445be4833f87006c597e1732aea739'
     # address = '0x6cf9aa65ebad7028536e353393630e2340ca6049' #swissborg 4, a giant bank
     # address = '0x134926384758acb7c95cd8ebbf84d655a19138ec' #ancestor retrieval problem on Avalanche
@@ -462,7 +504,7 @@ if __name__ == "__main__":
     # address = '0x3da48c5e033edc7dbb3bcc1e68293753c1ce9cf6' #fantom
     # address = '0x57a15518b0ab5309d6459dc32a8acd1e89e4f333' #avalanche
     # address = '0x1c7e188674d67d9db00a17696c02462bae80ac7c'
-    # address = '0xffea5a2cfaf1aafbb87a1fe4eed5413da45c30a0'
+    # address = '0xffea5a2cfaf1aafbb87a1fe4eed5413da45c30a0' #55000 transactions
     # address = '0xeb7d0be769cf857afa5626b5f8208528f034b1da' #cronos
     # address = '0x7c2ffb059a5b0a9dad492d57484626bc16cac021' #moonriver
     # address = '0xb3bb91c89d5cffa88926d0ff7c51b705a0702ffc' #cronos, fantom

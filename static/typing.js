@@ -13,13 +13,13 @@ function my_address_rule_options(direction,addr_custom) {
 
     let html = "<input type=hidden value='my_address' class='"+cls+"'>"
     if (dict_len(all_address_info) == 1)
-        html += "<input type=hidden class='"+cls+"_custom'>My address"
+        html += "<input type=hidden class='"+cls+"_custom'>my address"
     else {
         let selected = ''
         html += "<select class='"+cls+"_custom tc_rule_sel'>";
         if (addr_custom == null || addr_custom == '')
             selected = ' selected'
-        html += "<option value=''"+selected+">Any of my addresses</option>";
+        html += "<option value=''"+selected+">any of my addresses</option>";
         for (let address in all_address_info) {
             if (address == addr_custom) selected = ' selected'; else selected = '';
             html += "<option value='"+address+"'"+selected+">"+startend(address)+"</option>";
@@ -85,7 +85,7 @@ function token_rule_options(tok,tok_custom) {
     }
 
     html += "</select>";
-    html += "<input type=text class='specific_val index_rule_tok_custom' placeholder='token name or contract address'"+custom_val+"></div>";
+    html += "<input type=text class='specific_val index_rule_tok_custom' "+custom_val+"><div class='help help_tokenrule'></div></div>";
     return html;
 }
 
@@ -96,7 +96,7 @@ function treatment_rule_options(direction,def,vault_id=null,vault_id_custom=null
 
 
     if (direction == 'out') {
-        opt_list = [['ignore','Ignore'], ['sell','Sell at market price'], ['burn','Dispose for free'],['fee','Transaction cost'],['repay','Repay loan'],['full_repay','Fully repay loan'],['deposit','Deposit to vault']];
+        opt_list = [['ignore','Ignore'], ['sell','Sell at market price'], ['burn','Dispose for free'],['fee','Transaction cost'],['repay','Repay loan'],['full_repay','Fully repay loan'],['deposit','Deposit to vault'],['interest','Loan interest'],['expense','Business expense']];
         vault_id_opt_list = [['address','Destination address'],['type_name','Name of this custom type'],['other','Other']];
     } else {
         opt_list = [['ignore','Ignore'], ['buy','Buy at market price'], ['gift','Acquire for free'], ['income','Income'], ['borrow','Borrow'], ['withdraw','Withdraw from vault'], ['exit','Exit vault']];
@@ -310,7 +310,7 @@ function delete_custom_type_popup(id) {
     $('#content').append(html);
 }
 
-$('body').on('click','#tc_delete_cancel',function() {
+$('body').on('click','#tc_delete_cancel, #tc_confirm_cancel',function() {
     $('#popup').remove();
     $('#overlay').remove();
 });
@@ -497,27 +497,14 @@ $('body').on('click','#custom_types_list .applicable', function() {
    txids = [];
    if (selected_transactions.size == 0)
         return;
-//   transactions = $('div.secondary_selected');
-//   transactions.each(function() {
-//        txid = parseInt($(this).attr('id').substr(2));
-//        txids.push(txid)
-//   });
-//   console.log("apply type",ct_id,"to transactions",selected_transactions);
-   data = 'type_id='+ct_id+'&transactions='+Array.from(selected_transactions).join(',');
-//   let address = window.sessionStorage.getItem('address');
-   $.post("apply_type?address="+primary, data, function(resp) {
-//        console.log(resp);
-        var data = JSON.parse(resp);
-        if (data.hasOwnProperty('error')) {
-            type_clicked.append("<div class='err_mes'>"+data['error']+"</div>");
-        } else {
-            show_ajax_transactions(data)
-            need_recalc();
-        }
-    });
+   if (selected_transactions.size > 20) {
+        ct_name = $(this).html()
+        confirm_apply_popup(ct_id,ct_name)
+        return
+   }
+   apply_type(ct_id)
+
 });
-
-
 
 
 $('body').on('click','.ct_unapply', function() {
@@ -526,26 +513,64 @@ $('body').on('click','.ct_unapply', function() {
    txids = [];
    if (selected_transactions.size == 0)
         return;
-//   transactions = $('div.secondary_selected');
-//   if (transactions.length == 0)
-//        return;
-//   transactions.each(function() {
-//        txid = parseInt($(this).attr('id').substr(2));
-//        txids.push(txid)
-//   });
-//   console.log("unapply type",ct_id,"to transactions",selected_transactions);
-   data = 'type_id='+ct_id+'&transactions='+Array.from(selected_transactions).join(',');
-//   let address = window.sessionStorage.getItem('address');
-   $.post("unapply_type?address="+primary, data, function(resp) {
-//        console.log(resp);
+   if (selected_transactions.size > 20) {
+        ct_name = $(this).html()
+        confirm_apply_popup(ct_id,ct_name,unapply=true)
+        return
+   }
+   apply_type(ct_id,unapply=true)
+
+//   data = 'type_id='+ct_id+'&transactions='+Array.from(selected_transactions).join(',');
+//   $.post("unapply_type?address="+primary, data, function(resp) {
+//        var data = JSON.parse(resp);
+//        if (data.hasOwnProperty('error')) {
+//            type_clicked.append("<div class='err_mes'>"+data['error']+"</div>");
+//        } else {
+//
+//            show_ajax_transactions(data)
+//            need_recalc();
+//        }
+//    });
+
+});
+
+function apply_type(ct_id,unapply=false) {
+    data = 'type_id='+ct_id+'&transactions='+Array.from(selected_transactions).join(',');
+    call = 'apply_type'
+    if (unapply)
+        call = 'unapply_type'
+   $.post(call+"?address="+primary, data, function(resp) {
         var data = JSON.parse(resp);
         if (data.hasOwnProperty('error')) {
             type_clicked.append("<div class='err_mes'>"+data['error']+"</div>");
         } else {
-            selected_id = null;
+            if (unapply)
+                selected_id = null;
             show_ajax_transactions(data)
             need_recalc();
+            $('#popup,#overlay').remove()
         }
     });
+}
 
+
+function confirm_apply_popup(id,name,unapply=false) {
+    html ="<div id='overlay'></div><div id='popup' class='popup'><input type=hidden id=type_id value="+id+">"
+    html += "<input type=hidden id=confirm_unapply value="+(unapply?1:0)+"> ";
+    name = custom_types_js[id]['name'];
+    if (unapply)
+        html += "Are you sure you want to unapply custom type "+name+" from "+selected_transactions.size+" transactions?";
+    else
+        html += "Are you sure you want to apply custom type "+name+" to "+selected_transactions.size+" transactions?";
+    html += "<div class='sim_buttons'>";
+    html += "<div id='tc_confirm_apply'>Yes, do it</div>";
+    html += "<div id='tc_confirm_cancel'>Cancel</div></div>";
+    html += "</div>";
+    $('#content').append(html);
+}
+
+$('body').on('click','#tc_confirm_apply', function() {
+    let unapply = parseInt($('#confirm_unapply').val())
+    let ct_id = $('#type_id').val()
+    apply_type(ct_id,unapply=unapply)
 });

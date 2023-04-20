@@ -144,7 +144,7 @@ def log(*args,**kwargs):
     #     debug = g.debug
     # except:
     #     debug = True
-    debug = os.environ.get('debug') == '1'
+    debug_level = int(os.environ.get('debug'))
     # if debug:
     #     logger = Logger(address='glob')
     # else:
@@ -152,8 +152,10 @@ def log(*args,**kwargs):
     #
     # logger.log(*args,**kwargs)
 
-    if debug:
+    if debug_level > 0:
         logger = Logger(address='glob')
+        if debug_level == 1:
+            kwargs['log_only'] = True
         logger.log(*args, **kwargs)
 
 def log_error(*args,**kwargs):
@@ -170,7 +172,8 @@ def log_error(*args,**kwargs):
 
 def clog(transaction, *args, **kwargs):
     if transaction.hash == transaction.chain.hif:
-        log(args,kwargs)
+        args = [transaction.hash]+list(args)
+        log(*args,kwargs)
 
 # progress_bar = None
 class ProgressBar:
@@ -219,6 +222,12 @@ def persist(address,chain_name=None):
     g.chain_name=chain_name
 
 def sql_in(lst):
+    if isinstance(lst,(int,float,bool)):
+        return "("+str(lst)+")"
+
+    if isinstance(lst,str):
+        return "('"+lst+"')"
+
     if isinstance(lst,set):
         lst = list(lst)
     try:
@@ -235,6 +244,22 @@ def normalize_address(address):
     return address
 
 def is_ethereum(address):
-    if len(address) == 42 and address[0] == '0' and address[1] == 'x':
+    if len(address) == 42 and address[0] == '0' and address[1] in ['x','X']:
         return True
     return False
+
+def is_solana(address):
+    if len(address) >= 32 and len(address) <= 44 and address.isalnum():
+        return True
+    return False
+
+def timestamp_to_date(ts,and_time=False,format=None,utc=False):
+    if format is None:
+        if and_time:
+            format = '%m/%d/%y %H:%M:%S'
+        else:
+            format = '%m/%d/%y'
+    if utc:
+        return datetime.datetime.utcfromtimestamp(ts).strftime(format)
+    else:
+        return datetime.datetime.fromtimestamp(ts).strftime(format)

@@ -4,7 +4,7 @@ from .util import log, log_error
 import time
 
 class Redis:
-    def __init__(self,address,uid):
+    def __init__(self,address):
         # log("init redis",address)
         self.R = redis.StrictRedis(host='localhost',decode_responses=True)
         self.address = address
@@ -127,6 +127,9 @@ class Redis:
 
     def start(self):
         self.set('running','1')
+        self.unset('progress')
+        self.unset('progress_entry')
+        self.unset('last_update')
 
     def finish(self):
         self.unset('running')

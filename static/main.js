@@ -19,6 +19,14 @@ params = {
     'matchups_visible':1
 }
 
+global_options  = {
+    fiat : 'USD',
+    opt_tx_costs : 'sell',
+    opt_vault_gain : 'income',
+    opt_vault_loss : 'loss'
+}
+
+
 //tx_per_page = 100
 //high_impact_amount = 10000;
 //dc_fix_shutup = false;
@@ -92,7 +100,17 @@ setup();
 
 
 
+function round_usd(amount) {
+    return Math.round(amount);
+}
 
+function print_fiat(amount) {
+    let fiat_data = fiat_info[fiat]
+    if ('left_symbol' in fiat_data)
+        return fiat_data['left_symbol']+amount
+    else
+        return amount+fiat_data['right_symbol']
+}
 
 
 function timeConverter(UNIX_timestamp){
@@ -268,6 +286,8 @@ $( document ).ready(function() {
         get_last_update(address);
     });
 
+
+
 });
 
 function isAlphaNumeric(str) {
@@ -313,13 +333,24 @@ function show_last_update(last_transaction_timestamp,update_import_needed) {
 
 
 
-function start_progress_bar(position) {
+function start_progress_bar(mode) {
 //    console.log('pb position',position)
     pb_html = "<div id='progressbar_wrap'><div id='progressbar'></div><div id='pb_phase'>Processing...<div></div>"
-    $('#content').html(pb_html);
-    if (position) {
+
+    if (mode=='middle') {
+        $('#address_form').css({'width':'95%'});
+        $('#main_form').append(pb_html);
+    }
+
+    if (mode=='initial') {
+        $('#content').html(pb_html);
         $('#progressbar_wrap').css({'top':'100px','padding-top':'0px','position':'fixed','left':'50%','transform':'translateX(-50%)'});
     }
+
+    if (mode =='popup') {
+        $('.popup').append(pb_html);
+    }
+
     $( "#progressbar" ).progressbar({
       value: 0
     })
@@ -346,6 +377,7 @@ function start_progress_bar(position) {
 function stop_progress_bar() {
     if (pb_interval != null)
         clearInterval(pb_interval);
+    $('#progressbar_wrap').remove()
 }
 
 function map_lookups(transaction, unmap_instead=false) {
@@ -363,6 +395,10 @@ function map_lookups(transaction, unmap_instead=false) {
             cp_name = progenitor
         func('counterparty_name',cp_name,txid);
     }
+
+    if (transaction['upload_id'] != null && transaction['function'] != null)
+        func('signature',transaction['function'],txid);
+
     func('chain',transaction['chain'],txid)
     rows = transaction['rows'];
     outbound_count = 0;
@@ -437,6 +473,7 @@ function remove_from_mapping(mapping_type,value,txid) {
 }
 
 
+
 function display_counterparty(transaction, editable=false) {
 //    console.log('display_counterparty', transaction)
     html = "<div class='tx_row_2'>"
@@ -471,6 +508,8 @@ function display_counterparty(transaction, editable=false) {
         }
         if (editable)
             html += "<div class='help help_cpop'></div>";
+    } else if (transaction['function'] != null && transaction['upload_id'] != null) {
+        html += "Operation: <span class='signature'>"+transaction['function']+"</span>";
     }
     html += "</div>";
     return html;
@@ -508,8 +547,9 @@ function set_transfer_val(transaction_id, transfer_id, what, val, append=false) 
 
 function display_transfers(transaction, editable=false) {
     let options_in = {'ignore':'Ignore','buy':'Buy','gift':'Acquire for free','income':'Income','borrow':'Borrow','withdraw':'Withdraw from vault','exit':'Exit vault'};
-    let options_out = {'ignore':'Ignore','sell':'Sell','burn':'Dispose for free','fee':'Transaction cost','repay':'Repay loan','full_repay':'Fully repay loan','deposit':'Deposit to vault'};
+    let options_out = {'ignore':'Ignore','sell':'Sell','burn':'Dispose for free','fee':'Transaction cost','repay':'Repay loan','full_repay':'Fully repay loan','deposit':'Deposit to vault','interest':'Loan interest','expense':'Business expense'};
     let chain = transaction['chain'];
+    let fiat_rate = transaction['fiat_rate'];
 
 //    if (editable == false && fast_mode)
 //        return "<div class=transfers style='display:none;'></div>";
@@ -517,7 +557,10 @@ function display_transfers(transaction, editable=false) {
     rows = transaction['rows'];
     rows_table = "<div class='transfers'><table class='rows'>";
     rows_table += "<tr class='transfers_header'><td class=c>From</td><td></td><td class=c>To</td>"
-    rows_table += "<td class=r_amount>Amount</td><td class=r_token>Token</td><td class=r_treatment>Tax treatment</td>";
+    rows_table += "<td class=r_amount>Amount</td><td class=r_token>Token</td>"
+    if (editable)
+        rows_table += "<td class=r_coingecko_id>Coingecko ID</td>"
+    rows_table += "<td class=r_treatment>Tax treatment</td>";
     if (editable) {
         show_vaultid_col = true;
         rows_table += "<td class=r_vaultid>Vault/loan ID<div class='help help_vaultid'></div></td>";
@@ -536,7 +579,7 @@ function display_transfers(transaction, editable=false) {
             }
         }
     }
-    rows_table += "<td class=r_rate>USD rate</td></tr>";
+    rows_table += "<td class=r_rate>"+fiat+" rate</td></tr>";
 
     let txid = transaction['txid'];
 
@@ -553,6 +596,8 @@ function display_transfers(transaction, editable=false) {
         let nft_id = transfer['token_nft_id'];
         let input = transfer['input'];
         let input_len = transfer['input_len'];
+        let coingecko_id = transfer['coingecko_id'];
+        let changed = transfer['changed']
 
         treatment = transfer['treatment'];
 
@@ -562,9 +607,13 @@ function display_transfers(transaction, editable=false) {
         }
 
         rate = transfer['rate'];
-        if (rate != null && rate.toString().includes('custom:')) {
-            cust_rate_class = " custom";
-            rate = parseFloat(rate.substr(7));
+        if (rate != null) {
+            if (rate.toString().includes('custom:')) {
+                cust_rate_class = " custom";
+                rate = parseFloat(rate.substr(7));
+            } else {
+                rate *= fiat_rate
+            }
         }
 
 
@@ -585,6 +634,14 @@ function display_transfers(transaction, editable=false) {
             row_html += "<a class='open_scan' title='Open in scanner' target=_blank href='https://solscan.io/token/"+input+"'></a>";
         row_html += "</td>";
 
+        if (editable) {
+            if (coingecko_id == null)
+                coingecko_id_text = 'not found'
+            else
+                coingecko_id_text = coingecko_id
+            row_html += "<td class='r_coingecko_id'><a class='edit_coingecko_id' chain='"+chain+"' contract='"+token_contract+"' symbol='"+token_name+"' title='Change Coingecko ID'>"+coingecko_id_text+"</a></td>";
+        }
+
 
         row_html+="<td class='r_treatment"+cust_treatment_class+"'>"
         if (editable)
@@ -594,7 +651,7 @@ function display_transfers(transaction, editable=false) {
         let options = {}
         if (displayed_addresses.includes(to) && displayed_addresses.includes(from))
             options = Object.assign({},options_in,options_out)
-        else if (displayed_addresses.includes(to))
+        else if (displayed_addresses.includes(to) || to == 'my account')
             options = options_in
         else
             options = options_out
@@ -700,6 +757,21 @@ function make_transaction_html(transaction) {
     let chain_name = transaction['chain'];
 
 
+    let spam = false
+    if (transaction['type'] == 'spam' || transaction['type'] == 'spam (NFT-related)')
+        spam = true
+
+    let minimized = false
+    if (transaction.hasOwnProperty('minimized') && transaction.minimized != null) {
+        minimized = transaction.minimized
+    } else if (spam) {
+        transaction.minimized = true
+        minimized = true
+    }
+
+
+
+
     let rate_struct = {}
 
     txid = transaction['txid'];
@@ -710,15 +782,20 @@ function make_transaction_html(transaction) {
 //    if (chain_name == 'Arbitrum') {
 //        other_notes.push("Arbiscan is extremely buggy. It misses ALL ETH transfers that you receive from smart contracts! You may need to create manual transactions if you want Arbitrum to be processed correctly.")
 //    }
-
+    let transaction_symbols_out = new Set()
+    let transaction_symbols_in = new Set()
     for (let trid in rows) {
         let transfer = rows[trid];
         let symbol = transfer['symbol'];
+        if (transfer['from_me'] && transfer.to != 'network')
+            transaction_symbols_out.add(symbol)
+        if (transfer['to_me'])
+            transaction_symbols_in.add(symbol)
         let coingecko_id = transfer['coingecko_id'];
         let display_symbol = symbol;
-        if (coingecko_id != null) {
-            display_symbol += " ("+coingecko_id+")"
-        }
+//        if (coingecko_id != null) {
+//            display_symbol += " ("+coingecko_id+")"
+//        }
         let what = transfer['what'];
         let nft_id = transfer['token_nft_id'];
         if (!(chain_name in all_symbols))
@@ -736,7 +813,7 @@ function make_transaction_html(transaction) {
 
         if (synth == 4) {
 //            other_notes.push("Etherscan seems to have missed where you acquired "+display_token(symbol,what,nft_id,copiable=false)+". We added a transfer simulating a mint to this transaction.");
-            other_notes.push("Etherscan seems to have missed a mint in this transaction. We added it based on simplehash data.");
+            other_notes.push("Etherscan seems to have missed a mint in this transaction. We added it based on simplehash data. There's a small chance this is in a wrong transaction.");
             min_color = 3
         }
 
@@ -750,9 +827,10 @@ function make_transaction_html(transaction) {
         if (rate == null) {
             treatment = transfer['treatment'];
             if (treatment != 'ignore' && treatment != null) {
-                if (transaction['type'] != 'transfer in') //airdrops don't have rates
+                if (transaction['type'] != 'transfer in' && !spam) //airdrops don't have rates
                     min_color = 0;
-                rate_note(rate_struct,symbol,0,"Could not find rate of "+symbol+", assuming 0")
+                if (!spam)
+                    rate_note(rate_struct,symbol,0,"Could not find rate of "+symbol+", assuming 0")
             }
         } else if (!rate.toString().includes('custom:')) {
             let good_rate = transfer['rate_found'];
@@ -778,7 +856,7 @@ function make_transaction_html(transaction) {
                     rate_note(rate_struct,symbol,3,"Rate for "+symbol+" is inferred from subsequent transactions (from "+ttime+") and is probably wrong!")
                     min_color = Math.min(min_color,3)
                 } else
-                    rate_note(rate_struct,symbol,10,"Rate for "+symbol+" is inferred from the other currencies in this transaction")
+                    rate_note(rate_struct,symbol,10,"Rate for "+symbol+" is inferred from the other currencies")
             }
             else if (rate_source.includes("before")) {
                 let ts = rate_source.substr(rate_source.indexOf("before") + 13,10);
@@ -812,6 +890,8 @@ function make_transaction_html(transaction) {
     if ('protocol_note' in transaction)
         other_notes.push(transaction['protocol_note'])
 
+
+
     type_class = "";
     type = transaction['type'];
     if (type == null) {
@@ -831,6 +911,8 @@ function make_transaction_html(transaction) {
         transaction_html += " custom_type custom_type_"+ct_id;
     if ('manual' in transaction && transaction['manual'])
         transaction_html += " manual";
+    if (minimized)
+        transaction_html += " t_minimized"
     transaction_html += "'>";
     ts = transaction['ts'];
     ttime = timeConverter(ts);
@@ -838,52 +920,105 @@ function make_transaction_html(transaction) {
 
 
 //                                transaction_html += "<input type=checkbox class='t_sel'>";
-    transaction_html += "<div class='top_section'><div class='tx_row_0'><span class='t_time copiable' title='Copy timestamp to clipboard' full='"+ts+"'>"+ttime+"</span>";
+    transaction_html += "<div class='top_section'>"
+
+    transaction_html += "<div class='tx_row_0'>"
+    if (minimized) {
+        transaction_html += "<span class='t_class' title='"+type.toUpperCase()+"'>"+type.toUpperCase()+"</span>";
+        transaction_html += "<span class='t_time_icon' title='"+ttime+"'><div class=time_icon></div></span>"
+    } else
+        transaction_html += "<span class='t_time copiable' title='Copy timestamp to clipboard' full='"+ts+"'>"+ttime+"</span>";
     transaction_html += "<span class='tx_chain tx_chain_"+chain_name+"'>"+chain_name+"</span>";
     if (transaction['hash'] != null) {
-        let scanner = chain_config[chain_name]['scanner'];
-        transaction_html += "<span class='tx_hash'>TX hash: "+display_hash(transaction['hash'], "hash");
-        transaction_html += "<a class='open_scan' title='Open in scanner' href='https://"+scanner+"/tx/"+transaction['hash']+"' target=_blank></a></span>";
+        if (minimized)
+            transaction_html += "<span class='tx_hash'>"+display_hash(transaction['hash'], "hash");
+        else
+            transaction_html += "<span class='tx_hash'>TX hash: "+display_hash(transaction['hash'], "hash");
+        if (chain_name in chain_config) {
+            let scanner = chain_config[chain_name]['scanner'];
+            transaction_html += "<a class='open_scan' title='Open in scanner' href='https://"+scanner+"/tx/"+transaction['hash']+"' target=_blank></a>";
+        }
+        transaction_html += "</span>"
     }
 
+    if (minimized) {
+        transaction_symbols_out = Array.from(transaction_symbols_out)
+        transaction_symbols_in = Array.from(transaction_symbols_in)
+        if (transaction_symbols_in.length + transaction_symbols_out.length > 0) {
+            transaction_html += "<span class='t_tokens'>"
+            if (transaction_symbols_in.length > 0)
+                transaction_html += "<span class='t_token_list'>"+transaction_symbols_in.toString()+"</span><span class='r_arrow'><div></div></span>"
+            transaction_html += "you"
+            if (transaction_symbols_out.length > 0)
+                transaction_html += "<span class='r_arrow'><div></div></span><span class='t_token_list'>"+transaction_symbols_out.toString()+"</span>"
+            transaction_html += "</span>";
+        }
+    }
 
     if (transaction['num'] == null)
         transaction_html += "<span class='t_idx'></span>";
     else
         transaction_html += "<span class='t_idx'><span class='t_num'>#"+transaction['num']+"</span>/<span class='len'>"+transaction_order.length+"</span></span>";
-    transaction_html += "</div>";
 
-    ct_id = transaction['ct_id'];
-    if (ct_id != null)
-        transaction_html += "<div class='tx_row_1'><input type=hidden name=ct_id class=ct_id value="+ct_id+"><span class='t_class'>Your classification: "+type.toUpperCase()+"</span>";
+    if (minimized)
+        transaction_html += "<span class='t_hide t_hide_hidden' title='Show transaction'></span>";
     else
-        transaction_html += "<div class='tx_row_1'><span class='t_class'>Our classification: "+type.toUpperCase()+"</span>";
-
-    transaction_html += "</div>";
-    transaction_counterparties = transaction['counter_parties'];
-    cp_len = dict_len(transaction_counterparties)
-
-    transaction_html += display_counterparty(transaction,false);
-
-    for (let symbol in rate_struct) {
-        for (let text of rate_struct[symbol]['text'])
-            transaction_html += "<div class='note note_"+rate_struct[symbol]['level']+"'>Note: "+text+"</div>";
-    }
-
-    for (let note of other_notes) {
-        transaction_html += "<div class='note'>Note: "+note+"</div>";
-    }
-
-    if ('custom_note' in transaction)
-        transaction_html += "<div class='custom_note'>"+transaction['custom_note']+"</div><div class='add_note'>Edit note</div>";
-    else
-        transaction_html += "<div class='custom_note'></div><div class='add_note'>Add a note</div>";
-
+        transaction_html += "<span class='t_hide t_hide_shown' title='Minimize transaction'></span>";
     transaction_html += "</div>";
 
-    rows_table = display_transfers(transaction,false);
 
-    transaction_html += rows_table;
+
+
+
+
+    if (!minimized) {
+        let changed = transaction['changed'];
+        let previous_type = null
+        if (changed != null && changed != "NEW" && 'Category' in changed) {
+            old_type = changed['Category'][0]
+            if (old_type == null)
+                previous_type = "unclassified"
+            else
+                previous_type = old_type
+        }
+
+        transaction_html += "<div class='tx_row_1'>"
+
+        ct_id = transaction['ct_id'];
+        if (ct_id != null)
+            transaction_html += "<input type=hidden name=ct_id class=ct_id value="+ct_id+"><span class='t_class'>Your classification: "+type.toUpperCase()+"</span>";
+        else {
+            transaction_html += "<span class='t_class'>Our classification: "+type.toUpperCase()+"</span>";
+            if (previous_type != null)
+                transaction_html += "<span class='t_cat_updated'>[UPDATED FROM "+previous_type.toUpperCase()+"]</span>"
+        }
+
+        transaction_html += "</div>";
+
+        transaction_html += display_counterparty(transaction,false);
+        transaction_html += "<div class='notes'>"
+        for (let symbol in rate_struct) {
+            for (let text of rate_struct[symbol]['text'])
+                transaction_html += "<div class='note note_"+rate_struct[symbol]['level']+"'>Note: "+text+"</div>";
+        }
+
+        for (let note of other_notes) {
+            transaction_html += "<div class='note'>Note: "+note+"</div>";
+        }
+
+        if ('custom_note' in transaction)
+            transaction_html += "<div class='custom_note'>"+transaction['custom_note']+"</div><div class='add_note'>Edit note</div>";
+        else
+            transaction_html += "<div class='custom_note'></div><div class='add_note'>Add a note</div>";
+        transaction_html += "</div>";
+
+        transaction_html += "</div>";
+
+        rows_table = display_transfers(transaction,false);
+
+        transaction_html += rows_table;
+    } else
+        transaction_html += "</div>\n";
 
     transaction_html += "</div>\n";
     return transaction_html
@@ -955,6 +1090,8 @@ $(function() {
                 return
             }
 
+
+
             if (!demo)
                 document.cookie = "address="+primary+";path=/;expires=Fri, 31 Dec 9999 23:59:59 GMT";
             prev_selection = null;
@@ -985,34 +1122,9 @@ $(function() {
                     ac_ar.push($(this).attr('chain')+":"+$(this).attr('address'))
                 });
                 ac_str = ac_ar.join(',')
-//                if ($('#display_address_selector').length > 0) {
-//                    display_addresses = []
-//                    $('#display_address_selector').find('input').each(function() {
-//                        if ($(this).is(':checked'))
-//                            display_addresses.push($(this).attr('id').slice(0,-10))
-//                    });
-//
-//                    $('.address_selector_error').remove();
-//                    if (display_addresses.length == 0) {
-//                        $('#display_address_selector').after("<div class='address_selector_error'>Please select at least one address</div>")
-//                        return;
-//                    } else {
-//                        display_addresses = display_addresses.join(',')
-//                    }
-//                }
-
             }
 
 
-//            let accepted_chains = []
-//            if ($('#chain_selector').length > 0) {
-//                for (let chain_name of all_chain_list) {
-////                            console.log(chain_name,  '#chain_cb_'+chain_name,   $('#chain_cb_'+chain_name).is(':checked'))
-//                    if ($('#chain_cb_'+chain_name).is(':checked'))
-//                        accepted_chains.push(chain_name);
-//                }
-//            }
-//            accepted_chains_str = accepted_chains.join()
 
 
             $('#demo').remove()
@@ -1021,18 +1133,28 @@ $(function() {
             $('#supported_chain_list').remove()
 
             $(document.body).css({'cursor' : 'wait'});
-            need_reproc(false)
-            start_progress_bar($('#address_form').css('position') == 'fixed')
-            make_help_strings();
-            close_top_menu();
 
+            let pb_mode = 'initial'
+            if ($('#address_form').css('position') == 'absolute')
+                pb_mode = 'middle'
+
+            start_progress_bar(pb_mode)
+
+            close_top_menu();
+//            force_forget_derived = 0
+//            if ($('#force_forget_derived').length)
+//                force_forget_derived = $('#force_forget_derived').val()
+            need_reproc(false)
             $.ajax({
                 url:"process?address="+primary+"&uid="+uniqueid+"&import_addresses="+import_addresses+"&ac_str="+ac_str,
 
                 success: function( js ) {
-                    $('#address_form').css({'margin-top':'0px','padding-top':'0px','position':'fixed','left':'0','right':'0',
+                    $('#address_form').css({'margin-top':'0px','padding-top':'0px','position':'fixed','left':'0','right':'0','top':'0','transform':'none',
                         'background-color':'#FAFAFA','border-bottom':'1px solid #DFDFDF','padding':'0px'});
                     $('#main_form').css({'margin':'auto','margin-top':'0px','padding':'5px','border-width':'0px','width':'50%'});
+                    $('.header').remove();
+                    $('.footer').remove();
+
                     try {
                         data = JSON.parse(js);
                     } catch (error) {
@@ -1041,12 +1163,15 @@ $(function() {
                         return;
                     }
 
+
                     if (data.hasOwnProperty('error')) {
                         $('#content').html("<div class='main_error'>"+data['error']+"<div id='error_discord'>Get help on <a id='discord_link' href='https://discord.gg/E7yuUZ3W4X' target='_blank'>Discord</a></div></div>");
                         $(document.body).css({'cursor' : 'default'});
                         stop_progress_bar();
                         return;
                     }
+
+
 
                     console.log("received main data, no errors")
 
@@ -1055,85 +1180,13 @@ $(function() {
 
 //                    address_info = data['address_info'];
                     all_address_info = data['all_address_info'];
+                    fiat_info = data['fiat_info'];
                     chain_config = data['chain_config'];
 
 
 
 //                            let chain_selector_el = $('#chain_selector').css({'margin':'10px','display':'block'}).detach()
-                    let submit_button_el = $('#submit_address').css({'width':'auto','margin-top':'0px','display':'block'}).detach()
-                    $('#demo_link').remove();
-                    let import_new_el = $('#import_new_transactions').prop('checked',false).css({'display':'none'}).detach()
-
-                    let inner_form_html = "";
-
-//                    displayed_addresses = []
-//                    all_addresses = []
-                    displayed_addresses_set = new Set()
-                    for (let address in all_address_info) {
-                        for (let chain in all_address_info[address])
-                            if (all_address_info[address][chain]['used'])
-                                displayed_addresses_set.add(address)
-                    }
-                    displayed_addresses = Array.from(displayed_addresses_set)
-//                    console.log('displayed_addresses',displayed_addresses)
-                    inner_form_html += "<div id='displayed_address_list'>";
-
-                    if (displayed_addresses.length <= 3) {
-                        let idx = 0;
-                        for (let address of displayed_addresses) {
-                            idx += 1;
-
-                            inner_form_html += "<div class='displayed_address_top hash copiable' title='Copy to clipboard' full='"+address+"'>"+address+"</div>";
-                            if (idx < displayed_addresses.length)
-                                inner_form_html +=", "
-                        }
-                    }
-                    else inner_form_html +=displayed_addresses.length + " addresses";
-
-                    inner_form_html += "</div>";
-                    inner_form_html += "<input type=hidden id='your_address' value='"+primary+"'>"
-//                    displayed_chains = data['chain_list'];
-
-//                    if (displayed_chains.length > 1)
-//                        inner_form_html += "on "+displayed_chains.length+" chains"
-//                    else
-//                        inner_form_html += "on "+displayed_chains[0]
-                    inner_form_html += "<div id='top_menu_icon' class='top_menu_icon_closed'></div><div id='top_menu'></div>"
-
-
-                    $('#main_form').html(inner_form_html)
-
-                    let top_menu_html = "";
-
-//                    if (dict_len(address_info) > 1) {
-//                        top_menu_html += "<ul id='display_address_selector'>"
-//                        for (let address in address_info) {
-//                            top_menu_html += "<li><label><input type=checkbox id='"+address+"_displayed'"
-//                            if (address_info[address]['displayed'])
-//                                top_menu_html += " checked "
-//                            top_menu_html += "><div class='display_address_option'>"+address+"</div></label></li>"
-//                        }
-//                        top_menu_html += "</ul>"
-//                    }
-                    top_menu_html += address_matrix_html()
-
-
-                    top_menu_html += "<div id='aa_clicker'>Add another address</div>";
-
-
-//                    top_menu_html += "<div id='chain_selector'>";
-//                    for (let chain_name of all_chain_list) {
-//                        let chain_used = ""
-//                        if (displayed_chains.includes(chain_name))
-//                            chain_used = "checked"
-//                        top_menu_html += "<div class='chain_opt'><label>"+chain_name+"<input type=checkbox "+chain_used+" name=chain_cb_"+chain_name+" id=chain_cb_"+chain_name+" /></label></div>"
-//                    }
-//                    top_menu_html += "</div>";
-
-                    $('#top_menu').html(top_menu_html)
-//                            chain_selector_el.appendTo($('#top_menu'))
-                    import_new_el.appendTo($('#top_menu'))
-                    submit_button_el.appendTo($('#top_menu'))
+                    make_top()
 
 
 
@@ -1152,19 +1205,14 @@ $(function() {
                             if (field in info)
                                 params[field] = parseInt(info[field])
                         }
-//                        let fields = ['tx_per_page','high_impact_amount','dc_fix_shutup','matchups_visible']
-//
-//                        if ('tx_per_page' in info) {
-//                            tx_per_page = parseInt(info['tx_per_page'])
-//                        }
-//
-//                        if ('high_impact_amount' in info) {
-//                            high_impact_amount = parseInt(info['high_impact_amount'])
-//                        }
-//
-//                        if ('dc_fix_shutup' in info) {
-//                            dc_fix_shutup = parseInt(info['dc_fix_shutup'])
-//                        }
+
+                        for (let field in global_options) {
+                            if (field in info)
+                                global_options[field] = info[field]
+                        }
+                        fiat = global_options['fiat']
+
+                        make_help_strings();
 
                         var all_html = "";
                         let non_fatal_errors = data['non_fatal_errors'];
@@ -1240,6 +1288,14 @@ function select_transaction(txel,keep_secondary=false) {
     let txid = parseInt(t_id.substr(2));
 //    console.log("select_transaction",txid);
     let transaction = all_transactions[txid]
+
+    if (transaction.hasOwnProperty('minimized') && transaction.minimized) {
+        transaction.minimized = false
+        transaction_html = make_transaction_html(transaction);
+        txel.replaceWith(transaction_html)
+        txel = $('#t_'+txid)
+        transaction.minimized = true
+    }
 //    console.log('trdisp1',transaction);
     deselect_primary();
     prev_selection = txid;
@@ -1258,7 +1314,7 @@ function select_transaction(txel,keep_secondary=false) {
 //    console.log('trdisp2',transaction);
     txel.find('.tx_row_2').replaceWith(display_counterparty(transaction,true));
     txel.find('.transfers').replaceWith(display_transfers(transaction,true));
-    show(txel.find('.add_note'))
+    showib(txel.find('.add_note'))
     if (el.length)
         show(el);
     else {
@@ -1295,7 +1351,7 @@ function select_transaction(txel,keep_secondary=false) {
             if (transfer['to'] != 'network') {
 //                local_tokens[transfer['symbol']] = transfer['what'];
                 let token_id = transfer['coingecko_id'];
-                if (transfer['coingecko_id'] == null)
+                if (token_id == null)
                     token_id = transfer['what'];
                 local_tokens[transfer['symbol']] = token_id;
             }
@@ -1490,7 +1546,7 @@ function activate_clickables() {
 
     $('body').on('click','.button_cancel_note',function() {
         let txel = $(this).closest('.transaction');
-        show(txel.find('.add_note'));
+        showib(txel.find('.add_note'));
         $('#add_note_hold').remove()
         show(txel.find('.custom_note'))
     });
@@ -1511,7 +1567,7 @@ function activate_clickables() {
                     $(txel).find('.custom_note').html('');
 
                     clicker_el.html('Add a note')
-                    show(clicker_el);
+                    showib(clicker_el);
 
                     $('#add_note_hold').remove()
                     show(txel.find('.custom_note'))
@@ -1543,7 +1599,7 @@ function activate_clickables() {
                     delete all_transactions[txid]['custom_note']
                     $(clicker_el).html('Add note')
                 }
-                show(clicker_el);
+                showib(clicker_el);
                 $('#add_note_hold').remove()
                 show(txel.find('.custom_note'))
             }
@@ -1778,21 +1834,32 @@ function find_similar_transactions(txid) {
 function deselect_primary(and_secondary=false) {
     if (prev_selection != null) {
         let jqid = '#t_'+prev_selection;
+        let transaction = all_transactions[prev_selection];
         let txel = $(jqid)
-        txel.removeClass('primary_selected');
-        if (and_secondary) {
-            txel.removeClass('secondary_selected');
-            selected_transactions.delete(prev_selection)
-        }
-        txel.find('.tx_row_2').replaceWith(display_counterparty(all_transactions[prev_selection]));
-        txel.find('.transfers').replaceWith(display_transfers(all_transactions[prev_selection]));
-//        $(jqid).find('.button_cancel_note').click()
+        if (transaction.hasOwnProperty('minimized') && transaction.minimized) {
+            transaction_html = make_transaction_html(transaction);
+            txel.replaceWith(transaction_html)
+            txel = $(jqid)
+            if (!and_secondary)
+                txel.addClass('secondary_selected');
+            else
+                selected_transactions.delete(prev_selection)
+        } else {
+            txel.removeClass('primary_selected');
+            if (and_secondary) {
+                txel.removeClass('secondary_selected');
+                selected_transactions.delete(prev_selection)
+            }
+            txel.find('.tx_row_2').replaceWith(display_counterparty(all_transactions[prev_selection]));
+            txel.find('.transfers').replaceWith(display_transfers(all_transactions[prev_selection]));
+    //        $(jqid).find('.button_cancel_note').click()
 
-        $('#add_note_hold').remove()
-        show(txel.find('.custom_note'))
-        hide(txel.find('.add_note'))
-        hide(txel.find('.select_similar'));
-        hide(txel.find('.save_changes'));
+            $('#add_note_hold').remove()
+            show(txel.find('.custom_note'))
+            hide(txel.find('.add_note'))
+            hide(txel.find('.select_similar'));
+            hide(txel.find('.save_changes'));
+        }
         prev_selection = null;
     }
 }
@@ -1809,7 +1876,7 @@ function selection_operations(builtin_types,custom_types) {
     html += "<div class='scroll_row'>Bottom/Top <a id='scr_bottom' class='next_ic'></a><a id='scr_top' class='prev_ic'></a></div>";
     html += "<div class='scroll_row'>Selected <a id='scr_selected_next' class='next_ic'></a><a id='scr_selected_prev' class='prev_ic'></a></div>";
 //    html += "<div class='scroll_row'>Unknown <a id='scr_unknown_next'>Next</a><a id='scr_unknown_prev'>Previous</a></div>";
-    html += "<div class='scroll_row'>High impact (<a id='hi_conf'>$"+high_impact_amount+"+</a>) <a id='scr_hi_next' class='next_ic'></a><a id='scr_hi_prev' class='prev_ic'></a></div>";
+    html += "<div class='scroll_row'>High impact (<a id='hi_conf'>"+print_fiat(high_impact_amount)+"+</a>) <a id='scr_hi_next' class='next_ic'></a><a id='scr_hi_prev' class='prev_ic'></a></div>";
     html += "<div class='scroll_row'>Red <a id='scr_red_next' class='next_ic'></a><a id='scr_red_prev' class='prev_ic'></a></div>";
     html += "<div class='scroll_row'>Red or orange <a id='scr_orange_next' class='next_ic'></a><a id='scr_orange_prev' class='prev_ic'></a></div>";
     html += "<div class='scroll_row'>Red, orange, or yellow <a id='scr_yellow_next' class='next_ic'></a><a id='scr_yellow_prev' class='prev_ic'></a></div>";
@@ -2097,9 +2164,11 @@ function br_block() {
 }
 
 
-function need_reproc(display=true) {
+function need_reproc(display=true, level=1, text=null) {
     if (show && $('#need_reproc').length == 0) {
-        $('#main_form').append("<div id='need_reproc'>Reprocessing recommended</div>");
+        if (text == null)
+            text = "Reprocessing recommended"
+        $('#main_form').append("<div id='need_reproc' class='reproc_level_"+level+"'>"+text+"</div>");
         $('#main_form').addClass('main_form_outdated');
         show($('#submit_address'));
     }
@@ -2109,6 +2178,8 @@ function need_reproc(display=true) {
         $('#main_form').removeClass('main_form_outdated');
         hide($('#submit_address'))
     }
+
+//    $('#force_forget_derived').val(+display)
 }
 
 function isInViewport(element) {
@@ -2327,7 +2398,7 @@ $('body').on('click','#aa_clicker',function() {
     $('#content').append(html);
 });
 
-$('body').on('click','#aa_cancel, #hi_cancel, #dc_fix_cancel',function() {
+$('body').on('click','#aa_cancel, #hi_cancel, #dc_fix_cancel, #dl_cancel, #up_cancel, #cg_cancel, #opt_cancel',function() {
     $('.popup').remove();
     $('#overlay').remove();
 });
@@ -2361,7 +2432,7 @@ $('body').on('click','#aa_process',function() {
 
 $('body').on('click','#hi_conf',function() {
     let html ="<div id='overlay'></div><div id='hi_popup' class='popup'>";
-    html += "<div class='hi_popup_explanation'>Transaction is considered high impact if it results in at least this much USD gain or loss:</div>";
+    html += "<div class='hi_popup_explanation'>Transaction is considered high impact if it results in at least this much "+fiat+" gain or loss:</div>";
     html += "<input type=text value='"+params['high_impact_amount']+"' id='hi_input'>";
     html += "<div id='hi_update'>Update</div><div id='hi_cancel'>Cancel</div></div>";
     $('#content').append(html);
@@ -2393,6 +2464,8 @@ function address_matrix_html() {
     let addresses = new Set()
     used_chains = new Set()
     for (let address in all_address_info) {
+        if (address == 'my account')
+            continue
         for (let chain in all_address_info[address]) {
             let addr_dict = all_address_info[address][chain]
             if (addr_dict['present']) {
@@ -2412,12 +2485,21 @@ function address_matrix_html() {
         if (dict_len(all_address_info) > 1) {
             html += "<ul id='display_address_selector'>"
             for (let address in all_address_info) {
-                let used = all_address_info[address][chain]['used']
-                let tx_count = all_address_info[address][chain]['tx_count']
+                if (address == 'my account')
+                    continue
+                let addr_dict = all_address_info[address][chain]
+                let used = addr_dict['used']
+                let tx_count = 0
+                if ('tx_count' in addr_dict)
+                    tx_count = addr_dict['tx_count']
                 html += "<li><label><input type=checkbox class=ac_cb id="+address+"_displayed address="+address+" chain='"+chain+"'"
                 if (used)
                     html += " checked "
-                html += "><div class='display_address_option'>"+address+"</div></label> ("+tx_count+" transactions)</li>"
+                html += "><div class='display_address_option'>"+address+"</div></label> ("+tx_count+" transactions)"
+                if (address.toLowerCase() != primary.toLowerCase()) {
+                    html += "<div class='delete_address' addr='"+address+"' title='Delete this address'></div>"
+                }
+                html += "</li>"
             }
             html += "</ul>"
         }
@@ -2427,7 +2509,13 @@ function address_matrix_html() {
         if (addresses.size > 1)
             html += "<tr row_addr=all class='all_addresses_row'><td class='addresses_column'>All addresses</td><td class='all_chains_column'><input type=checkbox id='toggle_all'></td></tr>"
         for (let address in all_address_info) {
-            html += "<tr row_addr="+address+"><td class='addresses_column'>"+display_hash(address, name='address', copiable=true, replace_users_address=false)+"</td>"
+            if (address == 'my account')
+                continue
+            html += "<tr row_addr="+address+"><td class='addresses_column'>"+display_hash(address, name='address', copiable=true, replace_users_address=false)
+            if (address.toLowerCase() != primary.toLowerCase()) {
+                html += "<div class='delete_address' addr='"+address+"' title='Delete this address'></div>"
+            }
+            html += "</td>"
             html += "<td class='all_chains_column'><input type=checkbox class='toggle_all_chains'></td></tr>"
         }
         html += "</table>"
@@ -2453,6 +2541,8 @@ function address_matrix_html() {
         }
 
         for (let address in all_address_info) {
+            if (address == 'my account')
+                continue
             html += "<tr row_addr="+address+">"
             for (let chain of ordered_chains) {
                 if (chain in all_address_info[address]) {
@@ -2478,6 +2568,26 @@ function address_matrix_html() {
         }
         html += "</table>"
     }
+
+    if ('my account' in all_address_info) {
+        html += "<ul id='upload_list'><div id='upload_list_header'>Your uploads:</div>"
+        for (let upload in all_address_info['my account']) {
+            let addr_dict = all_address_info['my account'][upload]
+            let used = addr_dict['used']
+            let tx_count = 0
+            if ('tx_count' in addr_dict)
+                tx_count = addr_dict['tx_count']
+            html += "<li><label><input type=checkbox class=ac_cb id="+upload+"_displayed address='my account' chain='"+upload+"'"
+            if (used)
+                html += " checked "
+            html += "><div class='upload_option'>"+upload+"</div> ("+tx_count+" transactions)</label>"
+            html += "<div title='Add more transactions from the same source' class='up_icon up_add' chain='"+upload+"'></div>"
+            html += "<div title='Delete this upload and all its transactions' class='up_icon up_delete' chain='"+upload+"'></div>"
+            html += "</li>"
+        }
+        html += "</ul>"
+    }
+
     html += "</div>"
     return html
 }
@@ -2504,4 +2614,297 @@ $('body').on('change','#toggle_all',function() {
         checked = true
     $('#address_matrix_right').find('input').prop('checked',checked)
     $('.toggle_all_chains').prop('checked',checked)
+});
+
+
+
+
+
+
+
+function make_top() {
+    let submit_button_el = $('#submit_address').css({'width':'auto','margin-top':'20px','display':'block'}).detach()
+    $('#demo_link').remove();
+    let import_new_el = $('#import_new_transactions').prop('checked',false).css({'display':'none'}).detach()
+
+    let inner_form_html = "";
+
+    displayed_addresses_set = new Set()
+    for (let address in all_address_info) {
+        if (address == 'my account') {
+            for (let upload in all_address_info[address])
+                if (all_address_info[address][upload]['used'])
+                    displayed_addresses_set.add(upload)
+        } else {
+            for (let chain in all_address_info[address])
+                if (all_address_info[address][chain]['used'])
+                    displayed_addresses_set.add(address)
+        }
+    }
+    displayed_addresses = Array.from(displayed_addresses_set)
+//                    console.log('displayed_addresses',displayed_addresses)
+    inner_form_html += "<div id='displayed_address_list'>";
+
+    if (displayed_addresses.length <= 3) {
+        let idx = 0;
+        for (let address of displayed_addresses) {
+            idx += 1;
+
+            inner_form_html += "<div class='displayed_address_top hash copiable' title='Copy to clipboard' full='"+address+"'>"+address+"</div>";
+            if (idx < displayed_addresses.length)
+                inner_form_html +=", "
+        }
+    }
+    else inner_form_html +=displayed_addresses.length + " sources";
+
+    inner_form_html += "</div>";
+    inner_form_html += "<input type=hidden id='your_address' value='"+primary+"'>"
+    inner_form_html += "<div id='top_menu_icon' class='top_menu_icon_closed'></div><div id='top_menu'></div>"
+
+
+    $('#main_form').html(inner_form_html)
+
+    let top_menu_html = "";
+
+    top_menu_html += address_matrix_html()
+
+
+    top_menu_html += "<div id='aa_clicker'>Add another address</div>";
+    top_menu_html += "<div id='up_clicker'>Upload transactions from a CSV</div>";
+
+//    top_menu_html += "<input type=hidden id=force_forget_derived value=0 />"
+    $('#top_menu').html(top_menu_html)
+    import_new_el.appendTo($('#top_menu'))
+    submit_button_el.appendTo($('#top_menu'))
+}
+
+function add_transactions(transactions) {
+    new_txids = []
+    for (transaction of transactions) {
+        let txid = parseInt(transaction['txid']);
+        console.log("Adding tx",txid)
+        new_txids.push(txid)
+        if (txid in all_transactions) {
+            delete_transaction(txid);
+        }
+
+        {
+            let ts = transaction['ts'];
+            let idx = 0
+            insert_idx = -1
+            for (idx in transaction_order) {
+                txid_loop = transaction_order[idx];
+                let o_tx = all_transactions[txid_loop];
+                let ts_loop = o_tx['ts'];
+                if (ts_loop > ts) {
+                    if (insert_idx == -1) {
+                        insert_idx = parseInt(idx)
+//                                console.log("splicing at idx",idx)
+                    }
+                    o_tx['num'] = o_tx['num'] + 1;
+
+                }
+            }
+
+
+            all_transactions[txid] = transaction;
+            if (insert_idx == -1) {
+                transaction_order.push(txid)
+                transaction['num'] = transaction_order.length;
+            } else {
+                transaction['num'] = insert_idx+1;
+                transaction_order.splice(insert_idx,0,txid)
+            }
+
+            map_lookups(transaction);
+
+            all_transactions[txid] = transaction;
+
+        }
+    }
+    return new_txids
+}
+
+function delete_transaction(txid) {
+    console.log("Deleting tx "+txid)
+    let idx = transaction_order.indexOf(parseInt(txid))
+    for (let l_idx = idx+1; l_idx < transaction_order.length; l_idx++) {
+        let txid_loop = transaction_order[l_idx];
+        let o_tx = all_transactions[txid_loop];
+        o_tx['num'] = o_tx['num'] - 1;
+    }
+
+    map_lookups(all_transactions[txid], unmap_instead=true)
+
+    delete all_transactions[txid];
+    transaction_order.splice(idx,1)
+}
+
+$('body').on('click','a.edit_coingecko_id',function() {
+    let current_id = $(this).text()
+    let chain = $(this).attr('chain')
+    let contract = $(this).attr('contract')
+    let symbol = $(this).attr('symbol')
+    let l1 = lookup_info["token_address_mapping"][contract]
+    let l2 = lookup_info["chain_mapping"][chain]
+    let matches = set_intersect(l1,l2);
+
+
+    let html ="<div id='overlay'></div><div id='cg_popup' class='popup'>";
+    html += "<div class=header>Change Coingecko ID for "+symbol+"</div>"
+    if (current_id == fiat) {
+        html += "<div id='cg_popup_explanation'>Sorry, you can't change coingecko ID for "+fiat+". It will literally make the server explode.</div>"
+        html += "<div class='sim_buttons'><div id='cg_cancel'>Cancel</div></div>"
+    } else {
+
+        html += "<div id='cg_popup_explanation'><p>This will change coingecko ID everywhere you transferred "+contract+" on "+chain+", in "+matches.size+" transactions. "
+        html += "It will not affect other chains/uploads, or other tokens with the same symbol. It may cause the software to download additional rate data from coingecko, "
+        html += "and it may affect your taxes. All tokens with the same Coingecko ID are treated as the same asset when calculating your taxes.</p>"
+        html += "<p>You can find Coingecko ID in the browser address bar on Coingecko, or here:<br>"
+        html += "<img src='static/coingecko_id.png'></p>"
+        html += "</div>"
+
+        if (current_id == 'not found')
+            current_id = ''
+
+        html += "New Coingecko ID (leave empty to return to default): <input type=text id='coingecko_id_input' value='"+current_id+"' chain='"+chain+"' current_coingecko_id='"+current_id+"' contract='"+contract+"' />"
+
+        html += "<div class='sim_buttons'><div id='cg_process'>Change Coingecko ID</div>";
+        html += "<div id='cg_cancel'>Cancel</div></div></div>";
+    }
+    $('#content').append(html);
+});
+
+$('body').on('click','#cg_process',function() {
+    el = $('#coingecko_id_input')
+    new_id = el.val()
+    current_id = el.attr('current_coingecko_id')
+    if (new_id == current_id) {
+        $('.popup').remove();
+        $('#overlay').remove();
+        return
+    }
+    if (new_id == fiat) {
+        $('#cg_popup').find('.sim_buttons').css({'display':''}).after("<div class='cg_error'>You can't set coingecko ID to "+fiat+"</div>");
+        return
+    }
+
+    $('#cg_popup').find('.sim_buttons').css({'display':'none'})
+    start_progress_bar('popup')
+    $('.cg_error').remove()
+
+    chain = el.attr('chain')
+    contract = el.attr('contract')
+    $.get("update_coingecko_id?chain="+chain+"&address="+primary+"&contract="+contract+"&new_id="+new_id, function(js) {
+        stop_progress_bar();
+        var data = JSON.parse(js);
+        if (data.hasOwnProperty('error')) {
+            $('#cg_popup').find('.sim_buttons').css({'display':''}).after("<div class='cg_error'>"+data['error']+"</div>");
+        } else {
+            new_txids = add_transactions(data['transactions'])
+            make_pagination();
+            need_recalc();
+            $('.popup').remove();
+            $('#overlay').remove();
+        }
+    });
+})
+
+$('body').on('click','.t_hide',function(event) {
+    txel = $(this).closest('.transaction')
+    t_id = txel.attr('id');
+    let txid = parseInt(t_id.substr(2));
+    let transaction = all_transactions[txid]
+    if ($(this).hasClass('t_hide_shown'))
+        transaction.minimized = true
+    else
+        transaction.minimized = false
+    transaction_html = make_transaction_html(transaction);
+
+    secondary_selected = primary_selected = false
+    if (txel.hasClass('secondary_selected'))
+        secondary_selected = true
+
+    if (txel.hasClass('primary_selected'))
+        primary_selected = true
+    console.log(secondary_selected, primary_selected)
+
+    txel.replaceWith(transaction_html)
+
+    txel = $('#t_'+txid);
+    if (transaction.minimized) {
+        if (secondary_selected)
+            txel.addClass('secondary_selected')
+        if (primary_selected)
+            txel.addClass('primary_selected')
+    } else {
+        if (primary_selected)
+            select_transaction(txel,keep_secondary=true)
+        if (secondary_selected)
+            txel.addClass('secondary_selected')
+    }
+    data = 'minimized='+(transaction.minimized?1:0)+'&transactions='+txid;
+
+    $.post("minmax_transactions?address="+primary, data, function(resp) {
+        var data = JSON.parse(resp);
+        if (data.hasOwnProperty('error')) {
+            txel.append("<div class='err_mes'>"+data['error']+"</div>");
+        }
+    });
+    event.stopPropagation()
+});
+
+
+$('body').on('click','.delete_address',function() {
+    let address = $(this).attr('addr')
+    html ="<div id='overlay'></div><div id='delete_address_popup' class='popup'><form id='delete_address_form'><input type=hidden name=address_to_delete value='"+address+"'> ";
+    html += "Really delete "+address+"? This will also delete all transfers associated with it.";
+    html += "<div class='sim_buttons'>";
+    html += "<div id='delete_address_confirm'>Delete address</div>";
+    html += "<div id='delete_address_cancel'>Cancel</div></div>";
+    html += "</form></div>";
+    $('#content').append(html);
+});
+
+$('body').on('click','#delete_address_cancel',function() {
+    $('#delete_address_popup').remove();
+    $('#overlay').remove();
+});
+
+$('body').on('click','#delete_address_confirm',function() {
+    data = $('#delete_address_form').serialize();
+    $.post("delete_address?address="+primary, data, function(resp) {
+//        console.log(resp);
+        var data = JSON.parse(resp);
+        if (data.hasOwnProperty('error')) {
+            $("#delete_address_form").after("<div class='err_mes'>"+data['error']+"</div>");
+        } else {
+            all_address_info = data['all_address_info'];
+            make_top();
+            if (data['reproc_needed']) {
+                $('#main_form').submit();
+                return
+            }
+
+            $('#delete_address_popup').remove();
+            $('#overlay').remove();
+        }
+    });
+});
+
+$('body').on('click','#donations_main',function() {
+    html ="<div id='overlay'></div><div id='donations_popup' class='popup'>";
+    html += "<p>Thank you for clicking here. My name is Ilya Raykhel, and development of this website is my full-time job. Additionally, I spend about $7K/year on hosting costs and various paid APIs. ";
+    html += "If you found my website useful and would like to contribute to its development, I would appreciate a donation to 0xbf01E689Dd71206A47186f204afBf3b8e7bB8114.</p> "
+    html += "<p>If there's ever a token or an NFT project associated with this website in the future (no promises), all donators will be generously rewarded.</p>"
+    html += "<div class='sim_buttons'>";
+    html += "<div id='donations_popup_cancel'>Close popup</div></div>";
+    html += "</div>";
+    $('#content').append(html);
+});
+
+
+$('body').on('click','#donations_popup_cancel',function() {
+    $('#donations_popup').remove();
+    $('#overlay').remove();
 });

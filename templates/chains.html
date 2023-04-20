@@ -28,9 +28,12 @@
     </head>
 
     <body>
+        <div class='header'>
+            <h1><a id='home' href='/'>DeFi Taxes</a></h1>
+            <h4>Turn your blockchain transactions into tax forms in a reasonable amount of time.</h4>
+        </div>
         <div id='chain_support_content'>
-            <h2>Defitaxes Blockchain Support</h2>
-            <h4>(and a handy list of a bunch of scanners, ya welcome)</h4>
+            <h2>Blockchain Support and Data Sources</h2>
             <table id='chain_support'>
                 <tr><th>Chain</th><th>Level of support</th><th>Data source</th><th>Counterparty names availability</th><th>ERC1155 support</th><th>Balance check for tokens</th><th>Balance check for NFTs</th></tr>
                 {% for chain in chains %}
@@ -48,14 +51,26 @@
             </table>
             <h2>Additional Data Sources</h2>
             <table id='additional_data'>
-                <tr><td>Coingecko</td><td>Exchange rates</td></tr>
+                <tr><td>Coingecko</td><td>Crypto exchange rates</td></tr>
                 <tr><td>Debank</td><td>Current token balances, some protocol names</td></tr>
                 <tr><td>Simplehash</td><td>Currently held NFTs</td></tr>
                 <tr><td>CovalentHQ</td><td>Fees on Arbitrum, errors on Fantom, some counterparty info on Ethereum</td></tr>
                 <tr><td>4byte.directory</td><td>Decoded function signatures</td></tr>
                 <tr><td>Solscan, Solana.FM</td><td>Solana program names</td></tr>
+                <tr><td>twelvedata</td><td>FIAT currency exchange rates</td></tr>
             </table>
         </div>
     </body>
+
+    <div class='footer'>
+        <div class='social'>
+            <a href='services.html'>We can do your taxes</a>
+            <a id='discord_link' href='https://discord.gg/E7yuUZ3W4X' target='_blank'>Discord</a>
+            <a id='twitter_link' href='https://twitter.com/defitaxes' target='_blank'>Twitter</a>
+            <a id='email' href='mailto: iraykhel@gmail.com' target='_blank'>Email</a>
+            <a id='github' href='https://github.com/iraykhel/taxes' target='_blank'>Github</a>
+        </div>
+        <div id='made_by'>Made by <a href='https://www.linkedin.com/in/ilya-raykhel/' target='_blank'>Ilya Raykhel</a></div>
+    </div>
 
 </html>

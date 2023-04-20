@@ -14,7 +14,7 @@ $.validator.addMethod('useraddresspresent', function(val,el) {
             }
         });
         return !fail
-    },'Each transfer be from or to your address')
+    },'Each transfer needs to be from or to your address')
 
 $.validator.addMethod('mmddyyyy', function(value, element) {
     let re = new RegExp("^((0?[1-9]|1[012])[- /.](0?[1-9]|[12][0-9]|3[01])[- /.](19|20)?[0-9]{2})*$")
@@ -66,53 +66,9 @@ function post_manual_transactions(chain,data,followup=null) {
 
             var data = JSON.parse(resp);
             if (data.hasOwnProperty('error')) {
-                $(".sim_buttons").before("<div class='err_mes'>"+rv['error']+"</div>");
+                $(".sim_buttons").before("<div class='err_mes'>"+data['error']+"</div>");
             } else {
-                var new_txids = []
-                for (transaction of data['transactions']) {
-    //            let transaction = data['transactions'];
-
-
-                    let txid = parseInt(transaction['txid']);
-                    new_txids.push(txid)
-                    if (txid in all_transactions) {
-                        delete_transaction(txid);
-                    }
-
-                    {
-                        let ts = transaction['ts'];
-                        let idx = 0
-                        insert_idx = -1
-                        for (idx in transaction_order) {
-                            txid_loop = transaction_order[idx];
-                            let o_tx = all_transactions[txid_loop];
-                            let ts_loop = o_tx['ts'];
-                            if (ts_loop > ts) {
-                                if (insert_idx == -1) {
-                                    insert_idx = parseInt(idx)
-        //                                console.log("splicing at idx",idx)
-                                }
-                                o_tx['num'] = o_tx['num'] + 1;
-
-                            }
-                        }
-
-
-                        all_transactions[txid] = transaction;
-                        if (insert_idx == -1) {
-                            transaction_order.push(txid)
-                            transaction['num'] = transaction_order.length;
-                        } else {
-                            transaction['num'] = insert_idx+1;
-                            transaction_order.splice(insert_idx,0,txid)
-                        }
-
-                        map_lookups(transaction);
-
-                        all_transactions[txid] = transaction;
-
-                    }
-                }
+                new_txids = add_transactions(data['transactions'])
 
 
                 $('#mt').remove();
@@ -203,22 +159,7 @@ $('body').on('click','.mt_delete_popup',function() {
     delete_manual_transaction_popup(txid);
 });
 
-function delete_transaction(txid) {
-    let idx = transaction_order.indexOf(parseInt(txid))
-    for (let l_idx = idx+1; l_idx < transaction_order.length; l_idx++) {
-        let txid_loop = transaction_order[l_idx];
-        let o_tx = all_transactions[txid_loop];
-        o_tx['num'] = o_tx['num'] - 1;
-    }
 
-    map_lookups(all_transactions[txid], unmap_instead=true)
-
-    delete all_transactions[txid];
-//    console.log("delete tx",txid,"at idx",transaction_order.indexOf(parseInt(txid)),transaction_order.length)
-    transaction_order.splice(idx,1)
-
-//    $('#t_'+txid).remove();
-}
 
 $('body').on('click','#mt_delete',function() {
     data = $('#mt_delete_form').serialize();

@@ -15,13 +15,22 @@ table {
     border-collapse:collapse;
 }
 
+ul {
+    list-style-type:none;
+}
 
 div#address_form {
-    padding: 10px;
+    /*padding: 10px;
     margin-left:auto;
     margin-right:auto;
     display:inline-block;
     margin-top:15%;
+    z-index:5;*/
+    padding: 10px;
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform: translate(-50%,-50%);
     z-index:5;
 }
 
@@ -236,8 +245,14 @@ div#tax_block a {
     cursor: pointer;
     color:blue;
     text-decoration:underline;
-    display:inline-block;
-    margin-bottom:20px;
+    display:block;
+    margin-bottom: 5px;
+}
+
+div#tax_block a#calc_tax {
+    display:block;
+    margin-top: 5px;
+    margin-bottom: 30px;
 }
 
 
@@ -306,9 +321,10 @@ span.cp {
 
 
 div#progressbar_wrap {
-    width:80%;
+    width:90%;
     margin-left:auto;
     margin-right:auto;
+    margin-top: 10px;
 }
 
 
@@ -607,7 +623,7 @@ select.tc_rule_sel {
     vertical-align:middle;
 }
 
-.r_rem div, .r_mov div, .r_add div, div.ct_icon, .mt_r_rem div  {
+.r_rem div, .r_mov div, .r_add div, div.ct_icon, .mt_r_rem div, div.up_icon, div.delete_address  {
     background-image: url(icons.png);
     width: 16px;
     height: 16px;
@@ -660,6 +676,10 @@ div.hidden_custom .specific_val {
     display:none;
 }
 
+div.hidden_custom .help {
+    display:none;
+}
+
 
 
 div.hidden_custom > select.tc_rule_sel, span.r_from_addr > select.tc_rule_sel, span.r_to_addr > select.tc_rule_sel  {
@@ -688,7 +708,6 @@ div#custom_types_block {
 }
 
 ul#custom_types_list {
-    list-style-type: none;
     margin:0px;
     padding:0px;
     margin-bottom:10px;
@@ -707,7 +726,7 @@ ul#custom_types_list .applicable {
     cursor:pointer;
 }
 
-div.ct_icon {
+div.ct_icon, div.up_icon, div.delete_address {
     cursor:pointer;
     display:inline-block;
     margin-left:3px;
@@ -716,6 +735,10 @@ div.ct_icon {
     border-radius:5px;
     top:5px;
     background-color:#EEEEEE;
+}
+
+div.delete_address {
+    top: 0px;
 }
 
 div.note {
@@ -774,8 +797,12 @@ div.ct_select {
     background-position: -160px -112px;
 }
 
-div.ct_delete {
+div.ct_delete, div.up_delete, div.delete_address {
     background-position: -177px -97px;
+}
+
+div.up_add {
+    background-position: -17px -129px;
 }
 
 
@@ -795,16 +822,17 @@ div#overlay {
     left: 50%;
     transform: translate(-50%, -50%);
     z-index:100;
+    border-radius: 20px;
+    background-color:white;
+    z-index:100;
+    border: 3px solid #464646;
+    padding:30px;
 }
 
 div#popup {
     width:600px;
     height:60px;
-    border-radius: 20px;
-    background-color:white;
-    padding:30px;
-    border: 3px solid #464646;
-    z-index:100;
+
 }
 
 div.custom_type, .custom {
@@ -843,15 +871,6 @@ div.vault_id_wrap input.specific_val {
 }
 
 
-div#download_transactions_block {
-    margin-top:20px;
-}
-
-a#download_transactions_json {
-    margin-top:5px;
-    margin-right:10px;
-}
-
 
 
 table#tax_sums {
@@ -873,6 +892,15 @@ tr.matchup p {
 div#need_recalc {
     text-align:center;
     color:red;
+}
+
+div#need_reproc {
+    margin: 5px;
+}
+
+div.reproc_level_3 {
+    color: red;
+    font-weight: bold;
 }
 
 .outdated {
@@ -954,11 +982,10 @@ li.dc_adr {
 
 
 ul.item_list {
-    max-height:300px;
+    max-height:350px;
     overflow:auto;
     padding:0px;
    margin:0px;
-   list-style-type:none;
 }
 
 li.vault, li.loan, li.dc_token {
@@ -1027,6 +1054,11 @@ div#opened_item {
 
 div#tax_block div#opened_item a {
     margin:5px 0px;
+}
+
+div#tax_data {
+    margin-top: 30px;
+    margin-bottom: 30px;
 }
 
 table.vault_table td.vault_table_txnum, table.vault_table td.vault_table_tok {
@@ -1238,13 +1270,6 @@ div#donation_address:hover {
 
 
 
-div#help_popup {
-    border-radius: 20px;
-    background-color:white;
-    padding:30px;
-    border: 3px solid #464646;
-}
-
 div.help_header {
     margin-bottom:10px;
 }
@@ -1259,10 +1284,8 @@ div.help_content {
 
 
 div#help_main_popup {
-    border-radius: 20px;
     background-color:#FAFAFA;
-    /*padding:30px;*/
-    border: 3px solid #464646;
+    padding: 0px;
     width:90%;
     height:90%;
     min-width:700px;
@@ -1287,7 +1310,6 @@ div.help_topics {
 ul.help_topics_list {
     padding:0px;
     margin:0px;
-    list-style-type:none;
 }
 
 ul.help_topics_list li {
@@ -1478,28 +1500,25 @@ div.top_menu_icon_open {
     background-position: -64px -128px;
 }
 
-div#aa_clicker {
+div#aa_clicker, div#up_clicker {
     color:blue;
     cursor:pointer;
     text-decoration:underline;
-    display:inline-block;
-    margin-top:5px;
-    margin-bottom:20px;
+    display:block;
+    margin-top:10px;
+    margin-bottom:10px;
 }
 
-div#aa_popup, div#hi_popup {
+
+
+div#aa_popup, div#hi_popup, div#dl_popup, div#up_popup {
     width:600px;
     height:80px;
-    border-radius: 20px;
-    background-color:white;
-    padding:30px;
-    border: 3px solid #464646;
-    z-index:100;
 }
 
 
 
-div#aa_process, div#aa_cancel, div#hi_update, div#hi_cancel {
+div#aa_process, div#aa_cancel, div#hi_update, div#hi_cancel, div#dl_cancel, div#up_process, div#up_cancel, div#opt_process, div#opt_cancel {
     padding:5px;
     text-align:center;
     display:inline-block;
@@ -1511,7 +1530,7 @@ div#aa_process, div#aa_cancel, div#hi_update, div#hi_cancel {
     width:150px;
 }
 
-input#aa_input, input#hi_input {
+input#aa_input, input#hi_input, input#up_source, input#coingecko_id_input {
     width:350px;
     padding:5px;
     border-radius:5px;
@@ -1521,17 +1540,25 @@ input#aa_input, input#hi_input {
     margin-bottom:10px;
 }
 
-ul#display_address_selector {
+ul#display_address_selector, ul#upload_list {
     width:400px;
     margin:auto;
     margin-top:20px;
     text-align:left;
     padding:0px;
-    list-style-type: none;
 }
+
 
 div.display_address_option {
     width:370px;
+    display:inline-block;
+}
+
+div#upload_list_header {
+    display:block;
+}
+
+div.upload_option {
     display:inline-block;
 }
 
@@ -1625,18 +1652,11 @@ label#validation_hook-error {
 
 div#dc_fix_popup {
     width:800px;
-    /*height:400px;*/
-    border-radius: 20px;
-    background-color:white;
-    padding:30px;
-    border: 3px solid #464646;
-    z-index:100;
 }
 
 div#dc_fix_popup ul {
     padding:0px;
     margin:10px;
-    list-style-type:none;
     max-height:300px;
     text-align:left;
     overflow:auto;
@@ -1678,6 +1698,16 @@ div#address_matrix td.addresses_column {
     width:100px;
 }
 
+div#address_matrix td.addresses_column span {
+    vertical-align:top;
+    position:relative;
+    top:3px;
+}
+
+div#address_matrix td.all_chains_column {
+    width:30px;
+}
+
 div#address_matrix tr.chain_names_row td {
     vertical-align:bottom;
 }
@@ -1688,6 +1718,207 @@ div#updated_note {
     margin-top:10px;
     text-align:left;
     font-weight:bold;
+}
+
+div#dl_popup {
+    width:600px;
+    height:150px;
+}
+
+div#opt_popup {
+    width:600px;
+    height:600px;
+}
+
+ul#download_list {
+    text-align:left;
+}
+
+ul#download_list li {
+    margin: 5px;
+}
+
+div#dl_popup a {
+    cursor: pointer;
+    color:blue;
+    text-decoration:underline;
+}
+
+div#up_popup {
+    height:200px
+}
+
+ol#up_template_list {
+    width:450px;
+    display:block;
+    margin:auto;
+}
+
+ol#up_template_list li {
+    text-align:left;
+    margin: 10px;
+}
+
+input#up_input {
+    display:none;
+}
+
+div#up_input_text, a#up_template_link {
+    text-decoration: underline;
+    cursor: pointer;
+    display:inline-block;
+}
+
+input#up_source {
+    width:200px;
+    display:inline-block;
+}
+
+
+
+div.up_error, div.cg_error {
+    color:red;
+    font-weight:bold;
+}
+
+div#up_error_file {
+
+}
+
+div#up_error_source {
+    margin-top:-17px;
+}
+
+div#up_delete_popup, div#delete_address_popup {
+    width:600px;
+    height:60px;
+}
+
+a.edit_coingecko_id {
+    cursor:pointer;
+}
+
+a.edit_coingecko_id:hover {
+    text-decoration:underline;
+}
+
+div#cg_popup {
+    width:800px;
+    height:600px;
+}
+
+div#cg_popup_explanation{
+    text-align:left;
+    margin:5px;
+}
+
+span.t_cat_updated {
+    margin-left: 5px;
+    font-weight:bold;
+}
+
+ul#option_list {
+    text-align:left;
+}
+
+ul#option_list > li {
+    padding-top:20px;
+    padding-bottom:20px;
+    border-bottom:1px solid #EEEEEE;
+}
+
+div.opt_left {
+    display:inline-block;
+    width:350px;
+    vertical-align:middle;
+}
+
+div.opt_right {
+    display:inline-block;
+    width:200px;
+    vertical-align:middle;
+}
+
+
+div.opt_note {
+ margin-top: 5px;
+}
+
+select#opt_fiat {
+    border-color: #DFDFDF;
+    padding: 3px;
+    border-radius:5px;
+}
+
+ul.opt_radio_list {
+    padding:0px;
+}
+
+div.transaction span.t_hide {
+    background-image: url(icons.png);
+    width: 16px;
+    height: 16px;
+    cursor:pointer;
+    margin-left:5px;
+    position:absolute;
+    right:5px;
+    top:5px;
+    opacity:0.7;
+    border-radius:10px;
+    border: 1px solid white;
+}
+
+span.t_hide_hidden {
+    background-position: -16px -128px;
+}
+
+span.t_hide_shown {
+    background-position: -48px -128px;
+}
+
+span.t_tokens {
+    margin-left:10px;
+}
+
+div.t_minimized {
+    padding-top:5px;
+    padding-bottom:0px;
+    background-color:inherit !important;
+    opacity:0.5;
+}
+
+div.t_minimized div.tx_row_0 span {
+    vertical-align:middle;
+}
+
+div.t_minimized span.t_class {
+    width:150px;
+}
+
+div.t_minimized span.tx_chain {
+    margin-left:5px;
+    width:85px;
+}
+
+div.t_minimized span.tx_hash {
+    margin-left:10px;
+}
+
+div.t_minimized span.tx_hash {
+    margin-left:10px;
+}
+
+div.t_minimized a.open_scan {
+    background-position: -32px -81px;
+    vertical-align:middle;
+}
+
+div.t_minimized span.t_token_list {
+    max-width:120px;
+}
+
+div#donations_popup p {
+    text-align:left;
 }
 
 
@@ -1766,4 +1997,109 @@ table#additional_data td {
 
 div#social a {
     margin-right: 10px;
+}
+
+div.footer {
+    padding-top:10px;
+    padding-bottom:10px;
+    width:100%;
+    text-align:center;
+    border-top: 1px solid #DFDFDF;
+}
+
+div.footer_static {
+    position:fixed;
+    bottom:0;
+    left:0;
+    right: 0;
+}
+
+div.footer > div.social {
+    display:inline-block;
+    width:650px;
+    position:relative;
+    left:75px;
+}
+
+div.footer > div.social a {
+    margin: 20px;
+    color: #AAAAAA;
+}
+div.footer > div.social a:hover {
+    color:black;
+}
+
+a#donations_main {
+    text-decoration:underline;
+    cursor:pointer;
+}
+
+body > div.header {
+    width:100%;
+    z-index: -1;
+    border-bottom:1px solid #DFDFDF;
+    background-color:white;
+    padding-bottom:20px;
+    padding-top:20px;
+}
+
+body > div.header_static {
+    position:absolute;
+    top:0;
+    left:0;
+    right: 0;
+}
+
+body > div.header h1 {
+    font-weight: normal;
+    margin:0px;
+}
+
+body > div.header h4 {
+    font-weight: normal;
+    margin-bottom:0px;
+}
+
+a#home {
+    text-decoration:none;
+    color:black;
+}
+
+div#made_by {
+    display:block;
+    width:150px;
+    float:right;
+    color: #AAAAAA;
+}
+
+div#made_by > a {
+    color:#AAAAAA;
+}
+
+div#made_by > a:hover {
+    color:black;
+}
+
+
+
+
+
+#services_content p {
+    font-size: 18px;
+    display:block;
+    margin:auto;
+    margin-top:20px;
+    margin-bottom:10px;
+    max-width:800px;
+}
+
+#services_content ul {
+    margin:auto;
+    max-width: 800px;
+    text-align:left;
+    font-size:18px;
+}
+
+#services_content li {
+    margin-bottom:20px;
 }

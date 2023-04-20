@@ -5,6 +5,9 @@
 
 from flask import Flask, render_template, request, send_file, session, g
 import os
+
+
+
 import traceback
 import time
 import json
@@ -14,6 +17,7 @@ from code.chain import Chain
 from code.solana import Solana
 from code.util import log, ProgressBar, persist, sql_in, normalize_address, is_ethereum, log_error
 from code.sqlite import SQLite
+from code.fiat_rates import Twelve
 # from code.category import Typing
 from code.user import User, Import
 from code.tax_calc import Calculator
@@ -27,17 +31,25 @@ import threading
 import copy
 from collections import defaultdict
 import atexit
+from dotenv import load_dotenv
 
 FLASK_ENV = 'production'
 
 app = Flask(__name__)
 
 os.environ['debug'] = '0'
+os.environ['version'] = '1.42'
+os.environ['app_path'] = '/home/ubuntu/hyperboloid'
+
+def init():
+    os.chdir(os.environ.get('app_path')) if FLASK_ENV == "production" else False
+    load_dotenv()
+    log('env check',os.environ.get('api_key_etherscan'),filename='env_check.txt')
 
 @app.route('/')
 @app.route('/main')
 def main():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False  
+    init()
     address_cookie = request.cookies.get('address')
     address = ""
     if address_cookie is not None:
@@ -53,11 +65,15 @@ def main():
 
     blockchain_count = len(Chain.CONFIG)
     # log('cookie',address,chain_name)
-    return render_template('main.html', title='Blockchain transactions to US tax form', address=address, blockchain_count=blockchain_count)
+    return render_template('main.html', title='Blockchain transactions to US tax form', address=address, blockchain_count=blockchain_count, version=os.environ.get('version'))
+
+@app.route('/services.html')
+def services_page():
+    return render_template('services.html', title='Services we provide', version=os.environ.get('version'))
 
 @app.route('/chains.html')
 def chain_support():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     chains_support_info = []
     support_level_text_map = {10:'High',5:'Medium',3:'Low',0:'None'}
     for chain_name in Chain.list(alphabetical=True):
@@ -103,11 +119,11 @@ def chain_support():
              'balance_nft_support': balance_nft_support
              })
     log('chains_support_info',chains_support_info,filename='chain_support.txt')
-    return render_template('chains.html', title='Blockchain transactions to US tax form', chains=chains_support_info)
+    return render_template('chains.html', title='Blockchain transactions to US tax form', chains=chains_support_info, version=os.environ.get('version'))
 
 @app.route('/last_update')
 def last_update():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = request.args.get('address')	
     primary = normalize_address(address)#Address(address)
     if primary is None:
@@ -127,7 +143,8 @@ def last_update():
             # update_import_needed = user.check_info('update_import_needed')
             data_version = float(user.get_info('data_version'))
             log('version comp', data_version,user.version)
-            if data_version != user.version:
+            # if data_version != user.version:
+            if user.version - data_version >= 0.1:
                 update_import_needed = True
         except:
             last = user.last_db_modification_timestamp
@@ -148,7 +165,7 @@ def last_update_inner(user):
 
 @app.route('/process')
 def process():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = request.args.get('address')
     primary = normalize_address(address)#Address(address)
     # chain_name = request.args.get('chain')
@@ -165,7 +182,7 @@ def process():
 
 
     persist(primary)
-    redis = Redis(primary, uid)
+    redis = Redis(primary)
 
 
 
@@ -179,6 +196,7 @@ def process():
     # progress_bar_update(address, 'Starting', 0)
 
     active_address = None
+    pb = None
     try:
         # accepted_chains_str = request.args.get('accepted_chains')
         accepted_chains_str = None
@@ -192,12 +210,19 @@ def process():
         all_chains = {}
         for chain_name in Chain.list():
             chain = user.chain_factory(chain_name)
-            all_chains[chain_name] = {'chain': chain, 'import_addresses': [], 'display_addresses': set()}
+            all_chains[chain_name] = {'chain': chain, 'import_addresses': [], 'display_addresses': set(), 'is_upload':False}
 
+        if 'my account' in all_previous_addresses: #uploads
+            for chain_name in user.all_addresses['my account']:
+                chain = user.chain_factory(chain_name,is_upload=True)
+                all_chains[chain_name] = {'chain': chain, 'import_addresses': [], 'display_addresses': set(), 'is_upload': True}
 
         log('all chains',all_chains)
 
+
+
         import_addresses = request.args.get('import_addresses')
+        log('import_addresses provided',import_addresses)
         if import_addresses is not None and import_addresses != '':
             if import_addresses == 'all':
                 if len(all_previous_addresses) == 0:
@@ -212,10 +237,13 @@ def process():
             import_addresses = [primary]
         else:
             import_addresses = []
+        log('import_addresses processed',import_addresses)
+
 
         use_previous = True
         try:
             ac_str = request.args.get('ac_str')
+            log('ac_str',ac_str)
             if ac_str is not None and ac_str != '':
                 ac_spl = ac_str.split(",")
                 for entry in ac_spl:
@@ -254,10 +282,10 @@ def process():
             if address not in all_previous_addresses:
                 all_previous_addresses.append(address)
 
-                for chain_name, chain_data in all_chains.items():
-                    chain = chain_data['chain']
-                    if chain.check_validity(address):
-                        chain_data['display_addresses'].add(address)
+            for chain_name, chain_data in all_chains.items():
+                chain = chain_data['chain']
+                if chain.check_validity(address):
+                    chain_data['display_addresses'].add(address)
 
 
 
@@ -294,7 +322,10 @@ def process():
         # chain_list = Chain.list()
         log('req args',request.args)
         log('all_previous_addresses 2',all_previous_addresses)
+        if 'my account' in import_addresses:
+            import_addresses.remove('my account')
         log('import_addresses',import_addresses)
+        log('all_chains',all_chains)
 
 
         import_new = len(import_addresses) > 0
@@ -348,6 +379,8 @@ def process():
         non_fatal_errors = set()
 
         use_derived = False
+        force_forget_derived = user.check_info('force_forget_derived')
+        log('force_forget_derived',force_forget_derived)
         if import_new:
             # user.set_info('update_import_needed',0)
             user.set_info('data_version',user.version)
@@ -356,6 +389,9 @@ def process():
             redis.enq(reset=False)
             redis.wait(pb=0)
 
+            pb.update('Updating FIAT rates',0.1)
+            user.fiat_rates.download_all_rates()
+
             # chain_sets_to_check = defaultdict(dict)
             for chain_name, chain_data in all_chains.items():
                 chain = chain_data['chain']
@@ -363,7 +399,7 @@ def process():
 
                 for active_address in import_addresses:
                     active_address = normalize_address(active_address)
-                    if not chain.check_validity(active_address):
+                    if not chain.is_upload and not chain.check_validity(active_address):
                         continue
 
                     present = user.check_address_present(active_address, chain_name)
@@ -399,7 +435,7 @@ def process():
             pb.update('Checking supported chains for your addresses')
             threads = []
             for chain_name, chain_data in all_chains.items():
-                if len(chain_data['addresses_to_check']) > 0:
+                if not chain_data['is_upload'] and len(chain_data['addresses_to_check']) > 0:
                     t = threading.Thread(target=check_chain_for_addresses, args=(chain_data,))
                     threads.append(t)
                     t.start()
@@ -468,12 +504,6 @@ def process():
                         previous_use.add(chain_name + ":" + address)
                         user.set_address_used(address, chain_name, value=0) #unset all address use
 
-            # for previous_address in all_previous_addresses:
-            #     previous_address = normalize_address(previous_address)
-            #     for chain_name in Chain.list():
-            #         if user.check_address_used(previous_address,chain_name):
-            #             previous_use.add(chain_name+"_"+previous_address)
-            #             user.set_address_used(previous_address,chain_name,value=0)
 
             current_use = set()
             for chain_name, chain_data in all_chains.items():
@@ -481,19 +511,12 @@ def process():
                     current_use.add(chain_name+":"+address)
                     user.set_address_used(address, chain_name) #set current address use
 
-            # for active_address in display_addresses:
-            #     active_address = normalize_address(active_address)
-            #     for chain_name,chain_data in display_chains.items():
-            #         chain = chain_data['chain']
-            #         if not chain.check_validity(active_address):
-            #             continue
-            #         current_use.add(chain_name+"_"+active_address)
-            #         user.set_address_used(active_address,chain_name)
 
-            log("comparing previous use vs current use",str(previous_use),str(current_use))
-            rows = user.db.select("SELECT id FROM transactions_derived LIMIT 1")
-            if previous_use == current_use and len(rows) > 0:
-                use_derived = True
+            if not force_forget_derived:
+                log("comparing previous use vs current use",str(previous_use),str(current_use))
+                rows = user.db.select("SELECT id FROM transactions_derived LIMIT 1")
+                if previous_use == current_use and len(rows) > 0:
+                    use_derived = True
 
         log('import_new',import_new)
         log('use_derived',use_derived)
@@ -502,16 +525,27 @@ def process():
 
 
         total_request_count = 0
+        total_request_count_disp = 0
         for chain_name, chain_data in all_chains.items():
             chain = chain_data['chain']
+            if chain.is_upload:
+                continue
 
             addresses = chain_data['import_addresses']
             for active_address in addresses:
                 if chain.check_validity(active_address):
                     total_request_count += 1
-        log('total_request_count',total_request_count)
+
+            disp_addresses = list(chain_data['display_addresses'])
+            for active_address in disp_addresses:
+                if chain.check_validity(active_address):
+                    total_request_count_disp += 1
+        log('total_request_count',total_request_count,total_request_count_disp)
 
 
+        if import_new or not use_derived:
+            C = Coingecko(verbose=True)
+            C.make_contracts_map()
 
 
         if import_new:
@@ -543,7 +577,15 @@ def process():
                         log('retrieved transactions',chain.name,active_address,len(transactions))
                         chain.correct_transactions(active_address, transactions, 2. / total_request_count)
                         current_tokens = chain.get_current_tokens(active_address)
-                        chain_data['transactions'].update(transactions)
+                        # chain_data['transactions'].update(transactions)  #PROBLEM IF CROSS-WALLET TRANSFERS! Newly-downloaded overwrite previous. Need to merge transfers by only adding new ones.
+                        for txhash, transaction in transactions.items():
+                            if txhash not in chain_data['transactions']:
+                                chain_data['transactions'][txhash] = transaction
+                            else:
+                                chain.merge_transaction(transaction,chain_data['transactions'][txhash])
+
+
+
                         # if len(errors) > 0:
                         #     chain_data['errors'][active_address] = errors
                         if current_tokens is not None:
@@ -555,12 +597,14 @@ def process():
             def threaded_covalent(all_chains):
                 rq_cnt = 0
                 for chain_name, chain_data in all_chains.items():
-                    if 'covalent_mapping' in Chain.CONFIG[chain_name]:
+                    if not chain_data['is_upload'] and 'covalent_mapping' in Chain.CONFIG[chain_name]:
                         rq_cnt += len(chain_data['import_addresses'])
 
                 if rq_cnt > 0:
                     for chain_name, chain_data in all_chains.items():
                         chain = chain_data['chain']
+                        if chain.is_upload:
+                            continue
                         chain.covalent_download(chain_data, pb_alloc=5/float(rq_cnt))
 
             t_covalent = threading.Thread(target=threaded_covalent, args=(all_chains,)) #this asshole is the longest
@@ -575,7 +619,7 @@ def process():
                 chain_data['transactions'] = {}
                 chain_data['current_tokens'] = {}
                 # chain_data['errors'] = {}
-                if len(chain_data['import_addresses']) > 0:
+                if len(chain_data['import_addresses']) > 0 and not chain_data['is_upload']:
                     log('calling threaded_transaction_processing', chain_name)
                     t = threading.Thread(target=threaded_transaction_processing, args=(chain_data,))
                     threads.append(t)
@@ -605,14 +649,22 @@ def process():
 
             for chain_name, chain_data in all_chains.items():
                 chain = chain_data['chain']
+                if chain.is_upload:
+                    continue
                 chain.covalent_correction(chain_data)
                 chain.balance_provider_correction(chain_data)
 
 
+            pb.update('Loading coingecko symbols', 0)
+            try:
+                C.download_symbols_to_db(drop=True, progress_bar=pb)  # alloc 3
+            except:
+                log_error("Failed to download coingecko symbols", primary)
 
             pb.update('Storing transactions,',0)
+
             for chain_name, chain_data in all_chains.items():
-                user.store_transactions(chain_data['chain'], chain_data['transactions'], chain_data['import_addresses'])
+                user.store_transactions(chain_data['chain'], chain_data['transactions'], chain_data['import_addresses'],C)
                 log('storing transactions', chain_name, len(chain_data['transactions']))
                 user.store_current_tokens(chain_data['chain'], chain_data['current_tokens'])
 
@@ -628,18 +680,23 @@ def process():
         user.load_addresses()
         user.load_tx_counts()
         if import_new or not use_derived:
-            pb.update('Loading known counterparties')
-            address_db = SQLite('addresses', read_only=True)
-            for chain_name, chain_data in all_chains.items():
-                if len(chain_data['display_addresses']):
-                    chain_data['chain'].init_addresses(address_db)
-            address_db.disconnect()
 
-            transactions, _ = user.load_transactions(all_chains)
+            pb.update('Loading transactions')
+            transactions, _ = user.load_transactions(all_chains, load_derived=True)
             log("loaded transactions",len(transactions),filename='derived.txt')
-            pb.set('Looking up unknown counterparties')
+            pb.update('Loading known counterparties')
             contract_dict, counterparty_by_chain, input_list = user.get_contracts(transactions)
 
+            address_db = SQLite('addresses', read_only=True)
+            for chain_name, chain_data in all_chains.items():
+                if not chain_data['is_upload'] and len(chain_data['display_addresses']):
+                    pb.update('Loading known counterparties for '+chain_name)
+                    chain_data['chain'].init_addresses(address_db,counterparty_by_chain[chain_name])
+            address_db.disconnect()
+
+            pb.set('Looking up unknown counterparties')
+            if total_request_count == 0:
+                total_request_count = total_request_count_disp
             def threaded_update_progenitors(chain_name,chain_data,filtered_counterparty_list):
                 chain = chain_data['chain']
                 try:
@@ -648,12 +705,12 @@ def process():
                     chain_data['progenitor_db_writes'] = chain_db_writes
                     log('new writes', chain_name, len(chain_db_writes), filename='address_update.txt')
                 except:
-                    log('error updating', chain_name, traceback.format_exc(), filename='address_update.txt')
+                    log_error('error updating progenitors', primary, chain_name, traceback.format_exc())
 
             threads = []
             for chain_name, chain_data in all_chains.items():
                 chain = chain_data['chain']
-                if not chain.blockscout:
+                if not chain.blockscout and not chain.is_upload:
                     filtered_counterparty_list = chain.filter_progenitors(list(counterparty_by_chain[chain_name]))
                     log('filtered_counterparty_list', chain_name, filtered_counterparty_list, filename='address_update.txt')
                     if len(filtered_counterparty_list) > 0:
@@ -676,11 +733,12 @@ def process():
                 address_db = SQLite('addresses')
                 for write in all_db_writes:
                     chain_name, values = write
+                    cn = chain_name.upper().replace(" ","_")
                     entity = values[-2]
                     address_to_add = values[0]
-                    rc = address_db.insert_kw(chain_name + '_addresses', values=values, ignore=(entity == 'unknown'))
+                    rc = address_db.insert_kw(cn + '_addresses', values=values, ignore=(entity == 'unknown'))
                     if rc > 0:
-                        address_db.insert_kw(chain_name + '_labels', values=[address_to_add, 'auto'], ignore=True)
+                        address_db.insert_kw(cn + '_labels', values=[address_to_add, 'auto'], ignore=True)
                         insert_cnt += 1
                 if insert_cnt > 0:
                     address_db.commit()
@@ -693,23 +751,22 @@ def process():
             t = time.time()
             log('contract_dict',contract_dict)
             S.init_from_db(input_list)
-            C = Coingecko(verbose=True)
-            if import_new:
-                pb.set('Loading coingecko symbols', 60)
-                try:
-                    C.download_symbols_to_db(drop=True, progress_bar=pb) #alloc 3
-                except:
-                    log_error("Failed to download coingecko symbols", primary)
 
             pb.set('Loading coingecko rates', 63)
             needed_token_times = user.get_needed_token_times(transactions)
+            log("needed_token_times",needed_token_times)
+
             C.init_from_db_2(all_chains,needed_token_times, progress_bar=pb)
 
             # C.init_from_db(all_chains, contract_dict, progress_bar=pb) #alloc 17
         else:
+            pb.update('Loading transactions')
             transactions, _ = user.load_transactions(all_chains, load_derived=True)
+            needed_token_times = user.get_needed_token_times(transactions)
             try:
                 C = Coingecko.init_from_cache(user)
+                for coingecko_id in needed_token_times:
+                    assert coingecko_id in C.rates
             except:
                 C = Coingecko(verbose=True)
                 pb.set('Loading coingecko symbols', 60)
@@ -719,9 +776,30 @@ def process():
                     log_error("Failed to download coingecko symbols", primary)
 
                 pb.set('Loading coingecko rates', 63)
-                needed_token_times = user.get_needed_token_times(transactions)
+                C.make_contracts_map()
                 C.init_from_db_2(all_chains, needed_token_times, progress_bar=pb)
             S = None
+
+        # if import_new:
+        #     pb.set('Loading coingecko rates', 63)
+        #     needed_token_times = user.get_needed_token_times(transactions)
+        #     C.init_from_db_2(all_chains, needed_token_times, progress_bar=pb)
+        # else:
+        #     transactions, _ = user.load_transactions(all_chains, load_derived=True)
+        #     try:
+        #         C = Coingecko.init_from_cache(user)
+        #     except:
+        #         C = Coingecko(verbose=True)
+        #         pb.set('Loading coingecko symbols', 60)
+        #         try:
+        #             C.download_symbols_to_db(drop=True, progress_bar=pb)  # alloc 3
+        #         except:
+        #             log_error("Failed to download coingecko symbols", primary)
+        #
+        #         pb.set('Loading coingecko rates', 63)
+        #         needed_token_times = user.get_needed_token_times(transactions)
+        #         C.init_from_db_2(all_chains, needed_token_times, progress_bar=pb)
+        #     S = None
 
         if import_new:
             user.finish_import()
@@ -759,8 +837,8 @@ def process():
         custom_types = user.load_custom_types()
 
         pb.set('Calculating taxes', 90)
-        calculator = Calculator(user.address, C)
-        calculator.process_transactions(transactions_js) #alloc
+        calculator = Calculator(user, C)
+        calculator.process_transactions(transactions_js, user) #alloc
 
         #process_transactions affects coingecko rates! Need to cache it after, not before.
         C.dump(user)
@@ -774,7 +852,7 @@ def process():
         js_file.write(json.dumps(transactions_js,indent=2, sort_keys=True))
         js_file.close()
 
-        info_fields = ['tx_per_page','high_impact_amount','dc_fix_shutup','matchups_visible']
+        info_fields = ['tx_per_page','high_impact_amount','dc_fix_shutup','matchups_visible','fiat','opt_tx_costs','opt_vault_gain','opt_vault_loss']
         info = {}
         for field in info_fields:
             value = user.get_info(field)
@@ -798,19 +876,20 @@ def process():
 
         non_fatal_errors = non_fatal_errors.union(set(user.load_relevant_errors()))
         data_version = float(user.get_info('data_version'))
-        if user.version != data_version:
+        if user.version - data_version >= 0.1:
             non_fatal_errors.add('Software has been updated since your previous import. We recommend importing new transactions to enable all the features.')
 
         user.load_import_versions()
 
         data = {'info':info,'transactions':transactions_js,'custom_types':custom_types,
-                'CA_long':calculator.CA_long,'CA_short':calculator.CA_short,'CA_errors':calculator.errors,'incomes':calculator.incomes,'interest':calculator.interest_payments,
+                'CA_long':calculator.CA_long,'CA_short':calculator.CA_short,'CA_errors':calculator.errors,'incomes':calculator.incomes,'interest':calculator.interest_payments,'expenses':calculator.business_expenses,
                 'vaults':calculator.vaults_json()
                 ,'loans':calculator.loans_json(),
                 'tokens':calculator.tokens_json(),
                 'non_fatal_errors':list(non_fatal_errors),
                 # 'address_info':address_info, 'chain_list':list(display_chains.keys()),
                 'latest_tokens':current_tokens,
+                'fiat_info':Twelve.FIAT_SYMBOLS,
                 'all_address_info':user.all_addresses,
                 'chain_config':Chain.config_json(),
                 'version':{'software':user.version,'data':data_version}
@@ -832,7 +911,7 @@ def process():
                         'Please let us know on Discord if you received this message.'}
         dump = json.dumps(data)
         try:
-            pb.set('Uploading to your browser', 100)
+            pb.set('Uploading to your browser', 98)
         except:
             pass
     js_file = open('data/users/' + primary + '/data_cache.json', 'w', newline='')
@@ -857,13 +936,16 @@ def recreate_data_from_caches(primary):
         js_file.close()
         data['transactions'] = json.loads(js)
 
-        calculator = Calculator(primary, None)
+        user = User(primary)
+
+        calculator = Calculator(user, None)
         calculator.from_cache()
         data['CA_long'] = calculator.CA_long
         data['CA_short'] = calculator.CA_short
         data['CA_errors'] = calculator.errors
         data['incomes'] = calculator.incomes
         data['interest'] = calculator.interest_payments
+        data['expenses'] = calculator.business_expenses
         data['vaults'] = calculator.vaults_json()
         data['loans'] = calculator.loans_json()
         data['tokens'] = calculator.tokens_json()
@@ -875,7 +957,7 @@ def recreate_data_from_caches(primary):
 
 @app.route('/calc_tax',methods=['GET', 'POST'])
 def calc_tax():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -903,15 +985,15 @@ def calc_tax():
         user.get_custom_rates()
         C = Coingecko.init_from_cache(user)
 
-        calculator = Calculator(address, C, mtm=mtm)
-        calculator.process_transactions(transactions_js)
+        calculator = Calculator(user, C, mtm=mtm)
+        calculator.process_transactions(transactions_js, user)
         calculator.matchup()
         calculator.cache()
 
 
 
         js = {'CA_long': calculator.CA_long, 'CA_short': calculator.CA_short, 'CA_errors': calculator.errors, 'incomes': calculator.incomes, 'interest': calculator.interest_payments,
-              'vaults':calculator.vaults_json(),'loans':calculator.loans_json(),'tokens':calculator.tokens_json()}
+              'expenses':calculator.business_expenses,'vaults':calculator.vaults_json(),'loans':calculator.loans_json(),'tokens':calculator.tokens_json()}
 
         user.done()
     except:
@@ -924,7 +1006,7 @@ def calc_tax():
 
 @app.route('/save_type',methods=['GET', 'POST'])
 def save_type():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -973,7 +1055,7 @@ def save_type():
 
 @app.route('/delete_type',methods=['GET', 'POST'])
 def delete_type():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -1003,7 +1085,7 @@ def delete_type():
 
 @app.route('/apply_type',methods=['GET', 'POST'])
 def apply_type():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -1028,7 +1110,7 @@ def apply_type():
 
 @app.route('/unapply_type',methods=['GET', 'POST'])
 def unapply_type():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -1054,7 +1136,7 @@ def unapply_type():
 
 @app.route('/save_custom_val',methods=['GET', 'POST'])
 def save_custom_val():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -1083,7 +1165,7 @@ def save_custom_val():
 
 @app.route('/undo_custom_changes',methods=['GET', 'POST'])
 def undo_custom_changes():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -1108,7 +1190,8 @@ def undo_custom_changes():
 
 @app.route('/recolor',methods=['GET', 'POST'])
 def recolor():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    t = time.time()
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -1119,9 +1202,13 @@ def recolor():
         transactions = form['transactions']
 
         log('recolor', address, color_id, transactions)
+        log('recolor timing 1',time.time()-t)
         user = User(address)
+        log('recolor timing 2', time.time() - t)
         user.recolor(color_id, transactions.split(","))
+        log('recolor timing 3', time.time() - t)
         user.done()
+        log('recolor timing 4', time.time() - t)
         js = {'success':1}
     except:
         log("EXCEPTION in recolor", traceback.format_exc())
@@ -1132,7 +1219,7 @@ def recolor():
 
 @app.route('/save_note',methods=['GET', 'POST'])
 def save_note():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     persist(address)
     try:
@@ -1155,11 +1242,13 @@ def save_note():
 
 @app.route('/save_manual_transaction',methods=['GET', 'POST'])
 def save_manual_transaction():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     chain_name = request.args.get('chain')
     persist(address,chain_name)
+
     try:
+
         form = request.form
         done = False
         idx = 0
@@ -1187,6 +1276,8 @@ def save_manual_transaction():
                 s_tr_idx = str(tr_disp_idx)
                 if 'mt'+s_idx+'_from'+s_tr_idx in form:
                     transfers.append([form['mt'+s_idx+'_transfer_id'+s_tr_idx],form['mt'+s_idx+'_from'+s_tr_idx],form['mt'+s_idx+'_to'+s_tr_idx],form['mt'+s_idx+'_what'+s_tr_idx],form['mt'+s_idx+'_amount'+s_tr_idx],form['mt'+s_idx+'_nft_id'+s_tr_idx]])
+                    if form['mt'+s_idx+'_from'+s_tr_idx] == 'my account' or form['mt'+s_idx+'_to'+s_tr_idx] == 'my account':
+                        raise Exception('Using "my account" is not allowed')
 
             # froms = form.getlist('mt_from')
             # tos = form.getlist('mt_to')
@@ -1205,7 +1296,8 @@ def save_manual_transaction():
 
 
         user = User(address)
-        transactions_js = user.save_manual_transactions(chain_name,address,all_tx_blobs)
+        C = Coingecko.init_from_cache(user)
+        transactions_js = user.save_manual_transactions(chain_name,address,all_tx_blobs,C)
         user.done()
         js = {'success': 1, 'transactions':transactions_js}
     except:
@@ -1217,7 +1309,7 @@ def save_manual_transaction():
 
 @app.route('/delete_manual_transaction',methods=['GET', 'POST'])
 def delete_manual_transaction():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -1246,14 +1338,14 @@ def delete_manual_transaction():
 
 @app.route('/progress_bar')
 def get_progress_bar():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain_name')
     uid = request.args.get('uid')
     persist(address)
     try:
 
-        redis = Redis(address,uid)
+        redis = Redis(address)
         pb = ProgressBar(redis)
 
         phase, progress = pb.retrieve()
@@ -1270,7 +1362,7 @@ def get_progress_bar():
 
 @app.route('/update_progenitors')
 def update_progenitors():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = request.args.get('user')
     chain_name = request.args.get('chain')
     persist(address,chain_name)
@@ -1298,17 +1390,12 @@ def update_progenitors():
 
 @app.route('/wipe',methods=['GET', 'POST'])
 def wipe():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
-    chain_name = request.args.get('chain')
     persist(address)
     try:
-
-
-        log('wipe transactions for one chain', address, chain_name)
-
         user = User(address)
-        user.wipe_transactions(chain_name)
+        user.wipe_transactions()
         user.done()
         js = {'success': 1}
     except:
@@ -1318,9 +1405,26 @@ def wipe():
     data = json.dumps(js)
     return data
 
+@app.route('/restore',methods=['GET', 'POST'])
+def restore():
+    init()
+    address = normalize_address(request.args.get('address'))
+    persist(address)
+    try:
+        user = User(address)
+        user.restore_backup()
+        user.done()
+        js = {'success': 1}
+    except:
+        log("EXCEPTION in restore", traceback.format_exc())
+        log_error("EXCEPTION in restore", address, request.args)
+        js = {'error':'An error has occurred while restoring from backup'}
+    data = json.dumps(js)
+    return data
+
 @app.route('/save_info',methods=['GET', 'POST'])
 def save_info():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     persist(address)
     try:
@@ -1340,7 +1444,7 @@ def save_info():
 
 @app.route('/download')
 def download():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     # chain_name = request.args.get('chain')
     persist(address)
@@ -1365,12 +1469,27 @@ def download():
             year = request.args.get('year')
             user = User(address)
             C = Coingecko.init_from_cache(user)
-            calculator = Calculator(address,C)
+            calculator = Calculator(user,C)
             calculator.from_cache()
 
             calculator.make_forms(year)
             user.done()
             path = 'data/users/'+address+'/tax_forms_'+str(year)+'.zip'
+            return send_file(path, as_attachment=True, cache_timeout=0)
+
+        if type == 'turbotax':
+            year = request.args.get('year')
+            user = User(address)
+            C = Coingecko.init_from_cache(user)
+            calculator = Calculator(user,C)
+            calculator.from_cache()
+
+            batched = calculator.make_turbotax(year)
+            user.done()
+            if batched:
+                path = 'data/users/'+address+'/turbotax_8949_'+str(year)+'.zip'
+            else:
+                path = 'data/users/'+address+'/turbotax_8949_'+str(year)+'.csv'
             return send_file(path, as_attachment=True, cache_timeout=0)
     except:
         log_error("EXCEPTION in download", address, request.args)
@@ -1380,7 +1499,7 @@ def download():
 
 @app.route('/save_js',methods=['GET', 'POST'])
 def save_js():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     address = normalize_address(request.args.get('address'))
     persist(address)
     try:
@@ -1405,10 +1524,203 @@ def save_js():
     # return send_file(path, as_attachment=True, cache_timeout=0)
 
 
+@app.route('/upload_csv', methods=['GET', 'POST'])
+def upload_csv():
+    init()
+    address = normalize_address(request.args.get('address'))
+    persist(address)
+    redis = Redis(address)
+    redis.start()
+    pb = ProgressBar(redis)
+    pb.set('Starting', 0)
+    try:
+        source = request.args.get('source')
+        file = request.files['up_input']
+        user = User(address)
+        C = Coingecko.init_from_cache(user)
+        C.make_contracts_map()
+        error, transactions_js = user.upload_csv(source, file,C,pb)
+        C.dump(user)
+        user.done()
+
+        if error is None:
+            js = {'success': 1, 'transactions': transactions_js, 'all_address_info':user.all_addresses}
+        else:
+            js = {'error': error}
+    except:
+        log_error("EXCEPTION in upload_csv", address, request.args)
+        js = {'error': 'An error has occurred while uploading a file'}
+    pb.set('Uploading to your browser', 100)
+    redis.finish()
+    data = json.dumps(js)
+    return data
+
+@app.route('/delete_upload',methods=['GET', 'POST'])
+def delete_upload():
+    init()
+    address = normalize_address(request.args.get('address'))
+    # chain_name = request.args.get('chain')
+    persist(address)
+    try:
+        form = request.form
+
+        upload_source = form['chain']
+
+
+        log('delete upload', address, upload_source)
+
+        user = User(address)
+        txids_to_delete = user.delete_upload(upload_source)
+        user.load_addresses()
+        user.load_tx_counts()
+        user.done()
+        js = {'success': 1, 'txids':txids_to_delete,'all_address_info':user.all_addresses}
+    except:
+        log("EXCEPTION in delete_upload", traceback.format_exc())
+        log_error("EXCEPTION in delete_upload", address, request.args, request.form)
+        js = {'error':'An error has occurred while deleting an upload'}
+    data = json.dumps(js)
+    return data
+
+@app.route('/update_coingecko_id',methods=['GET', 'POST'])
+def update_coingecko_id():
+    init()
+    address = normalize_address(request.args.get('address'))
+    persist(address)
+    redis = Redis(address)
+    redis.start()
+    pb = ProgressBar(redis)
+    pb.set('Starting', 0)
+    try:
+        chain_name = request.args.get('chain')
+        contract = request.args.get('contract')
+        new_id = request.args.get('new_id')
+
+
+        user = User(address)
+        C = Coingecko.init_from_cache(user)
+        C.make_contracts_map()
+        error, transactions_js = user.update_coingecko_id(chain_name,contract,new_id, C, pb)
+        user.done()
+        if error is None:
+            js = {'success': 1, 'transactions': transactions_js}
+        else:
+            js = {'error': error}
+    except:
+        log_error("EXCEPTION in update_coingecko_id", address, request.args)
+        js = {'error': 'An error has occurred while updating coingecko ID'}
+    pb.set('Uploading to your browser', 100)
+    redis.finish()
+    data = json.dumps(js)
+    return data
+
+@app.route('/save_options',methods=['GET', 'POST'])
+def save_options():
+    init()
+    address = normalize_address(request.args.get('address'))
+    persist(address)
+    try:
+        form = request.form
+        recalc_needed = False
+        reproc_needed = False
+
+        fiat = form['opt_fiat']
+        adjust_custom = False
+        if 'opt_fiat_update_custom' in form:
+            adjust_custom = form['opt_fiat_update_custom'] in ['on','checked']
+        log('adjust_custom',adjust_custom)
+
+        js = {}
+        user = User(address)
+        if fiat != user.fiat:
+            reproc_needed = True
+            user.load_fiat()
+            user.set_info('fiat',fiat)
+            js['fiat'] = fiat
+            if adjust_custom:
+                user.adjust_custom_rates(fiat)
+
+        radio_options = ['tx_costs','vault_gain','vault_loss']
+        for opt in radio_options:
+            opt_code = 'opt_'+opt
+            if opt_code in form:
+                current_val = user.get_info(opt_code)
+                new_val = form[opt_code]
+                log('opt',opt_code,current_val,new_val)
+                if current_val != new_val:
+                    js[opt_code] = new_val
+                    user.set_info(opt_code,new_val)
+                    recalc_needed = True
+
+
+        user.done()
+        js.update({'success': 1, 'reproc_needed':reproc_needed, 'recalc_needed':recalc_needed})
+    except:
+        log("EXCEPTION in save_options", traceback.format_exc())
+        log_error("EXCEPTION in save_options", address, request.args)
+        js = {'error': 'An error has occurred while saving options'}
+    data = json.dumps(js)
+    return data
+
+@app.route('/minmax_transactions',methods=['GET','POST'])
+def minmax_transactions():
+    init()
+    address = normalize_address(request.args.get('address'))
+    persist(address)
+    try:
+        form = request.form
+
+        minimized = form['minimized']
+        transactions = form['transactions']
+
+        log('minmax_transaction', address, minimized, transactions)
+        user = User(address)
+        user.db.do_logging=True
+        user.db.update_kw('transactions',"id IN "+sql_in(transactions),minimized=minimized)
+        user.db.commit()
+        user.done()
+        js = {'success': 1}
+    except:
+        log("EXCEPTION in minmax_transaction", traceback.format_exc())
+        log_error("EXCEPTION in minmax_transaction", address, request.args)
+        js = {'error': 'An error has occurred while saving information'}
+    data = json.dumps(js)
+    return data
+
+@app.route('/delete_address',methods=['GET', 'POST'])
+def delete_address():
+    init()
+    address = normalize_address(request.args.get('address'))
+    # chain_name = request.args.get('chain')
+    persist(address)
+    try:
+        form = request.form
+
+        address_to_delete = form['address_to_delete']
+
+
+        log('delete address', address, address_to_delete)
+
+        user = User(address)
+        need_reproc = user.delete_address(address_to_delete)
+        if need_reproc:
+            user.set_info('force_forget_derived',1)
+        user.load_addresses()
+        user.load_tx_counts()
+        user.done()
+        js = {'success': 1, 'all_address_info':user.all_addresses, 'reproc_needed':need_reproc}
+    except:
+        log("EXCEPTION in delete_address", traceback.format_exc())
+        log_error("EXCEPTION in delete_address", address, request.args, request.form)
+        js = {'error':'An error has occurred while deleting an address'}
+    data = json.dumps(js)
+    return data
+
+
 
 @app.route('/cross_user')
 def cross_user():
-    os.chdir('/home/ubuntu/hyperboloid') if FLASK_ENV == "production" else False
+    init()
     dirs = os.listdir('data/users/')
 
     query = "SELECT count(id) FROM custom_types_rules WHERE token=='base'"
