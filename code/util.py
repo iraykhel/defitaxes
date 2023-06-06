@@ -173,7 +173,7 @@ def log_error(*args,**kwargs):
 def clog(transaction, *args, **kwargs):
     if transaction.hash == transaction.chain.hif:
         args = [transaction.hash]+list(args)
-        log(*args,kwargs)
+        log(*args,**kwargs)
 
 # progress_bar = None
 class ProgressBar:

@@ -491,7 +491,7 @@ class Chain:
         if wrapper is not None:
             self.wrapper = normalize_address(wrapper)
 
-        self.hif = '0xd30822305c563c321df2137934d57bb409e17dbd64e8c2e85b2773052ea58502'
+        self.hif = '47M65BG4riNsp4HwtEYdKx9dy4rC6QNM8zY1h1jf3aXEoWmGgDcrZcFLj7777ebvfHsThoTzVWZkpo6kLPuB9NSD'
         self.wait_time = 1/float(rate_limit)+0.05
 
         self.wait_time *= 2
@@ -2233,12 +2233,6 @@ class Chain:
             else:
                 clog(source,"Adding transfer",sub_data, "synthetic",synthetic)
                 destination.append(type, sub_data, synthetic=synthetic)
-            # address_db.commit()
-
-        # for idx,contract in enumerate(counterparty_list):
-        #     self.update_address_from_scan(address_db, user,normalize_address(contract))
-        #
-        #     self.update_pb('Looking up counterparties (runs slowly once): '+str(idx)+'/'+str(len(counterparty_list)),pb_per_contract)
 
 
 

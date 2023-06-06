@@ -11,7 +11,7 @@ from .sqlite import *
 from .chain import Chain
 
 class Coingecko:
-    def __init__(self, verbose=False,use_pro=True):
+    def __init__(self, verbose=False,use_pro=False):
         self.contracts_map = defaultdict(dict)
 
         # self.symbol_map = defaultdict(dict)

@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from .transaction import Transaction, Transfer
 from .chain import Chain
-from .util import log, normalize_address, log_error
+from .util import log, normalize_address, log_error, clog
 from .imports import Import
 
 import base64
@@ -45,7 +45,7 @@ class Solana(Chain):
         self.wait_time = 0.25
         self.solscan_session = requests.session()
         self.explorer_session = requests.session()
-        self.hif = '2GAypSN6CZKChduqsGB4EvmVgwSzGvxjdHbKrigv7Vkj2mByQDkZN4xdJ4HjoAr7Sv73ivk2nU8k6coVS1DcmDFP'
+        self.hif = '47M65BG4riNsp4HwtEYdKx9dy4rC6QNM8zY1h1jf3aXEoWmGgDcrZcFLj7777ebvfHsThoTzVWZkpo6kLPuB9NSD'
 
         self.solana_nft_data = {}
         self.solana_proxy_map = {}
@@ -457,10 +457,12 @@ class Solana(Chain):
 
 
         proxy_to_token_mapping = {}
+        other_accounts_proxy_mapping = {}
         SOL = '11111111111111111111111111111111'
         SPL = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
         WSOL = 'So11111111111111111111111111111111111111112'
         #collect all proxy accounts and valid proxy ownership periods OHMYGOD SOLANA WHY
+        missing_owners = {}
         account_deposits = {}
         for tx_hash, tx_data in all_tx_data.items():
             if tx_data is None:
@@ -535,22 +537,32 @@ class Solana(Chain):
                     if 'type' in parsed:
                         type = parsed['type']
                         info = parsed['info']
-                        if type == 'setAuthority' and programId == SPL:
-                            if info['authorityType'] == 'accountOwner':
-                                proxy = info['account']
-                                old = get_authority(info)
-                                new = info['newAuthority']
-                                if address == old:
-                                    proxy_to_token_mapping[proxy]['periods'][-1][1] = ts
-                                    log("Reassign proxy away", proxy,proxy_to_token_mapping[proxy])
+                        if programId == SPL:
+                            if type == 'setAuthority':
+                                if info['authorityType'] == 'accountOwner':
+                                    proxy = info['account']
+                                    old = get_authority(info)
+                                    new = info['newAuthority']
+                                    if address == old:
+                                        proxy_to_token_mapping[proxy]['periods'][-1][1] = ts
+                                        log("Reassign proxy away", proxy,proxy_to_token_mapping[proxy])
 
-                                if address == new:
-                                    mint = self.get_nft_address_from_tx(tx_data)
-                                    if proxy not in proxy_to_token_mapping:
-                                        proxy_to_token_mapping[proxy] = {'token':mint,'periods':[[ts,None]]}
-                                    else:
-                                        proxy_to_token_mapping[proxy]['periods'].append([ts,None])
-                                    log("Reassign proxy here", proxy, mint)
+                                    if address == new:
+                                        mint = self.get_nft_address_from_tx(tx_data)
+                                        if proxy not in proxy_to_token_mapping:
+                                            proxy_to_token_mapping[proxy] = {'token':mint,'periods':[[ts,None]]}
+                                        else:
+                                            proxy_to_token_mapping[proxy]['periods'].append([ts,None])
+                                        log("Reassign proxy here", proxy, mint)
+
+                            if type in ['transfer','transferChecked']:
+                                destination = info['destination']
+                                source = info['source']
+                                for adr in [source,destination]:
+                                    if adr not in proxy_to_token_mapping:
+                                        missing_owners[adr] = None
+
+
 
                 except:
                     log('error - failed to parse',traceback.format_exc(),filename='solana.txt')
@@ -574,11 +586,26 @@ class Solana(Chain):
         log("missing_from_pulled",len(missing_from_pulled),missing_from_pulled, filename='solana.txt')
         log("missing_from_running", len(missing_from_running), missing_from_running, filename='solana.txt')
 
+
+        account_info_list = self.explorer_multi_request({"method": "getAccountInfo", "jsonrpc": "2.0", "params": [None, {"encoding": "jsonParsed", "commitment": "confirmed"}]},
+                                                        list(missing_owners.keys()), pb_text='Getting info for token holding accounts you interacted with', pb_alloc=pb_alloc * 0.03)
+        for proxy, entry in account_info_list.items():
+            try:
+                data = entry['value']['data']['parsed']['info']
+                owner = data['owner']
+                state = data['state']
+                if state == 'initialized':
+                    missing_owners[proxy] = owner
+            except:
+                log("Failed to get info", proxy, entry)
+                continue
+        log("missing_owners", missing_owners, filename='solana.txt')
+
         for token in list(missing_from_running):
             all_token_data[token] = {'proxies': [], 'name': 'Unknown token', 'symbol': 'Unknown (' + token[:6] + '...)', 'mint_authority': token, 'uri': None, 'update_authority': token, 'decimals': 6}
 
         account_info_list = self.explorer_multi_request({"method": "getAccountInfo", "jsonrpc": "2.0", "params": [None, {"encoding": "jsonParsed", "commitment": "confirmed"}]},
-                                                        list(all_token_data.keys()),  pb_text='Getting info for tokens at ' + address,pb_alloc=pb_alloc*0.05)
+                                                        list(all_token_data.keys()),  pb_text='Getting info for tokens at ' + address,pb_alloc=pb_alloc*0.02)
         for token, entry in account_info_list.items():
             try:
                 data = entry['value']['data']['parsed']['info']
@@ -692,6 +719,8 @@ class Solana(Chain):
         nonce = 0
         all_transactions = {}
         type_counter = defaultdict(int)
+
+
 
         tx_sol_mismatches = []
         for tx_hash, ts, tx_data in tx_list:
@@ -822,20 +851,35 @@ class Solana(Chain):
                             token = None
                             authority = get_authority(info)
 
-
+                            source_suspect = False
                             if proxy_is_owned(source,ts):
                                 proxy = source
                                 token = proxy_to_token_mapping[source]['token']
                                 source = address
                             elif authority is not None and authority != address:
                                 source = authority
+                            elif source != address:
+                                if source in missing_owners and missing_owners[source] is not None:
+                                    source = missing_owners[source]
+                                else:
+                                    source_suspect = True
 
+
+
+
+                            destination_suspect = False
                             if proxy_is_owned(destination, ts):
                                 proxy = destination
                                 token = proxy_to_token_mapping[destination]['token']
                                 destination = address
-                            elif authority is not None and authority != source:
+                            elif authority is not None and authority != address:
                                 destination = authority
+                            elif destination != address:
+                                if destination in missing_owners and missing_owners[destination] is not None:
+                                    destination = missing_owners[destination]
+                                else:
+                                    destination_suspect = True
+
 
                             if token is not None:
                                 if address in [source, destination]:
@@ -846,7 +890,7 @@ class Solana(Chain):
                                         amount = info['tokenAmount']['uiAmount']
                                     if amount > 0:
                                         log("Token transfer", source, "->", destination, ":", amount, 'proxy',proxy,'token',token,filename='solana.txt')
-                                        transfers.append({'what': token, 'from': source, 'to': destination, 'amount': amount})
+                                        transfers.append({'what': token, 'from': source, 'to': destination, 'amount': amount, 'source_suspect':source_suspect, 'destination_suspect':destination_suspect})
 
                                         if token == WSOL:
                                             wsol_operation(proxy, 'transfer', len(transfers)-1)
@@ -1185,6 +1229,12 @@ class Solana(Chain):
 
                     row = [tx_hash, ts, nonce, ts, fr, to, t['amount'], symbol, token, None, nft_id, 0, input_len, input]
                     T.append(type, row)
+                    if 'source_suspect' in t and t['source_suspect']:
+                        clog(T,"Setting suspect source in transfer",T.grouping[-1],filename='solana.txt')
+                        T.grouping[-1][6] |= Transfer.SUSPECT_FROM
+                    if 'destination_suspect' in t and t['destination_suspect']:
+                        clog(T, "Setting suspect destination in transfer", T.grouping[-1],filename='solana.txt')
+                        T.grouping[-1][6] |= Transfer.SUSPECT_FROM
                 all_transactions[tx_hash] = T
                 # all_transactions.append(T)
 
@@ -2848,6 +2898,40 @@ class Solana(Chain):
 
         return True, db_writes
 
+
+    def merge_transaction(self, source, destination):
+        clog(source,"Merging",filename='solana.txt')
+        if destination.function is None:
+            destination.function = source.function
+
+        if destination.interacted is None:
+            destination.interacted = source.interacted
+
+        if destination.originator is None:
+            destination.originator = source.originator
+
+        for source_idx, (type, sub_data, transfer_id, custom_treatment, custom_rate, custom_vaultid, synthetic, derived) in enumerate(source.grouping):
+            hash, ts, nonce, block, fr, to, val, token, token_contract, coingecko_id, token_nft_id, base_fee, input_len, input = sub_data
+            for dest_idx, (c_type, c_sub_data, _, _, _, _, _, _) in enumerate(destination.grouping):
+                hash, ts, nonce, block, c_fr, c_to, c_val, c_token, c_token_contract, c_coingecko_id, c_token_nft_id, c_base_fee, c_input_len, c_input = c_sub_data
+                if val == c_val and token == c_token and token_nft_id == c_token_nft_id and input == c_input:
+                    if fr == c_fr and to == c_to:
+                        clog(source, "Skipping transfer", sub_data, "synthetic", synthetic,filename='solana.txt')
+                        break
+
+                    elif fr == c_fr or to == c_to:
+                        # clog(source, "Skipping transfer", sub_data, "synthetic", synthetic)
+                        if source.my_address(fr) and not source.my_address(c_fr):
+                            clog(source, "Updating transfer from address", c_fr, "->", fr,filename='solana.txt')
+                            destination.grouping[dest_idx][4] = fr
+                            break
+                        elif source.my_address(to) and not source.my_address(c_to):
+                            clog(source, "Updating transfer to address", c_to, "->", to,filename='solana.txt')
+                            destination.grouping[dest_idx][5] = to
+                            break
+            else:
+                clog(source,"Adding transfer",sub_data, "synthetic",synthetic,filename='solana.txt')
+                destination.append(type, sub_data, synthetic=synthetic)
 
 
 
