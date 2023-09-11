@@ -152,6 +152,34 @@ class Chain:
             'cp_availability': 10
         },
 
+        'zkEVM': {
+            'scanner': 'zkevm.polygonscan.com',
+            'base_asset': 'ETH',
+            'api_key': 'api_key_polygonscan_zkevm',
+            'wrapper': '0x4F9A0e7FD2Bf6067db6994CF12E4495Df938E6e9',
+            'coingecko_platform': 'polygon-zkevm',
+            'coingecko_id': 'ethereum',
+            'simplehash_mapping': 'polygon-zkevm',
+            'explorer_url': 'https://api-zkevm.polygonscan.com/api',
+            'order': 4.5,
+            'support': 3,
+            '1155_support': 3,
+            'debank_mapping': None,
+        },
+
+        'Base': {
+            'scanner': 'basescan.org',
+            'base_asset': 'ETH',
+            'api_key': 'api_key_base',
+            'wrapper': '0x4200000000000000000000000000000000000006',
+            'coingecko_id': 'ethereum',
+            'simplehash_mapping': 'base',
+            'order': 4.6,
+            'support': 3,
+            '1155_support': 3,
+            'debank_mapping': None
+        },
+
         'Avalanche': {
             'scanner': 'snowtrace.io',
             'base_asset': 'AVAX',
@@ -237,8 +265,15 @@ class Chain:
             'support': 3
         },
 
+        # 'Canto': {
+        #     'scanner': 'evm.explorer.canto.io',
+        #     'wrapper': '0x826551890dc65655a0aceca109ab11abdbd7a07b',
+        #     'blockscout':1,
+        #     'order': 10,
+        #     'support': 3
+        # },
         'Canto': {
-            'scanner': 'evm.explorer.canto.io',
+            'scanner': 'tuber.build',
             'wrapper': '0x826551890dc65655a0aceca109ab11abdbd7a07b',
             'blockscout':1,
             'order': 10,
@@ -318,15 +353,15 @@ class Chain:
             'support': 3
         },
 
-        'Metis': {
-            'scanner': 'andromeda-explorer.metis.io',
-            'wrapper': '0x75cb093e4d61d2a2e65d8e0bbb01de8d89b53481',
-            'coingecko_platform': 'metis-andromeda',
-            'coingecko_id': 'metis-token',
-            'blockscout': 1,
-            'order': 19,
-            'support': 3
-        },
+        # 'Metis': {
+        #     'scanner': 'andromeda-explorer.metis.io',
+        #     'wrapper': '0x75cb093e4d61d2a2e65d8e0bbb01de8d89b53481',
+        #     'coingecko_platform': 'metis-andromeda',
+        #     'coingecko_id': 'metis-token',
+        #     'blockscout': 1,
+        #     'order': 19,
+        #     'support': 3
+        # },
 
         'Oasis': {
             'scanner': 'explorer.emerald.oasis.dev',
@@ -397,14 +432,23 @@ class Chain:
             'support': 3
         },
 
-        'Boba': {
-            'scanner': 'blockexplorer.bobabeam.boba.network',
-            'wrapper': '0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000',
-            'coingecko_id': 'boba-network',
-            'blockscout': 1,
-            'order': 26,
-            'support': 3
-        },
+        # 'Boba': {
+        #     'scanner': 'blockexplorer.bobabeam.boba.network',
+        #     'wrapper': '0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000',
+        #     'coingecko_id': 'boba-network',
+        #     'blockscout': 1,
+        #     'order': 26,
+        #     'support': 3
+        # },
+
+        #  'Boba': {
+        #     'scanner': 'bobascan.com',
+        #     'scanner_name':'Bobascan',
+        #     'api_key': 'api_key_bobascan',
+        #     'wrapper': '0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000',
+        #     'order': 26,
+        #     'support': 3
+        # },
 
         'SXnetwork': {
             'scanner': 'explorer.sx.technology',
@@ -607,6 +651,7 @@ class Chain:
             if entry is not None:
                 entry = self.name+": "+entry
             self.progress_bar.update(entry,percent)
+
 
     def init_addresses(self,address_db, contract_list=None):
         log("init_addresses",self.name,filename='address_lookups.txt')
@@ -904,7 +949,7 @@ class Chain:
         rq_cnt = 2
         if not self.blockscout:
             rq_cnt += 1
-        if self.name in ['ETH', 'Polygon', 'Arbitrum', 'Optimism', 'Avalanche', 'Gnosis']:
+        if self.name in ['ETH', 'Polygon', 'Arbitrum', 'Optimism', 'Avalanche', 'Gnosis', 'zkEVM','Base']:
             rq_cnt += 1
         if self.name == 'Polygon':
             rq_cnt += 1
@@ -1183,7 +1228,7 @@ class Chain:
                 transactions[hash].append(4, row)
 
         t4 = time.time()
-        if self.name in ['ETH','Polygon','Arbitrum','Optimism','Avalanche','Gnosis']:
+        if self.name in ['ETH','Polygon','Arbitrum','Optimism','Avalanche','Gnosis','zkEVM','Base']:
             self.update_pb('Retrieving ERC1155 transactions for ' + address, per_type_alloc)
             data = self.get_all_transaction_from_api(address, 'token1155tx',max_per_page=mpp)
             # all_errors = all_errors.union(errors)

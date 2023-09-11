@@ -2066,7 +2066,7 @@ class User:
                             symbol = entry['contract']['symbol']
                             type = entry['contract']['type']
                             #'ETH','Polygon','Arbitrum','Optimism','Avalanche','Gnosis'
-                            if chain_name in ['BSC','Polygon','Fantom'] and type == 'ERC1155': #no scanner support for ERC1155 on these chains. Polygon support is shitty.
+                            if chain_name in ['BSC','Polygon','Fantom','zkEVM'] and type == 'ERC1155': #no scanner support for ERC1155 on these chains. Polygon support is shitty.
                                 continue
                             for bal in entry['queried_wallet_balances']:
                                 amount = bal['quantity']

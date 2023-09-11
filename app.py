@@ -579,6 +579,7 @@ def process():
                         current_tokens = chain.get_current_tokens(active_address)
                         # chain_data['transactions'].update(transactions)  #PROBLEM IF CROSS-WALLET TRANSFERS! Newly-downloaded overwrite previous. Need to merge transfers by only adding new ones.
                         for txhash, transaction in transactions.items():
+                            log('txhash proc',txhash)
                             if txhash not in chain_data['transactions']:
                                 chain_data['transactions'][txhash] = transaction
                             else:

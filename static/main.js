@@ -322,6 +322,7 @@ function show_last_update(last_transaction_timestamp,update_import_needed) {
         ttime = timeConverter(last_transaction_timestamp);
         html = "You last imported transactions at "+ttime+" (UTC).<br>";
         html += "<label>Import new transactions that you made since then? <input type=checkbox id='import_new_transactions'></label>";
+
         if (update_import_needed)
             html += "<div id='updated_note'>Software has been updated since your last visit. "+
             "Importing new transactions will also fix some issues with the old ones, and is strongly recommended. "
@@ -1031,18 +1032,28 @@ function show_eula() {
     if (!eula_agreed)
     {
         let html ="<div id='overlay'></div><div id='eula' class='popup'>";
-        html += "<h3>BEWARE! DISCLAIMITY DISCLAIMER!</h3>";
-        html += "<p>So, we could've hired a lawyer and written a regular 74-page terms agreement and asked you to say you read it but we both know it's bullshit.</p>";
-        html += "<p>Here's what you need to know:</p><p>We made this service to help you with your blockchain tax filing. It will NOT magically turn your transactions "+
-        "into tax forms. We will attempt to classify and pick the correct tax treatment for your transfers; we also absolutely 100% guarantee that it's going to "+
-        "occasionally be wrong. Sometimes we will have no idea what this or that transfer is. You MUST go over your transactions and inspect them. "+
-        "We will give you tools to make corrections, and those tools are better than what anyone else currently offers. Even after you make corrections, due to bugs "+
-        "and half-assed programming the tax filing may still end up wrong.</p>"+
-        "<p>So, to recap. We don't guarantee correctness in any way. This warning isn't here just to cover our asses,"+
-        " we really mean it! You promise not to blame us if the IRS comes a knocking. Oh, and also we'll stick some cookies in your browser. We good?</p>"
+//        html += "<h3>BEWARE! DISCLAIMITY DISCLAIMER!</h3>";
+//        html += "<p>So, we could've hired a lawyer and written a regular 74-page terms agreement and asked you to say you read it but we both know it's bullshit.</p>";
+//        html += "<p>Here's what you need to know:</p><p>We made this service to help you with your blockchain tax filing. It will NOT magically turn your transactions "+
+//        "into tax forms. We will attempt to classify and pick the correct tax treatment for your transfers; we also absolutely 100% guarantee that it's going to "+
+//        "occasionally be wrong. Sometimes we will have no idea what this or that transfer is. You need to go over your transactions and inspect them. "+
+//        "We will give you tools to make corrections, and those tools are better than what anyone else currently offers. Even after you make corrections, due to bugs "+
+//        "and half-assed programming the tax filing may still end up wrong.</p>"+
+//        "<p>So, to recap. We don't guarantee correctness in any way. This warning isn't here just to cover our asses,"+
+//        " we really mean it! You promise not to blame us if the IRS comes a knocking. Oh, and also we'll stick some cookies in your browser. We good?</p>"
+        html += "<h3>Disclaimer</h3>";
+        html += "<p>This service will help you with your blockchain tax filing. It will NOT automatically turn your transactions "+
+        "into correct tax forms, that is impossible because there are so many DeFi protocols, each one requiring customized treatment. " +
+        "This software will attempt to classify and pick the correct tax treatment for your transfers, but it will be frequently wrong (just like any other software attempting to do this). " +
+        "Sometimes it will have no idea what this or that transfer is. You need to go over your transactions and inspect them. "+
+        "There are tools for you to make corrections, and the color of each transaction will indicate how certain the software is of correct handling. " +
+        "However, even after you made the corrections, there is still a risk that the tax forms will still be wrong. "+
+        "</p>"+
+        "<p>To recap: there is absolutely no guarantee of correct tax filing when using this service. Additionally, this site uses cookies. Do you accept?</p>"
+
         html += "<div class='sim_buttons'>";
-        html += "<div id='agree_eula'>We good. I'm not gonna blame you for wrong tax filing.</div>";
-        html += "<div id='disagree_eula'>Nah, I'm outta here!</div>";
+        html += "<div id='agree_eula'>Yes. I'm not going to blame you for a wrong tax filing.</div>";
+        html += "<div id='disagree_eula'>Nevermind</div>";
         html += "</div>";
         html += "</div>";
         $('#content').append(html);
