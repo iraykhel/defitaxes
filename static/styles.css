@@ -1973,6 +1973,12 @@ table#chain_support tr.support_3 td {
     background-color:#FFAC3A;
 }
 
+table#chain_support tr.support_0 td {
+    background-color:#AAAAAA;
+}
+
+
+
 table#chain_support td {
     padding:20px;
     border: 1px solid white;

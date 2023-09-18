@@ -80,6 +80,8 @@ def chain_support():
         conf = Chain.CONFIG[chain_name]
         support_level = conf['support']
         support_level_text = support_level_text_map[support_level]
+        if support_level == 0:
+            support_level_text = 'Discontinued'
 
         data_source_url = "https://"+conf['scanner']
         data_source_name = conf['scanner']
@@ -528,7 +530,7 @@ def process():
         total_request_count_disp = 0
         for chain_name, chain_data in all_chains.items():
             chain = chain_data['chain']
-            if chain.is_upload:
+            if chain.is_upload or chain.discontinued:
                 continue
 
             addresses = chain_data['import_addresses']

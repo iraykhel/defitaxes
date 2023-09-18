@@ -353,15 +353,15 @@ class Chain:
             'support': 3
         },
 
-        # 'Metis': {
-        #     'scanner': 'andromeda-explorer.metis.io',
-        #     'wrapper': '0x75cb093e4d61d2a2e65d8e0bbb01de8d89b53481',
-        #     'coingecko_platform': 'metis-andromeda',
-        #     'coingecko_id': 'metis-token',
-        #     'blockscout': 1,
-        #     'order': 19,
-        #     'support': 3
-        # },
+        'Metis': {
+            'scanner': 'andromeda-explorer.metis.io',
+            'wrapper': '0x75cb093e4d61d2a2e65d8e0bbb01de8d89b53481',
+            'coingecko_platform': 'metis-andromeda',
+            'coingecko_id': 'metis-token',
+            'blockscout': 1,
+            'order': 19,
+            'support': 0,
+        },
 
         'Oasis': {
             'scanner': 'explorer.emerald.oasis.dev',
@@ -441,14 +441,14 @@ class Chain:
         #     'support': 3
         # },
 
-        #  'Boba': {
-        #     'scanner': 'bobascan.com',
-        #     'scanner_name':'Bobascan',
-        #     'api_key': 'api_key_bobascan',
-        #     'wrapper': '0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000',
-        #     'order': 26,
-        #     'support': 3
-        # },
+         'Boba': {
+            'scanner': 'bobascan.com',
+            'scanner_name':'Bobascan',
+            'api_key': 'api_key_bobascan',
+            'wrapper': '0xdeaddeaddeaddeaddeaddeaddeaddeaddead0000',
+            'order': 26,
+            'support': 0,
+        },
 
         'SXnetwork': {
             'scanner': 'explorer.sx.technology',
@@ -506,7 +506,7 @@ class Chain:
 
     }
 
-    def __init__(self,name,domain,main_asset, api_key, outbound_bridges=(),inbound_bridges=(),wrapper=None,rate_limit=5,blockscout=False,explorer_url=None, is_upload=False):
+    def __init__(self,name,domain,main_asset, api_key, outbound_bridges=(),inbound_bridges=(),wrapper=None,rate_limit=5,blockscout=False,explorer_url=None, is_upload=False,discontinued=False):
         self.is_upload = is_upload
         self.domain = domain
         self.explorer_url = None
@@ -563,6 +563,7 @@ class Chain:
         self.transferred_tokens = set()
 
         self.proxy = 'http://5uu5k:7sdcf2x2@104.128.115.239:5432'
+        self.discontinued = discontinued
 
     def __str__(self):
         return self.name+" chain"
@@ -636,13 +637,17 @@ class Chain:
         if 'explorer_url' in conf:
             explorer_url = conf['explorer_url']
 
+        discontinued = False
+        if 'support' in conf and conf['support'] == 0:
+            discontinued = True
+
         chain = Chain(chain_name, conf['scanner'], base_asset, api_key,
                         outbound_bridges=outbound_bridges,
                         inbound_bridges=inbound_bridges,
                         wrapper=wrapper,
                         blockscout=blockscout,
                         explorer_url = explorer_url,
-                        rate_limit=rate_limit)
+                        rate_limit=rate_limit, discontinued=discontinued)
         return chain
 
 
@@ -929,6 +934,8 @@ class Chain:
 
 
     def check_presence(self,address):
+        if self.discontinued:
+            return False
         if self.name == 'EVMOS':
             data = self.get_all_transaction_from_api(address, 'txlist', reps=1, max_pages=1, timeout=5, sort=None, startblock=None)
         else:
@@ -941,6 +948,8 @@ class Chain:
         return False
 
     def get_transactions(self,user, address,pb_alloc):
+        if self.discontinued:
+            return {}
         # pb_alloc = 20./self.chain_count
         mpp = 10000
         if self.name == 'HECO':
