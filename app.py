@@ -713,7 +713,7 @@ def process():
             threads = []
             for chain_name, chain_data in all_chains.items():
                 chain = chain_data['chain']
-                if not chain.blockscout and not chain.is_upload:
+                if not chain.blockscout and not chain.is_upload and not chain.use_routescan_backup:
                     filtered_counterparty_list = chain.filter_progenitors(list(counterparty_by_chain[chain_name]))
                     log('filtered_counterparty_list', chain_name, filtered_counterparty_list, filename='address_update.txt')
                     if len(filtered_counterparty_list) > 0:

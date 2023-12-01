@@ -357,7 +357,7 @@ class Coingecko:
                 sleep = 0.2
             else:
                 url = "https://api.coingecko.com/api/v3/coins/" + id + "/market_chart/range?vs_currency=usd&from=" + str(start) + "&to=" + str(end)
-                sleep = 2
+                sleep = 3
             log("Calling", url, filename='coingecko2.txt')
             time.sleep(sleep)
             try:
@@ -368,10 +368,10 @@ class Coingecko:
             try:
                 data = data.json()
             except:
-                log_error("Couldn't parse coingecko response", id, start)
+                log_error("Couldn't parse coingecko response", url)
                 continue
             if 'prices' not in data:
-                log_error("Couldn't find price data", id, start)
+                log_error("Couldn't find price data", url, 'got',data)
                 continue
 
             prices = data['prices']

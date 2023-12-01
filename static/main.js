@@ -1065,7 +1065,7 @@ function show_eula() {
         });
 
         $('#disagree_eula').on('click',function() {
-            window.open("https://www.google.com/search?q=hire+a+programmer+to+do+my+blockchain+taxes")
+            window.open("https://www.google.com")
         });
     }
 }
@@ -1265,7 +1265,7 @@ $(function() {
 //                                console.log('custom types?',data['custom_types']);
                         selection_operations(data['builtin_types'],data['custom_types']);
                         assist_block();
-                        br_block();
+//                        br_block();
                         $('#sel_opt_all').click();
 //                        console.log("make_pagination in main")
                         make_pagination();
@@ -2162,7 +2162,7 @@ function assist_block() {
     html += "<a id='discord_link' href='https://discord.gg/E7yuUZ3W4X' target='_blank'>Discord</a>"
     html += "<a id='twitter_link' href='https://twitter.com/defitaxes' target='_blank'>Twitter</a>"
     html += "</div></div>"
-    html += "<div class='assist_line'><div id='attribution'>Powered by <a href='chains.html' target=_blank>Etherscan and Blockscout scanners</a></div></div>"
+    html += "<div class='assist_line'><div id='attribution'>Powered by <a href='chains.html' target=_blank>Etherscan, Blockscout, Routescan</a></div></div>"
     html += "</div>";
     $('#content').append(html);
 }

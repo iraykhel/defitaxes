@@ -82,7 +82,8 @@ class Chain:
             'order':0,
             'support':10,
             '1155_support':10,
-            'cp_availability':10
+            'cp_availability':10,
+            'routescan':1,
         },
 
         'BSC': {
@@ -177,7 +178,8 @@ class Chain:
             'order': 4.6,
             'support': 3,
             '1155_support': 3,
-            'debank_mapping': None
+            'debank_mapping': None,
+            'routescan':8453
         },
 
         'Avalanche': {
@@ -194,6 +196,7 @@ class Chain:
             '1155_support': 5,
             'cp_availability': 5,
             'covalent_mapping': 'avalanche-mainnet',
+            'routescan':43114
         },
 
         'Optimism': {
@@ -209,7 +212,8 @@ class Chain:
             # 'covalent_mapping': 10, #covalent fees are also wrong
             'order': 6,
             'support': 5,
-            'cp_availability': 3
+            'cp_availability': 3,
+            'routescan':10
         },
 
         'Fantom': {
@@ -273,7 +277,8 @@ class Chain:
         #     'support': 3
         # },
         'Canto': {
-            'scanner': 'tuber.build',
+            # 'scanner': 'tuber.build',
+            'scanner': 'explorer.plexnode.wtf',
             'wrapper': '0x826551890dc65655a0aceca109ab11abdbd7a07b',
             'blockscout':1,
             'order': 10,
@@ -301,7 +306,7 @@ class Chain:
             'coingecko_id': 'huobi-token',
             'debank_mapping':'heco',
             'order': 15,
-            'support': 5,
+            'support': 0,
             'cp_availability': 5
         },
 
@@ -353,15 +358,25 @@ class Chain:
             'support': 3
         },
 
+        # 'Metis': {
+        #     'scanner': 'andromeda-explorer.metis.io',
+        #     'wrapper': '0x75cb093e4d61d2a2e65d8e0bbb01de8d89b53481',
+        #     'coingecko_platform': 'metis-andromeda',
+        #     'coingecko_id': 'metis-token',
+        #     'blockscout': 1,
+        #     'order': 19,
+        #     'support': 0,
+        # },
         'Metis': {
-            'scanner': 'andromeda-explorer.metis.io',
-            'wrapper': '0x75cb093e4d61d2a2e65d8e0bbb01de8d89b53481',
-            'coingecko_platform': 'metis-andromeda',
-            'coingecko_id': 'metis-token',
-            'blockscout': 1,
-            'order': 19,
-            'support': 0,
-        },
+                'scanner': 'explorer.metis.io',
+                'explorer_url': 'https://api.routescan.io/v2/network/mainnet/evm/1/etherscan/api',
+                'wrapper': '0x75cb093e4d61d2a2e65d8e0bbb01de8d89b53481',
+                'coingecko_platform': 'metis-andromeda',
+                'coingecko_id': 'metis-token',
+                'order': 19,
+                'support': 3,
+                'routescan':1088
+            },
 
         'Oasis': {
             'scanner': 'explorer.emerald.oasis.dev',
@@ -382,7 +397,8 @@ class Chain:
             'dexscreener_mapping': None,
             'blockscout': 1,
             'order': 21,
-            'support': 3
+            'support': 3,
+            'routescan':19
         },
 
         'Flare': {
@@ -394,7 +410,8 @@ class Chain:
             'debank_mapping': None,
             'blockscout': 1,
             'order': 22,
-            'support': 3
+            'support': 3,
+            'routescan':14
         },
 
         'Step': {
@@ -408,7 +425,8 @@ class Chain:
             'dexscreener_mapping': 'stepnetwork',
             'blockscout': 1,
             'order': 23,
-            'support': 3
+            'support': 3,
+            'routescan':1234
         },
 
         'Doge': {
@@ -470,7 +488,7 @@ class Chain:
             'debank_mapping': 'sbch',
             'blockscout': 1,
             'order': 28,
-            'support': 3
+            'support': 0
         },
 
         'EVMOS': {
@@ -478,7 +496,7 @@ class Chain:
             'wrapper': '0xd4949664cd82660aae99bedc034a0dea8a0bd517',
             'blockscout': 1,
             'order': 29,
-            'support': 3
+            'support': 0
         },
 
         # 'Bitgert': {
@@ -506,7 +524,7 @@ class Chain:
 
     }
 
-    def __init__(self,name,domain,main_asset, api_key, outbound_bridges=(),inbound_bridges=(),wrapper=None,rate_limit=5,blockscout=False,explorer_url=None, is_upload=False,discontinued=False):
+    def __init__(self,name,domain,main_asset, api_key, outbound_bridges=(),inbound_bridges=(),wrapper=None,rate_limit=5,blockscout=False,explorer_url=None, is_upload=False,discontinued=False,routescan_id=None):
         self.is_upload = is_upload
         self.domain = domain
         self.explorer_url = None
@@ -564,6 +582,11 @@ class Chain:
 
         self.proxy = 'http://5uu5k:7sdcf2x2@104.128.115.239:5432'
         self.discontinued = discontinued
+
+        self.routescan_id = routescan_id
+        self.use_routescan_backup = False
+        if self.explorer_url is not None and 'routescan.io' in self.explorer_url:
+            self.use_routescan_backup = True
 
     def __str__(self):
         return self.name+" chain"
@@ -641,13 +664,17 @@ class Chain:
         if 'support' in conf and conf['support'] == 0:
             discontinued = True
 
+        routescan_id = None
+        if 'routescan' in conf:
+            routescan_id = conf['routescan']
+
         chain = Chain(chain_name, conf['scanner'], base_asset, api_key,
                         outbound_bridges=outbound_bridges,
                         inbound_bridges=inbound_bridges,
                         wrapper=wrapper,
                         blockscout=blockscout,
                         explorer_url = explorer_url,
-                        rate_limit=rate_limit, discontinued=discontinued)
+                        rate_limit=rate_limit, discontinued=discontinued, routescan_id=routescan_id)
         return chain
 
 
@@ -806,15 +833,15 @@ class Chain:
         return None, [], None, None
 
 
-    def get_ancestor_new(self,addresses):
-        url = self.explorer_url + "?module=contract&action=getcontractcreation&contractaddresses=" + ','.join(addresses) + "&apikey=" + self.api_key
-        resp = requests.get(url)
-        time.sleep(self.wait_time)
-        rv = {}
-        data = resp.json()['result']
-        for entry in data:
-            rv[entry['contractAddress']] = entry['contractCreator']
-        return rv
+    # def get_ancestor_new(self,addresses):
+    #     url = self.explorer_url + "?module=contract&action=getcontractcreation&contractaddresses=" + ','.join(addresses) + "&apikey=" + self.api_key
+    #     resp = requests.get(url)
+    #     time.sleep(self.wait_time)
+    #     rv = {}
+    #     data = resp.json()['result']
+    #     for entry in data:
+    #         rv[entry['contractAddress']] = entry['contractCreator']
+    #     return rv
 
     def get_all_transaction_from_api(self,address,action, reps=3, offset=None, max_pages=5, max_per_page=10000, timeout=30, page=None, sort='asc', startblock=0):
 
@@ -839,7 +866,12 @@ class Chain:
         while not done:
             overlap_cnt = 0
             self.update_pb()
-            url = self.explorer_url + '?module=account&action='+action+'&address=' + address
+            if self.use_routescan_backup:
+                explorer_url = f"https://api.routescan.io/v2/network/mainnet/evm/{self.routescan_id}/etherscan/api"
+            else:
+                explorer_url = self.explorer_url
+
+            url = explorer_url + '?module=account&action='+action+'&address=' + address
             if startblock is not None:
                 url += '&startblock=' + sb
                 if self.name == 'HECO':
@@ -857,6 +889,10 @@ class Chain:
             try:
                 resp = requests.get(url, headers=headers, timeout=timeout)
             except:
+                if self.routescan_id is not None and self.use_routescan_backup == False:
+                    self.use_routescan_backup = True
+                    return self.get_all_transaction_from_api(address,action, reps=reps-1, offset=offset, max_pages=max_pages, max_per_page=max_per_page, timeout=timeout, page=page, sort=sort, startblock=startblock)
+
                 time.sleep(3)
                 cur_rep += 1
                 if cur_rep == reps:
@@ -969,7 +1005,7 @@ class Chain:
         t = time.time()
         self.update_pb('Retrieving '+self.main_asset+' transactions for '+address,0)
         div = 1000000000000000000.
-        log('\n\ngetting transaction for',address,self.name)
+        log('\n\ngetting transactions for',address,self.name)
 
         #because shitty heco chain doesn't have hashes on txlistinternal, we need to try to locate tx by block
         if self.name == 'HECO':
@@ -2019,7 +2055,7 @@ class Chain:
             url = self.explorer_url + "?module=contract&action=getcontractcreation&contractaddresses=" + ','.join(five_addresses) + "&apikey=" + self.api_key
             log(self.name, "five address lookup url", url, filename='address_lookups.txt')
             try:
-                resp = requests.get(url, headers=headers, timeout=10)
+                resp = requests.get(url, headers=headers, timeout=20)
                 time.sleep(self.wait_time)
             except:
                 log_error("Failed to get contract creators", url)
