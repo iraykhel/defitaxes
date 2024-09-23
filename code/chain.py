@@ -196,6 +196,7 @@ class Chain:
             '1155_support': 5,
             'cp_availability': 5,
             'covalent_mapping': 'avalanche-mainnet',
+            'explorer_url': 'https://api.routescan.io/v2/network/mainnet/evm/43114/api',
             'routescan':43114
         },
 
@@ -868,6 +869,7 @@ class Chain:
             self.update_pb()
             if self.use_routescan_backup:
                 explorer_url = f"https://api.routescan.io/v2/network/mainnet/evm/{self.routescan_id}/etherscan/api"
+                offset = 10000
             else:
                 explorer_url = self.explorer_url
 

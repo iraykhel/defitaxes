@@ -186,11 +186,14 @@ class Solana(Chain):
 
 
 
-    def explorer_multi_request(self,json_template, query_list, batch_size=90,pb_alloc=None,pb_text = None, timeout=30):
+    def explorer_multi_request(self,json_template, query_list, batch_size=90,pb_alloc=None,pb_text = None, timeout=30, wait=0.2):
         if len(query_list) == 0:
             log('error: query_list is empty for',json_template,filename='solana.txt')
             return {}
-        rpc_url = 'https://floral-prettiest-wish.solana-mainnet.discover.quiknode.pro/'+os.environ.get('quicknode_solana_auth_token')+'/'
+        # rpc_url = 'https://floral-prettiest-wish.solana-mainnet.discover.quiknode.pro/'+os.environ.get('quicknode_solana_auth_token')+'/' #rate limited per sec
+        # rpc_url = 'https://api.mainnet-beta.solana.com/' #rate limited
+        # rpc_url = 'https://rpc.ankr.com/solana/c9a8aac3e365ed12c403993c587a032d28d24e638a204100c08a4c5976bcfae2' #does not get all transactions
+        rpc_url = 'https://solana-mainnet.g.alchemy.com/v2/'+os.environ.get('api_key_alchemy_for_solana')
 
         query_list = list(query_list)
         log('rpc call', json_template, len(query_list), query_list[0], filename='solana.txt')

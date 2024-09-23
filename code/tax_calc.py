@@ -440,6 +440,7 @@ class Loan:
 
         if amount > 0:
             # print("REPAY LOAN:REPAYING MORE THAN LOANED")
+            log("interest",'timestamp', timestamp, 'text', 'Interest on loan '+self.id, 'amount', amount * rate, 'txid',transaction['txid'],'trid',trid)
             interest_payments.append({'timestamp': timestamp, 'text': 'Interest on loan '+self.id, 'amount': amount * rate, 'txid': transaction['txid'],'trid':trid})
             rate = rate_pick(token, timestamp, running_rates, coingecko_rates, fiat_rate)
             trades.append(CA_transaction(timestamp, token, -amount, rate, txid, trid, queue_only=True)) #loss of assets
@@ -524,7 +525,10 @@ class CA_transaction:
             s += "acquire "+str(self.amount)
         else:
             s += "dispose " + str(-self.amount)
-        s += " of "+self.token.symbol() + " for "+str(self.rate)+" each"
+        s += " of "+self.token.symbol()
+        if self.token.nft_id is not None:
+            s += f"[{self.token.nft_id}]"
+        s += " for "+str(self.rate)+" each"
         return s
 
     def __repr__(self):
@@ -830,6 +834,7 @@ class Calculator:
                     self.ca_transactions.append(CA_transaction(timestamp, token, amount, rate, txid,trid,usd_fee=fee_amount_per_transaction))
 
                 if treatment == 'interest':
+                    log("interest", 'timestamp', timestamp, 'text', 'Interest on a loan'+explanation, 'amount', amount * rate, 'txid', txid, 'trid', trid)
                     self.interest_payments.append({'timestamp': timestamp, 'text': 'Interest on a loan'+explanation, 'amount': amount * rate, 'txid':txid,'trid':trid})
                     self.ca_transactions.append(CA_transaction(timestamp, token, -amount, rate, txid, trid, usd_fee=fee_amount_per_transaction))
 
@@ -952,9 +957,11 @@ class Calculator:
         CA_long = []
         CA_all = []
         errors = {}
+        log("processing queues")
         for idx, ca_trans in enumerate(self.ca_transactions):
             queue_only = ca_trans.queue_only
             token = ca_trans.token
+            is_nft = token.nft_id is not None
             # what = ca_trans.what
             # symbol = ca_trans.symbol
             # coingecko_id = ca_trans.coingecko_id
@@ -964,18 +971,20 @@ class Calculator:
                 queues[token] = []
                 modes[token] = 1
             q = queues[token]
-            log("trans",ca_trans,"q")#,"current q",q)
+            log("trans",ca_trans,"current q",q)
             mode = modes[token]
 
             amount = ca_trans.amount
             txid = ca_trans.txid
             trid = ca_trans.trid
             done = False
+            min_threshold = 0.000001
             while not done:
                 switch = False
                 if (amount > 0 and mode == 1) or (amount < 0 and mode == -1):
                     # if mode == -1:
                     #     print("Putting short on q", ca_trans)
+                    log("put current trans on q")
                     q.append(ca_trans)
                     done = True
                 else:
@@ -983,9 +992,11 @@ class Calculator:
                     fees = initial_fees = ca_trans.usd_fee
                     rate = ca_trans.rate
                     pos_amount = amount * mode
-                    while pos_amount > 0 and ((pos_amount * rate > 0.01 and rate != 0) or (pos_amount > 0.0001 and rate == 0)):
-
+                    log("subtracting from 1", "pos_amount",pos_amount,"rate",rate)
+                    while pos_amount > 0 and (is_nft or ((pos_amount * rate > min_threshold and rate != 0) or (pos_amount > 0.0001 and rate == 0))):
+                        log('qloop')
                         if len(q) == 0:
+                            log('qcase err')
                             modes[token] = mode = -mode
                             amount = -amount
                             ca_trans.amount = amount
@@ -1007,6 +1018,7 @@ class Calculator:
 
                         if mode == 1:
                             if CA_in.amount > amount:
+                                log('qcase 1')
                                 # if not queue_only:
                                 if 1:
                                     prop_in = amount / CA_in.amount
@@ -1025,10 +1037,12 @@ class Calculator:
 
 
                                 CA_in.amount -= amount
-                                if CA_in.amount*CA_in.rate < 0.01 and CA_in.rate != 0:
+                                if CA_in.amount*CA_in.rate < min_threshold and CA_in.rate != 0:
+                                    log("del first from q")
                                     del q[0]
                                 amount = 0
                             else:
+                                log('qcase 2')
                                 # if not queue_only:
                                 if 1:
                                     prop_out = CA_in.amount / amount
@@ -1039,11 +1053,13 @@ class Calculator:
                                     if 1:
                                         CA_line = {'token':token.id, 'amount': CA_in.amount, 'in_ts': CA_in.timestamp, 'out_ts': ca_trans.timestamp,
                                                    'basis': basis, 'sale': CA_in.amount * rate, 'out_txid': txid, 'out_trid': trid, 'in_txid':CA_in.txid, 'in_trid':CA_in.trid}
+                                log("del first from q")
                                 del q[0]
                                 amount -= CA_in.amount
 
                         else: #short, all amounts negative
                             if CA_in.amount < amount:
+                                log('qcase 3')
                                 # if not queue_only:
                                 if 1:
                                     prop_in = amount / CA_in.amount
@@ -1063,10 +1079,12 @@ class Calculator:
                                 fees = 0
                                 amount = 0
 
-                                if -CA_in.amount * CA_in.rate < 0.01 and CA_in.rate != 0:
+                                if -CA_in.amount * CA_in.rate < min_threshold and CA_in.rate != 0:
+                                    log("del first from q")
                                     del q[0]
                             else:
                                 # if not queue_only:
+                                log('qcase 4')
                                 if 1:
                                     prop_out = CA_in.amount / amount
                                     fees_spent = fees * prop_out
@@ -1077,6 +1095,7 @@ class Calculator:
                                     if 1:
                                         CA_line = {'token':token.id, 'amount': -CA_in.amount, 'out_ts': CA_in.timestamp, 'in_ts': ca_trans.timestamp,
                                                'basis': basis, 'sale': sale, 'in_txid': txid, 'in_trid': trid, 'out_txid': CA_in.txid, 'out_trid': CA_in.trid}
+                                log("del first from q")
                                 del q[0]
                                 amount -= CA_in.amount
 
@@ -1149,7 +1168,7 @@ class Calculator:
 
 
     def CA_to_form(self,CA, year, format=None):
-
+        log('ca_to_form',year, filename='ca_to_form.txt')
 
         rows = []
         total_proceeds = 0
@@ -1178,6 +1197,7 @@ class Calculator:
                 rows.append(row)
                 total_proceeds += ca_line['sale']
                 total_cost += ca_line['basis']
+        log('ca_to_form','total_proceeds',total_proceeds, 'total_cost',total_cost, filename='ca_to_form.txt')
         return rows, round(total_proceeds), round(total_cost)
 
     def make_turbotax(self,year):
@@ -1375,7 +1395,8 @@ class Calculator:
             total = 0
             form_file.write("\nWe strongly recommend consulting with a tax professional about deducting loan interest\n")
             for entry in self.interest_payments:
-                total += entry['amount']
+                if timestamp_to_year(entry['timestamp']) == year:
+                    total += entry['amount']
             form_file.write("\nLine 1: " + str(round(total)))
             form_file.write("\n\nYou will need to complete the rest of the form yourself")
             form_file.close()
