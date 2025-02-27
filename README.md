@@ -2,7 +2,7 @@
 
 ## Running app locally
 
-You will need to rename sample.env to .env and populate it with API keys for a zillion third-party services, all of them (except debank) have a free version though. For debank you'll need to pay $200 :( Without debank balance check inspection won't work, but the rest should.
+You will need to rename sample.env to .env and populate it with API keys for a zillion third-party services, most of them (not debank and covalenthq) have a free version though. For debank you'll need to pay $200, and covalenthq is $50/month :( Without debank balance check inspection won't work, but the rest should. Without covalenthq fees on several chains will be off.
 
 driver.py should run locally without much fussing, it has main loop implemented that imports transactions and calculates taxes on them. 
 
