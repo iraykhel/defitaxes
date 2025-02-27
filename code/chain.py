@@ -247,7 +247,7 @@ class Chain:
             'wrapper': '0xc86c7c0efbd6a49b35e8714c5f59d99de09a225b',
             'blockscout':1,
             'order': 10,
-            'support': 3
+            'support': 0
         },
 
         'Celo': {
@@ -388,7 +388,7 @@ class Chain:
             'debank_mapping':None,
             'blockscout': 1,
             'order': 20,
-            'support': 3
+            'support': 0
         },
 
         'Songbird': {

@@ -1,5 +1,5 @@
 import math
-
+import random
 import requests
 import time
 import traceback
@@ -186,14 +186,15 @@ class Solana(Chain):
 
 
 
-    def explorer_multi_request(self,json_template, query_list, batch_size=90,pb_alloc=None,pb_text = None, timeout=30, wait=0.2):
+    def explorer_multi_request(self,json_template, query_list, batch_size=10,pb_alloc=None,pb_text = None, timeout=30, wait=0.2):
         if len(query_list) == 0:
             log('error: query_list is empty for',json_template,filename='solana.txt')
             return {}
         # rpc_url = 'https://floral-prettiest-wish.solana-mainnet.discover.quiknode.pro/'+os.environ.get('quicknode_solana_auth_token')+'/' #rate limited per sec
         # rpc_url = 'https://api.mainnet-beta.solana.com/' #rate limited
         # rpc_url = 'https://rpc.ankr.com/solana/c9a8aac3e365ed12c403993c587a032d28d24e638a204100c08a4c5976bcfae2' #does not get all transactions
-        rpc_url = 'https://solana-mainnet.g.alchemy.com/v2/'+os.environ.get('api_key_alchemy_for_solana')
+        # rpc_url = 'https://solana-mainnet.g.alchemy.com/v2/'+os.environ.get('api_key_alchemy_for_solana')
+        rpc_url = 'https://solana-mainnet.api.syndica.io/api-key/'+os.environ.get('api_key_syndica_for_solana')
 
         query_list = list(query_list)
         log('rpc call', json_template, len(query_list), query_list[0], filename='solana.txt')
@@ -229,7 +230,8 @@ class Solana(Chain):
             batch = query_list[offset:offset+batch_size]
 
             for query_datum in batch:
-                uid = str(uuid.uuid4())
+                # uid = str(uuid.uuid4())
+                uid = random.randint(1000000000, 9999999999)
                 explorer_dump = copy.deepcopy(json_template)
                 explorer_dump['params'][0] = query_datum
                 explorer_dump['id'] = uid
@@ -243,7 +245,8 @@ class Solana(Chain):
             time.sleep(1)
             try:
                 log('post dump',rpc_url,multi_explorer_request,filename='solana.txt')
-                resp = self.explorer_session.post(rpc_url, timeout=timeout, json=multi_explorer_request)
+                headers = {'accept':'application/json','content-type':'application/json'}
+                resp = self.explorer_session.post(rpc_url, timeout=timeout, json=multi_explorer_request, headers=headers)
                 # resp = self.explorer_session.post('https://api.mainnet-beta.solana.com', timeout=timeout, json=multi_explorer_request, headers=explorer_headers)
             except:
                 log("Request failed, timeout", traceback.format_exc(),filename='solana.txt')
@@ -265,9 +268,9 @@ class Solana(Chain):
             # log('response',multi_data,filename='solana.txt')
 
             for entry in multi_data:
+                if 'result' not in entry or 'id' not in entry:
+                    log("BAD ENTRY",json_template, entry, filename='solana.txt')
                 uid = entry['id']
-                if 'result' not in entry:
-                    log("BAD ENTRY",json_template, entry, uid, uid_mapping[uid],filename='solana.txt')
                 output_mapping[uid_mapping[uid]] = entry['result']
 
             offset += batch_size
@@ -283,17 +286,18 @@ class Solana(Chain):
             instruction['source'] = 'message'
             all_instructions.append([instruction])
 
-        if 'innerInstructions' in explorer_tx_data['meta']:
+        if 'innerInstructions' in explorer_tx_data['meta'] :
             innerInstructions = explorer_tx_data['meta']['innerInstructions']
-            for entry in innerInstructions:
-                idx = entry['index']
-                # if 'parsed' in outer_instructions[idx]:
-                #     log('get_all_instructions',idx,'already parsed',outer_instructions[idx]['parsed']['type'],outer_instructions[idx])
-                instructions = entry['instructions']
-                for instruction in instructions:
-                    instruction['source']='innerInstructions'
-                    instruction['index'] = idx
-                all_instructions[idx].extend(instructions)
+            if innerInstructions is not None:
+                for entry in innerInstructions:
+                    idx = entry['index']
+                    # if 'parsed' in outer_instructions[idx]:
+                    #     log('get_all_instructions',idx,'already parsed',outer_instructions[idx]['parsed']['type'],outer_instructions[idx])
+                    instructions = entry['instructions']
+                    for instruction in instructions:
+                        instruction['source']='innerInstructions'
+                        instruction['index'] = idx
+                    all_instructions[idx].extend(instructions)
 
         flattened_all_instructions = []
         for subset in all_instructions:
@@ -444,18 +448,18 @@ class Solana(Chain):
                 time.sleep(1)
             else:
                 done = True
-            if len(tx_list) >= 10000:
+            if len(tx_list) >= 30000:
                 self.current_import.add_error(Import.TOO_MANY_TRANSACTIONS, chain=self, address=address)
                 done = True
 
         self.update_pb(None, pb_alloc*0.1)
 
         tx_list = tx_list[::-1]
-        log('tx_list',len(tx_list),tx_list)
+        log('tx_list',len(tx_list),tx_list,filename='solana.txt')
 
         # self.update_pb('Getting transactions for ' + address)
         all_tx_data = self.explorer_multi_request(
-            {"method": "getTransaction", "jsonrpc": "2.0", "params": [None, {"encoding": "jsonParsed", "commitment": "confirmed", "maxSupportedTransactionVersion": 2}]},
+            {"method": "getTransaction", "jsonrpc": "2.0", "params": [None, {"encoding": "jsonParsed", "commitment": "confirmed", "maxSupportedTransactionVersion": 0}]},
             tx_list,  timeout=60, pb_text='Getting transactions for ' + address, pb_alloc=pb_alloc*0.7)
 
 
@@ -688,6 +692,33 @@ class Solana(Chain):
         # proxy_tx_list = self.explorer_multi_request({"method": "getConfirmedSignaturesForAddress2", "jsonrpc": "2.0", "params": [None, {"limit": 1000}]},proxies)
         proxy_tx_list = self.explorer_multi_request({"method": "getSignaturesForAddress", "jsonrpc": "2.0", "params": [None, {"limit": 1000}]},proxies,
                                                     pb_text='Getting signatures for token-holding accounts belonging to ' + address,pb_alloc=pb_alloc*0.05)
+
+        # proxy_tx_list = {}
+        # total_proxy_sigs = 0
+        # for proxy in proxies:
+        #     proxy_tx_list[proxy] = []
+        #     done = False
+        #     json_template = {"method": "getSignaturesForAddress", "jsonrpc": "2.0", "params": [None, {"limit": 1000}]}
+        #     while not done:
+        #         # tx_multi_list = self.explorer_multi_request(json_template, [address], pb_text='Getting signatures for ' + address, timeout=120)
+        #
+        #         proxy_tx_sublist = self.explorer_multi_request(json_template, [proxy],
+        #                                                     pb_text='Getting signatures for token-holding account '+proxy+' belonging to ' + address, pb_alloc=0)
+        #
+        #
+        #         output = proxy_tx_sublist[proxy]
+        #         proxy_tx_list[proxy].extend(output)
+        #         total_proxy_sigs += len(output)
+        #
+        #         if len(output) == limit:
+        #             json_template['params'][1]['before'] = proxy_tx_sublist[-1]
+        #             time.sleep(1)
+        #         else:
+        #             done = True
+        #         if total_proxy_sigs >= 10000:
+        #             self.current_import.add_error(Import.TOO_MANY_TRANSACTIONS, chain=self, address=address)
+        #             done = True
+
         all_proxy_signatures = set()
         for proxy, proxy_transactions in proxy_tx_list.items():
             # periods = proxy_to_token_mapping[proxy]['periods']
@@ -707,7 +738,7 @@ class Solana(Chain):
 
         log("Additional transactions to retrieve",len(all_proxy_signatures),all_proxy_signatures,filename='solana.txt')
         additional_tx_data = self.explorer_multi_request(
-            {"method": "getTransaction", "jsonrpc": "2.0", "params": [None, {"encoding": "jsonParsed", "commitment": "confirmed", "maxSupportedTransactionVersion": 0}]},
+            {"method": "getTransaction", "jsonrpc": "2.0", "params": [None, {"encoding": "jsonParsed", "commitment": "confirmed", "maxSupportedTransactionVersion": 0, "transactionDetails":"full"}]},
             all_proxy_signatures,  timeout=60, pb_text='Getting transactions for token-holding accounts belonging to ' + address,pb_alloc=pb_alloc*0.05)
 
         all_tx_data.update(additional_tx_data)
@@ -715,8 +746,10 @@ class Solana(Chain):
         self.update_pb('Processing transactions for ' + address)
         tx_list = []
         for tx_hash, tx_data in all_tx_data.items():
-            tx_list.append([tx_hash, tx_data['blockTime'], tx_data])
+            if tx_data is not None:
+                tx_list.append([tx_hash, tx_data['blockTime'], tx_data])
         tx_list = sorted(tx_list, key=lambda tup: tup[1])
+        log('tx_list length',len(tx_list),filename='solana.txt')
 
         prev_ts = None
         nonce = 0
@@ -762,6 +795,7 @@ class Solana(Chain):
                 #     my_sol_change = sol_change
                 # elif sol_change != 0:
                 sol_changes[account] = post_balances[entry_idx]-pre_balances[entry_idx]
+            log('sol_changes after post/pre-balances', sol_changes, filename='solana.txt')
 
             total_rewards_fee = 0
             rewards_data = tx_data['meta']['rewards']
@@ -902,13 +936,13 @@ class Solana(Chain):
                                                 continue
 
                                             if source == address:
-                                                account_deposits[proxy] -= int(info['amount'])
+                                                account_deposits[proxy] -= amount * 1000000000 # int(info['amount'])
                                                 # assert account_deposits[proxy] >= 0
                                                 if account_deposits[proxy] < 0:
                                                     log("WARNING NEGATIVE DEPOSIT",proxy, account_deposits[proxy],filename='solana.txt')
 
                                             if destination == address:
-                                                account_deposits[proxy] += int(info['amount'])
+                                                account_deposits[proxy] +=  amount * 1000000000 #int(info['amount'])
 
                     if type == 'create':
                         if info['source'] == address:
@@ -1021,23 +1055,28 @@ class Solana(Chain):
 
 
 
-
+            log('sol_changes before populating from transfers',sol_changes,filename='solana.txt')
+            log('transfers created from parsed',transfers,filename='solana.txt')
             for t in transfers: #accounting balance changes, after this sol_changes should be 0
                 if t['what'] == 'SOL':
                     lamports = int(round(t['amount'] * 1000000000))
                     sol_changes[t['from']] += lamports
                     sol_changes[t['to']] -= lamports
+                    # if address in [t['from'],t['to']]:
+                    log("adding sol change from transfer",t['from'],t['to'],t['amount'],lamports,filename='solana.txt')
 
             total_unaccounted = 0
-            unaccounted_changes = {}
+            unaccounted_changes = defaultdict(float)
             my_unaccounted_change = 0
+            log('sol changes before unaccounted',sol_changes,filename='solana.txt')
             for account, amount in sol_changes.items():
                 total_unaccounted += amount
                 if amount != 0:
                     if account == address:
-                        my_unaccounted_change = amount
+                        my_unaccounted_change += amount
                     else:
-                        unaccounted_changes[account] = amount
+                        unaccounted_changes[account] += amount
+            unaccounted_changes = dict(unaccounted_changes)
 
             if abs(my_unaccounted_change) > fee:
                 log("Unaccounted",total_unaccounted, 'my_unaccounted_change', my_unaccounted_change, 'unaccounted_changes',unaccounted_changes,filename='solana.txt')
@@ -1244,6 +1283,7 @@ class Solana(Chain):
         log("final all_token_data", all_token_data)
         log("type_counter",type_counter)
         log("tx_sol_mismatches",len(tx_sol_mismatches),tx_sol_mismatches,filename='solana.txt')
+        log("all_transactions length",len(all_transactions),filename='solana.txt')
         return all_transactions
 
 
@@ -2581,8 +2621,10 @@ class Solana(Chain):
         try:
             resp = self.explorer_multi_request({"method": "getAccountInfo", "jsonrpc": "2.0", "params": [None, {"encoding": "jsonParsed", "commitment": "confirmed"}]}, [address])
             data = resp[address]['value']
-            log("sol balance",data)
-            lamports = data['lamports']
+            log("sol balance",data,filename='solana.txt')
+            lamports = 0
+            if data is not None and 'lamports' in data:
+                lamports = data['lamports']
             sol_amt = lamports / 1000000000.
             rv = {}
             rv['SOL'] = {'symbol':'SOL','amount':sol_amt}

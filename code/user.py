@@ -210,7 +210,8 @@ class User:
                     last_update = self.get_info(chain_name + "_last_update")
                     if last_update is None:
                         last_update = 0
-                    self.db.insert_kw('user_addresses',address=self.address, chain=chain_name, previously_used=used, present=present, last_update=last_update)
+                    log('attempting to insert address',self.address,'for chain',chain_name)
+                    self.db.insert_kw('user_addresses',address=self.address, chain=chain_name, previously_used=used, present=present, last_update=last_update, ignore=True)
                     fields = [chain_name+"_presence",chain_name+"_used",chain_name+"_last_update"]
                     self.db.query("DELETE FROM info WHERE field IN "+sql_in(fields))
 
@@ -459,6 +460,7 @@ class User:
         # self.load_addresses()
 
     def set_address_used(self, address, chain_name,value=1,commit=True):
+        log('set_address_used',address,chain_name,value,commit)
         self.db.insert_kw('user_addresses', address=address, chain=chain_name, ignore=True)
         self.db.update_kw('user_addresses', "address='" + address + "' AND chain='" + chain_name + "'", previously_used=value)
         if commit:
@@ -597,7 +599,7 @@ class User:
             db.insert_kw('addresses', chain=chain_name, address=address)
             return db.select("SELECT last_insert_rowid()")[0][0]
 
-    def locate_insert_token(self,chain_name,contract,symbol,coingecko_id=None):
+    def locate_insert_token(self,chain_name,contract,symbol,coingecko_id=False):
         # log('locate_insert_token', chain_name, contract, symbol, filename='token_insert.txt')
         db = self.db
         assert contract is not None or symbol is not None
@@ -615,16 +617,32 @@ class User:
         #     Q = "SELECT id FROM tokens WHERE chain='" + chain_name + "' and symbol = '" + symbol + "' and (contract IS NULL OR contract ='"+symbol+"') ORDER BY id ASC"
         # else:
         #     Q = "SELECT id FROM tokens WHERE chain='" + chain_name + "' and contract = '" + contract + "'  ORDER BY id ASC"
-        Q = "SELECT id, coingecko_id FROM tokens WHERE LOWER(chain)=LOWER('" + chain_name + "') and contract = '" + contract + "'  ORDER BY id ASC"
+        Q = "SELECT id, coingecko_id, custom_coingecko_id FROM tokens WHERE LOWER(chain)=LOWER('" + chain_name + "') and contract = '" + contract + "'  ORDER BY id ASC"
         rows = db.select(Q)
 
         if len(rows) >= 1:
             # log('locate_insert_token-found ',len(row), row[0][0], filename='token_insert.txt')
-            id, current_coingecko_id = rows[0]
-            if coingecko_id is not None and coingecko_id != current_coingecko_id:
-                db.update_kw('tokens','id='+str(id),coingecko_id=coingecko_id)
+            id, current_coingecko_id, custom_coingecko_id = rows[0]
+
+            if coingecko_id != False and custom_coingecko_id is None:
+                if coingecko_id != current_coingecko_id:
+                    # db.update_kw('tokens','id='+str(id),coingecko_id=coingecko_id)
+                    if coingecko_id is not None and current_coingecko_id is None:
+                        db.update_kw('tokens', 'id=' + str(id), coingecko_id=coingecko_id)
+                    elif coingecko_id is None and current_coingecko_id is not None:
+                        pass
+                        # self.current_import.add_error(Import.COINGECKO_ID_CHANGED, chain=chain_name,
+                        #                               additional_text=f"Coingecko ID for contract {contract} ({symbol}) disappeared. Used to be {current_coingecko_id}. New transfers involving this contract may need attention.")
+
+                    # if current_coingecko_id is not None:
+                    #     if custom_coingecko_id is None:
+                    #         self.current_import.add_error(Import.COINGECKO_ID_CHANGED, chain=chain_name, additional_text=f"Coingecko ID for contract {contract} ({symbol}) changed from {current_coingecko_id} to {coingecko_id}. We are keeping the old ID. Transfers involving this contract may need attention.")
+                    # else:
+                    #     db.update_kw('tokens', 'id=' + str(id), coingecko_id=coingecko_id)
             return id
         else:
+            if coingecko_id == False:
+                coingecko_id = None
             db.insert_kw('tokens', chain=chain_name, contract=contract, symbol=symbol,coingecko_id=coingecko_id)
             id = db.select("SELECT last_insert_rowid()")[0][0]
             # log('locate_insert_token-inserting',id, chain_name, contract, symbol, filename='token_insert.txt')

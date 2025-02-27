@@ -18,6 +18,7 @@ class Import:
     TOO_MANY_TRANSACTIONS = 11
     COINGECKO_CACHE_FAIL = 12
     COVALENT_OVERLOAD = 13
+    COINGECKO_ID_CHANGED = 14
 
     def __init__(self,user,all_chains=None, id=None):
         if id is None:
@@ -29,6 +30,7 @@ class Import:
         else:
             self.id = id
         self.errors = []
+        self.error_hashes = set()
         self.codes = set()
         if all_chains is not None:
             for chain_name, chain_data in all_chains.items():
@@ -63,11 +65,17 @@ class Import:
     def add_error(self,error_code,chain=None,address=None,txtype=None,additional_text=None,debug_info=None,txhash=None):
         chain_name = None
         if chain is not None:
-            chain_name = chain.name
+            if isinstance(chain,str):
+                chain_name = chain
+            else:
+                chain_name = chain.name
         # if error_code not in [Import.COVALENT_FAILURE, Import.DEBANK_TOKEN_FAILURE, Import.DEBANK_PROTOCOL_FAILURE, Import.PRESENCE_CHECK_FAILURE]:
         #     self.overwrites_ok = False
         self.codes.add(error_code)
-        self.errors.append({'chain':chain_name,'address':address,'error_code':error_code,'txtype':txtype,'additional_text':additional_text,'debug_info':debug_info, 'txhash':txhash})
+        error_hash = chain_name+str(error_code)+str(address)+str(txtype)+str(additional_text)+str(txhash)
+        if error_hash not in self.error_hashes:
+            self.error_hashes.add(error_hash)
+            self.errors.append({'chain':chain_name,'address':address,'error_code':error_code,'txtype':txtype,'additional_text':additional_text,'debug_info':debug_info, 'txhash':txhash})
 
     @classmethod
     def load_errors(cls,user):
@@ -84,7 +92,9 @@ class Import:
             code = error['error_code']
             action = error['txtype']
             chain = error['chain']
+            additional_text = error['additional_text']
             err_tx_type = "transactions"
+            prefix = "Problem"
             if action is not None:
                 err_tx_type = action_error_mapping[action] + " transactions"
             if code == Import.NO_API_RESPONSE:
@@ -121,9 +131,12 @@ class Import:
                     s = "too many transactions, we support up to 50000 per chain per address."
             elif code == Import.COINGECKO_CACHE_FAIL:
                 s = "Failed to load coingecko cache, importing of transactions is necessary"
+            elif code == Import.COINGECKO_ID_CHANGED:
+                s = additional_text
+                # prefix = "W|Warning"
             else:
                 s = "unknown error"
-            prefix = "Problem"
+
             if error['address'] is not None:
                 prefix += " with "+error['address']
             if error['chain'] is not None:
